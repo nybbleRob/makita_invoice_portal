@@ -172,19 +172,6 @@ const Invoices = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const getStatusBadgeClass = (status) => {
-    const classes = {
-      draft: 'bg-secondary',
-      ready: 'bg-success-lt',
-      sent: 'bg-info',
-      paid: 'bg-success',
-      overdue: 'bg-danger',
-      cancelled: 'bg-dark'
-    };
-    return classes[status] || 'bg-secondary';
-  };
-
-
   const formatDate = (date) => {
     if (!date) return '-';
     return new Date(date).toLocaleDateString('en-GB');
@@ -364,19 +351,6 @@ const Invoices = () => {
     return 'ready_new'; // Default for new invoices
   };
 
-  const getDocumentStatusIndicator = (status) => {
-    const indicators = {
-      ready_new: <span className="badge bg-success-lt" title="Ready (New) - Not viewed">●</span>,
-      new: <span className="badge bg-success-lt" title="Ready (New) - Not viewed">●</span>,
-      ready: <span className="badge bg-success-lt" title="Ready (New) - Not viewed">●</span>,
-      viewed: <span className="badge bg-orange-lt" title="Viewed - Not downloaded">●</span>,
-      downloaded: <span className="badge bg-primary-lt" title="Downloaded">●</span>,
-      review: <span className="badge bg-warning-lt" title="Review Required">●</span>,
-      queried: <span className="badge bg-info-lt" title="Queried">●</span>
-    };
-    return indicators[status] || indicators.ready_new;
-  };
-
   const getDocumentStatusBadgeClass = (status) => {
     const classes = {
       ready_new: 'bg-success-lt',
@@ -517,26 +491,6 @@ const Invoices = () => {
       console.error('Error downloading invoices:', error);
       toast.error('Error downloading invoices: ' + (error.message || 'Unknown error'));
     }
-  };
-
-  // Get company info helpers
-  const getCorporateNumber = (invoice) => {
-    if (!invoice.company) return '-';
-    if (invoice.company.type === 'CORP') {
-      return invoice.company.referenceNo || invoice.company.code || '-';
-    }
-    if (invoice.company.parent) {
-      return invoice.company.parent.referenceNo || invoice.company.parent.code || '-';
-    }
-    return '-';
-  };
-
-  const getBranchNumber = (invoice) => {
-    if (!invoice.company) return '-';
-    if (invoice.company.type === 'BRANCH' || invoice.company.type === 'SUB') {
-      return invoice.company.referenceNo || invoice.company.code || '-';
-    }
-    return '-';
   };
 
   const getPONumber = (invoice) => {

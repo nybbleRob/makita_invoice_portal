@@ -152,19 +152,6 @@ const CreditNotes = () => {
     return 'ready_new'; // Default for new credit notes
   };
 
-  const getDocumentStatusIndicator = (status) => {
-    const indicators = {
-      ready_new: <span className="badge bg-success-lt" title="Ready (New) - Not viewed">●</span>,
-      new: <span className="badge bg-success-lt" title="Ready (New) - Not viewed">●</span>,
-      ready: <span className="badge bg-success-lt" title="Ready (New) - Not viewed">●</span>,
-      viewed: <span className="badge bg-orange-lt" title="Viewed - Not downloaded">●</span>,
-      downloaded: <span className="badge bg-primary-lt" title="Downloaded">●</span>,
-      review: <span className="badge bg-warning-lt" title="Review Required">●</span>,
-      queried: <span className="badge bg-info-lt" title="Queried">●</span>
-    };
-    return indicators[status] || indicators.ready_new;
-  };
-
   const getDocumentStatusBadgeClass = (status) => {
     const classes = {
       ready_new: 'bg-success-lt',
@@ -305,26 +292,6 @@ const CreditNotes = () => {
       console.error('Error downloading credit notes:', error);
       toast.error('Error downloading credit notes: ' + (error.message || 'Unknown error'));
     }
-  };
-
-  // Get company info helpers
-  const getCorporateNumber = (creditNote) => {
-    if (!creditNote.company) return '-';
-    if (creditNote.company.type === 'CORP') {
-      return creditNote.company.referenceNo || creditNote.company.code || '-';
-    }
-    if (creditNote.company.parent) {
-      return creditNote.company.parent.referenceNo || creditNote.company.parent.code || '-';
-    }
-    return '-';
-  };
-
-  const getBranchNumber = (creditNote) => {
-    if (!creditNote.company) return '-';
-    if (creditNote.company.type === 'BRANCH' || creditNote.company.type === 'SUB') {
-      return creditNote.company.referenceNo || creditNote.company.code || '-';
-    }
-    return '-';
   };
 
   const getPONumber = (creditNote) => {
@@ -892,7 +859,6 @@ const CreditNotes = () => {
                   ) : (
                     creditNotes.map((creditNote) => {
                       const docStatus = getDocumentStatus(creditNote);
-                      const amount = creditNote.amount ? parseFloat(creditNote.amount) : 0;
                       return (
                         <tr key={creditNote.id}>
                           <td>

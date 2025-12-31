@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import toast from '../utils/toast';
-import { useAuth } from '../context/AuthContext';
-
 const Branches = () => {
-  const { user: currentUser } = useAuth();
   const [branches, setBranches] = useState([]);
   const [filteredBranches, setFilteredBranches] = useState([]);
   const [loading, setLoading] = useState(true);

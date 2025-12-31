@@ -1,12 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import api from '../services/api';
 import toast from '../utils/toast';
-import { useAuth } from '../context/AuthContext';
 import './ExcelTemplateBuilder.css';
 
 const ExcelTemplateBuilder = ({ template, onSave, onCancel }) => {
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'global_admin' || user?.role === 'admin';
   const templateType = template?.templateType || 'invoice';
   
   // Get template code (from existing template or generate from name)
@@ -213,15 +210,6 @@ const ExcelTemplateBuilder = ({ template, onSave, onCancel }) => {
         cells: updatedCells
       };
     });
-  };
-  
-  // Convert label to field name (e.g., "Goods Total" -> "goods_total")
-  const labelToFieldName = (label) => {
-    return label.trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, '') // Remove special characters
-      .replace(/\s+/g, '_') // Replace spaces with underscores
-      .replace(/^_+|_+$/g, ''); // Remove leading/trailing underscores
   };
   
   // Add custom field
@@ -448,12 +436,12 @@ const ExcelTemplateBuilder = ({ template, onSave, onCancel }) => {
       console.log('Template name:', templateData.name);
       
       if (template?.id) {
-        const response = await api.put(`/api/templates/${template.id}`, formData, {
+        await api.put(`/api/templates/${template.id}`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         toast.success('Template updated successfully');
       } else {
-        const response = await api.post('/api/templates', formData, {
+        await api.post('/api/templates', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         toast.success('Template created successfully');

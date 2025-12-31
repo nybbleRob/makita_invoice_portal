@@ -2,8 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import api from '../services/api';
 import toast from '../utils/toast';
-import { useSettings } from '../context/SettingsContext';
-import { STANDARD_FIELDS, getMandatoryFields, getAvailableFields, getStandardField } from '../utils/standardFields';
+import { getAvailableFields } from '../utils/standardFields';
 
 // Set up pdfjs worker - use local file from public folder
 pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL || ''}/pdf.worker.min.mjs`;
@@ -20,7 +19,6 @@ if (typeof window !== 'undefined') {
 }
 
 const TemplateBuilder = ({ template, onSave, onCancel }) => {
-  const { settings } = useSettings();
   
   // Generate template code from name (same logic as backend)
   const generateTemplateCode = (name) => {
@@ -417,7 +415,6 @@ const TemplateBuilder = ({ template, onSave, onCancel }) => {
         };
         
         // Also get PDF page dimensions for reference (in points)
-        const viewport = pdfPage.getViewport({ scale: 1.0 });
         const pdfPageSize = pdfPage.view;
         const pdfPageWidth = pdfPageSize[2] - pdfPageSize[0];
         const pdfPageHeight = pdfPageSize[3] - pdfPageSize[1];
@@ -605,7 +602,6 @@ const TemplateBuilder = ({ template, onSave, onCancel }) => {
     const coordinates = {};
     
     // Get PDF page dimensions for coordinate conversion
-    const viewport = pdfPage?.getViewport({ scale: 1.0 });
     const pdfPageSize = pdfPage?.view;
     const pdfPageWidth = pdfPageSize ? (pdfPageSize[2] - pdfPageSize[0]) : (pdfDimensions?.width || 612);
     const pdfPageHeight = pdfPageSize ? (pdfPageSize[3] - pdfPageSize[1]) : (pdfDimensions?.height || 792);
@@ -691,12 +687,12 @@ const TemplateBuilder = ({ template, onSave, onCancel }) => {
       console.log('Has document_type in coordinates:', !!coordinates[docTypeFieldId]);
       
       if (template?.id) {
-        const response = await api.put(`/api/templates/${template.id}`, formData, {
+        await api.put(`/api/templates/${template.id}`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         toast.success('Template updated successfully');
       } else {
-        const response = await api.post('/api/templates', formData, {
+        await api.post('/api/templates', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         toast.success('Template created successfully');

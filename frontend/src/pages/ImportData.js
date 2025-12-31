@@ -17,7 +17,6 @@ const ImportData = () => {
   const [undoing, setUndoing] = useState(false);
   const [previewFilter, setPreviewFilter] = useState('all'); // 'all', 'valid', 'warning', 'error', 'create', 'update'
   const [lastImport, setLastImport] = useState(null);
-  const [loadingLastImport, setLoadingLastImport] = useState(false);
 
   // Check if user is administrator
   const isAdministrator = () => {
@@ -32,15 +31,12 @@ const ImportData = () => {
       }
 
       try {
-        setLoadingLastImport(true);
         const response = await api.get('/api/companies/import/last');
         // Response will be null if no import found (200 status)
         setLastImport(response.data);
       } catch (error) {
         console.error('Error fetching last import:', error);
         setLastImport(null);
-      } finally {
-        setLoadingLastImport(false);
       }
     };
 

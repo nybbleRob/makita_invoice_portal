@@ -309,18 +309,6 @@ const CreditNoteView = () => {
     return badges[status] || badges.new;
   };
 
-  const getStatusBadgeClass = (status) => {
-    const classes = {
-      draft: 'bg-secondary',
-      ready: 'bg-success-lt',
-      sent: 'bg-info',
-      paid: 'bg-success',
-      overdue: 'bg-danger',
-      cancelled: 'bg-dark'
-    };
-    return classes[status] || 'bg-secondary';
-  };
-
   // Query functions
   const fetchQueryHistory = async () => {
     try {

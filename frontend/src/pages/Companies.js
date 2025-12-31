@@ -34,10 +34,6 @@ const Companies = () => {
   const [showRelationshipsModal, setShowRelationshipsModal] = useState(false);
   const [selectedCompanyForRelationships, setSelectedCompanyForRelationships] = useState(null);
   
-  // Legacy state (keeping for backward compatibility if needed)
-  const [selectedCompanyRelationships, setSelectedCompanyRelationships] = useState(null);
-  const [loadingRelationships, setLoadingRelationships] = useState(false);
-  
   // Confirmation modal states
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
@@ -144,9 +140,6 @@ const Companies = () => {
   const [quickAddLoading, setQuickAddLoading] = useState(false);
   const [currentFormDataSetter, setCurrentFormDataSetter] = useState(null);
   const [currentCompanyId, setCurrentCompanyId] = useState(null);
-  
-  // Assigned users state
-  const [assignedUsers, setAssignedUsers] = useState([]);
   
   const [creating, setCreating] = useState(false);
 
@@ -502,12 +495,6 @@ const Companies = () => {
     return currentUser?.role === 'global_admin' || currentUser?.role === 'administrator';
   };
 
-  // Check if user is global admin
-  const isGlobalAdmin = () => {
-    return currentUser?.role === 'global_admin';
-  };
-
-
   const resetCorporateForm = () => {
     setCorporateFormData({
       name: '',
@@ -822,22 +809,6 @@ const Companies = () => {
     return companies.some(c => c.parentId === company.id);
   };
 
-  // Load company relationships (for the old modal - keeping for backward compatibility)
-  const handleViewRelationships = async (company) => {
-    setLoadingRelationships(true);
-    setShowRelationshipsModal(true);
-    try {
-      const response = await api.get(`/api/companies/${company.id}/relationships`);
-      setSelectedCompanyRelationships(response.data);
-    } catch (error) {
-      console.error('Error loading relationships:', error);
-      toast.error('Failed to load company relationships');
-      setShowRelationshipsModal(false);
-    } finally {
-      setLoadingRelationships(false);
-    }
-  };
-
   // Load relationships for modal (lazy load)
   const loadModalRelationships = async (companyId) => {
     // If already loaded, don't reload
@@ -865,29 +836,6 @@ const Companies = () => {
     if (!modalRelationships[company.id]) {
       await loadModalRelationships(company.id);
     }
-  };
-
-
-  // Render nested children list
-  const renderChildrenList = (children, level = 0) => {
-    if (!children || children.length === 0) return null;
-    
-    return (
-      <ul style={{ listStyle: 'none', paddingLeft: level > 0 ? '20px' : '0', marginTop: '8px' }}>
-        {children.map((child) => (
-          <li key={child.id} style={{ marginBottom: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span className={`badge ${getTypeBadgeClass(child.type)}`}>
-                {getTypeLabel(child.type)}
-              </span>
-              <strong>{child.name}</strong>
-              {child.referenceNo && <span className="text-muted">({child.referenceNo})</span>}
-            </div>
-            {child.children && child.children.length > 0 && renderChildrenList(child.children, level + 1)}
-          </li>
-        ))}
-      </ul>
-    );
   };
 
   const renderModal = (type, show, onClose, formData, setFormData, onSubmit, resetForm) => {
@@ -1860,18 +1808,6 @@ const Companies = () => {
         const sortedLevels = Object.keys(groupedByLevel)
           .map(Number)
           .sort((a, b) => a - b);
-        
-        const getLevelLabel = (level) => {
-          if (level === -1) {
-            return 'Top Level (Ancestors)';
-          } else if (level === 0) {
-            return 'Second Level (Direct Children)';
-          } else if (level === 1) {
-            return 'Third Level (Grandchildren)';
-          } else {
-            return `Level ${level + 2} (Descendants)`;
-          }
-        };
         
         return (
           <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">

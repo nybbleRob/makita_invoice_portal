@@ -12,9 +12,9 @@ const Unallocated = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [reasonFilter, setReasonFilter] = useState('all');
-  const [accountNumberFilter, setAccountNumberFilter] = useState('');
-  const [invoiceNumberFilter, setInvoiceNumberFilter] = useState('');
-  const [dateFilter, setDateFilter] = useState('');
+  const [accountNumberFilter] = useState('');
+  const [invoiceNumberFilter] = useState('');
+  const [dateFilter] = useState('');
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [editingData, setEditingData] = useState({});
@@ -74,31 +74,6 @@ const Unallocated = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleView = (document) => {
-    setSelectedDocument(document);
-    // Map parsed data to editing data, checking both standard and template field names
-    const parsed = document.parsedData || {};
-    setEditingData({
-      ...parsed,
-      // Map standard field names to expected field names - match template field order
-      documentType: parsed.documentType || parsed.document_type || '',
-      accountNumber: parsed.accountNumber || parsed.customerNumber || parsed.account_no || parsed.accountNo || '',
-      invoiceDate: parsed.invoiceDate || parsed.date || parsed.taxPoint || parsed.tax_point || '',
-      invoiceNumber: parsed.invoiceNumber || parsed.documentNumber || parsed.invoice_number || parsed.invoiceNo || parsed.creditNumber || parsed.credit_number || '',
-      customerPO: parsed.customerPO || parsed.poNumber || parsed.purchaseOrder || parsed.customer_po || parsed.po_number || '',
-      totalAmount: parsed.totalAmount || parsed.amount || parsed.invoiceTotal || parsed.total || '',
-      vatAmount: parsed.vatAmount || parsed.vatTotal || parsed.vat_amount || '',
-      deliveryAddress: parsed.deliveryAddress || parsed.delivery_address || parsed.ship_to || parsed.shipping_address || '',
-      goodsAmount: parsed.goodsAmount || parsed.goods_amount || parsed.subtotal || parsed.net_amount || '',
-      invoiceTo: parsed.invoiceTo || parsed.invoice_to || parsed.bill_to || '',
-      // Keep legacy field names for backward compatibility
-      amount: parsed.totalAmount || parsed.amount || parsed.invoiceTotal || parsed.total || '',
-      date: parsed.invoiceDate || parsed.date || parsed.taxPoint || parsed.tax_point || ''
-    });
-    setActiveDataTab('extracted'); // Reset to default tab when opening
-    setShowViewModal(true);
   };
 
   const handleSave = async () => {
@@ -339,53 +314,6 @@ const Unallocated = () => {
         )}
       </div>
     );
-  };
-
-  const getSummary = (doc) => {
-    const parts = [];
-    const parsed = doc.parsedData || {};
-    
-    // Check for invoice number (multiple possible field names)
-    const invoiceNumber = parsed.invoiceNumber || parsed.documentNumber || parsed.inv_no || parsed.invoice_ref;
-    if (invoiceNumber) {
-      parts.push(`Invoice #: ${invoiceNumber}`);
-    }
-    
-    // Check for amount (multiple possible field names)
-    const amount = parsed.totalAmount || parsed.amount || parsed.invoiceTotal || parsed.grand_total;
-    if (amount) {
-      const amountNum = typeof amount === 'string' ? parseFloat(amount.replace(/[£,]/g, '')) : amount;
-      if (!isNaN(amountNum) && amountNum > 0) {
-        parts.push(`Amount: ${new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(amountNum)}`);
-      }
-    }
-    
-    // Check for date (multiple possible field names)
-    const dateValue = parsed.invoiceDate || parsed.date || parsed.taxPoint || parsed.tax_point;
-    if (dateValue) {
-      try {
-        const date = new Date(dateValue);
-        if (!isNaN(date.getTime())) {
-          parts.push(`Date: ${date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`);
-        }
-      } catch (e) {
-        // Invalid date, skip
-      }
-    }
-    
-    // Check for PO number
-    const poNumber = parsed.customerPO || parsed.poNumber || parsed.purchaseOrder || parsed.customer_po;
-    if (poNumber) {
-      parts.push(`PO: ${poNumber}`);
-    }
-    
-    // Check for document type
-    const docType = parsed.documentType || parsed.document_type || parsed.type;
-    if (docType) {
-      parts.push(`Type: ${docType}`);
-    }
-    
-    return parts.length > 0 ? parts.join(' • ') : 'No extracted data';
   };
 
   return (
@@ -757,7 +685,7 @@ const Unallocated = () => {
                       </div>
                       <div className="card-body p-0" style={{ height: '600px', overflow: 'auto' }}>
                         <iframe
-                          src={`/uploads/${selectedDocument.filePath.replace(/^.*[\\\/]/, '')}`}
+                          src={`/uploads/${selectedDocument.filePath.replace(/^.*[\\/]/, '')}`}
                           style={{
                             width: '100%',
                             height: '100%',

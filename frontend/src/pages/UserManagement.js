@@ -574,30 +574,6 @@ const UserManagement = () => {
     }
   };
 
-  const handleResetPassword = async (userId) => {
-    if (!window.confirm('Reset password for this user? A temporary password will be generated.')) return;
-    
-    try {
-      const response = await api.post(`/api/users/${userId}/reset-password`);
-      toast.success(`Password reset! Temporary password: ${response.data.tempPassword}. Share this with the user securely.`, 10000);
-      fetchUsers();
-    } catch (error) {
-      toast.error('Error resetting password: ' + (error.response?.data?.message || error.message));
-    }
-  };
-
-  const handleRemove2FA = async (userId) => {
-    if (!window.confirm('Remove 2FA from this user? They will need to set it up again on next login if 2FA is required.')) return;
-    
-    try {
-      await api.delete(`/api/users/${userId}/two-factor`);
-      toast.success('2FA removed successfully!');
-      fetchUsers();
-    } catch (error) {
-      toast.error('Error removing 2FA: ' + (error.response?.data?.message || error.message));
-    }
-  };
-
   const openEditModal = async (user) => {
     setSelectedUser(user);
     setFormData({
@@ -631,12 +607,6 @@ const UserManagement = () => {
     setShowModal(true);
   };
 
-  const openPasswordModal = (user) => {
-    setSelectedUser(user);
-    setFormData({ ...formData, password: '' });
-    setShowPasswordModal(true);
-  };
-
   // Password validation and generation functions
   const validatePassword = (password) => {
     setPasswordRequirements({
@@ -644,7 +614,7 @@ const UserManagement = () => {
       hasUpperCase: /[A-Z]/.test(password),
       hasLowerCase: /[a-z]/.test(password),
       hasNumber: /[0-9]/.test(password),
-      hasSymbol: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)
+      hasSymbol: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)
     });
   };
 
@@ -729,7 +699,7 @@ const UserManagement = () => {
     if (!window.confirm('Reset password with temporary password? An email will be sent to the user.')) return;
     
     try {
-      const response = await api.post(`/api/users/${selectedUser.id}/reset-password`);
+      await api.post(`/api/users/${selectedUser.id}/reset-password`);
       toast.success('Temporary password generated and email sent to user!', 5000);
       fetchUsers();
     } catch (error) {

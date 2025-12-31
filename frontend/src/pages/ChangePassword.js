@@ -15,14 +15,12 @@ const ChangePassword = () => {
   const [loading, setLoading] = useState(false);
   const [sessionToken, setSessionToken] = useState(null);
   const [isFirstTime, setIsFirstTime] = useState(false);
-  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    // Get session token and user from location state (first-time login)
+    // Get session token from location state (first-time login)
     // Or check if user is authenticated (changing password from profile)
     if (location.state) {
       setSessionToken(location.state.sessionToken);
-      setUser(location.state.user);
       setIsFirstTime(location.state.isFirstTime || false);
     } else {
       // If no state, user might be changing password from profile

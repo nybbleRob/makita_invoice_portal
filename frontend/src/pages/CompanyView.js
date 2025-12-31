@@ -2,12 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import toast from '../utils/toast';
-import { useAuth } from '../context/AuthContext';
-
 const CompanyView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [company, setCompany] = useState(null);
   const [children, setChildren] = useState([]);
   const [loading, setLoading] = useState(true);

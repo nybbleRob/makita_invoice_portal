@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
@@ -8,7 +7,6 @@ import TemplateBuilder from '../components/TemplateBuilder';
 
 const Templates = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedType, setSelectedType] = useState('all');

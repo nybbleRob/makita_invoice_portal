@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
@@ -29,7 +28,6 @@ const Settings = () => {
   const [testImportResult, setTestImportResult] = useState(null);
   const [testingDocumentAI, setTestingDocumentAI] = useState(false);
   const [testingEmail, setTestingEmail] = useState(false);
-  const [activeParsingTab, setActiveParsingTab] = useState('documentai'); // 'documentai'
   const [activeParsingSection, setActiveParsingSection] = useState('configuration'); // 'configuration', 'testing'
   const [emailTemplates, setEmailTemplates] = useState([]);
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState('welcome');
@@ -467,19 +465,6 @@ const Settings = () => {
     } finally {
       setTestingDocumentAI(false);
     }
-  };
-
-  const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleString();
   };
 
   // Parser Test functions
