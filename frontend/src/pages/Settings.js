@@ -28,6 +28,8 @@ const Settings = () => {
   const [purgingDocuments, setPurgingDocuments] = useState(false);
   const [purgingCustomers, setPurgingCustomers] = useState(false);
   const [purgeStats, setPurgeStats] = useState(null);
+  const [updatingGlobalEDI, setUpdatingGlobalEDI] = useState(false);
+  const [updatingGlobalEmail, setUpdatingGlobalEmail] = useState(false);
   
 
   useEffect(() => {
@@ -238,6 +240,51 @@ const Settings = () => {
       toast.error('Error purging customers: ' + (error.response?.data?.message || error.message));
     } finally {
       setPurgingCustomers(false);
+    }
+  };
+
+  const handleGlobalEDIChange = async (enabled) => {
+    const action = enabled ? 'enable' : 'disable';
+    if (!window.confirm(`Are you sure you want to ${action} EDI for ALL companies? This will affect every company in the system.`)) {
+      return;
+    }
+
+    setUpdatingGlobalEDI(true);
+    try {
+      const response = await api.put('/api/companies/bulk-update-all', {
+        edi: enabled
+      });
+      
+      toast.success(`EDI ${action}d for ${response.data.updated} companies`);
+    } catch (error) {
+      console.error('Error updating global EDI:', error);
+      toast.error('Error updating EDI: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setUpdatingGlobalEDI(false);
+    }
+  };
+
+  const handleGlobalEmailNotificationsChange = async (enabled) => {
+    const action = enabled ? 'enable' : 'disable';
+    if (!window.confirm(`Are you sure you want to ${action} ALL email notifications for ALL companies? This will affect every company in the system.`)) {
+      return;
+    }
+
+    setUpdatingGlobalEmail(true);
+    try {
+      const response = await api.put('/api/companies/bulk-update-all', {
+        sendInvoiceEmail: enabled,
+        sendInvoiceAttachment: enabled,
+        sendStatementEmail: enabled,
+        sendStatementAttachment: enabled
+      });
+      
+      toast.success(`Email notifications ${action}d for ${response.data.updated} companies`);
+    } catch (error) {
+      console.error('Error updating global email notifications:', error);
+      toast.error('Error updating email notifications: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setUpdatingGlobalEmail(false);
     }
   };
 
@@ -1120,6 +1167,88 @@ const Settings = () => {
                       <h2 className="mb-4">Admin Tools</h2>
                       <p className="card-subtitle mb-4">Administrative tools for system maintenance. These actions cannot be undone.</p>
                       
+                      {/* Global Settings Section */}
+                      <h4 className="mb-3">Global Company Settings</h4>
+                      <p className="text-muted mb-3">These settings affect ALL companies in the system at once.</p>
+                      
+                      {/* Global EDI Toggle */}
+                      <div className="card mb-3">
+                        <div className="card-header">
+                          <h3 className="card-title">Global EDI Control</h3>
+                        </div>
+                        <div className="card-body">
+                          <p className="text-muted mb-3">
+                            Enable or disable EDI for all companies in the system. This is useful for quickly toggling EDI functionality across the entire platform.
+                          </p>
+                          <div className="btn-group">
+                            <button
+                              className="btn btn-success"
+                              onClick={() => handleGlobalEDIChange(true)}
+                              disabled={updatingGlobalEDI || updatingGlobalEmail}
+                            >
+                              {updatingGlobalEDI ? (
+                                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                              ) : null}
+                              Enable EDI Globally
+                            </button>
+                            <button
+                              className="btn btn-warning"
+                              onClick={() => handleGlobalEDIChange(false)}
+                              disabled={updatingGlobalEDI || updatingGlobalEmail}
+                            >
+                              {updatingGlobalEDI ? (
+                                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                              ) : null}
+                              Disable EDI Globally
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Global Email Notifications Toggle */}
+                      <div className="card mb-3">
+                        <div className="card-header">
+                          <h3 className="card-title">Global Email Notifications Control</h3>
+                        </div>
+                        <div className="card-body">
+                          <p className="text-muted mb-3">
+                            Enable or disable all email notifications for all companies in the system. This affects:
+                          </p>
+                          <ul className="mb-3">
+                            <li>Invoice Email Notifications</li>
+                            <li>Invoice Email Attachments</li>
+                            <li>Statement Email Notifications</li>
+                            <li>Statement Email Attachments</li>
+                          </ul>
+                          <div className="btn-group">
+                            <button
+                              className="btn btn-success"
+                              onClick={() => handleGlobalEmailNotificationsChange(true)}
+                              disabled={updatingGlobalEDI || updatingGlobalEmail}
+                            >
+                              {updatingGlobalEmail ? (
+                                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                              ) : null}
+                              Enable All Email Notifications
+                            </button>
+                            <button
+                              className="btn btn-warning"
+                              onClick={() => handleGlobalEmailNotificationsChange(false)}
+                              disabled={updatingGlobalEDI || updatingGlobalEmail}
+                            >
+                              {updatingGlobalEmail ? (
+                                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                              ) : null}
+                              Disable All Email Notifications
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <hr className="my-4" />
+                      
+                      {/* Danger Zone */}
+                      <h4 className="mb-3 text-danger">Danger Zone</h4>
                       <div className="alert alert-danger">
                         <i className="fas fa-exclamation-triangle me-2"></i>
                         <strong>Warning:</strong> These tools will permanently delete data from the system. Use with extreme caution. All actions are logged and cannot be undone.
