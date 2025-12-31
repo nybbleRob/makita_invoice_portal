@@ -146,9 +146,9 @@ const Companies = () => {
   const [quickAddFormData, setQuickAddFormData] = useState({ 
     name: '', 
     email: '', 
-    sendInvoiceEmail: true, 
+    sendInvoiceEmail: false, 
     sendInvoiceAttachment: false, 
-    sendStatementEmail: true, 
+    sendStatementEmail: false, 
     sendStatementAttachment: false, 
     sendEmailAsSummary: false 
   });
@@ -433,9 +433,9 @@ const Companies = () => {
       setQuickAddLoading(true);
       
       const notificationSettings = {
-        sendInvoiceEmail: quickAddFormData.sendInvoiceEmail !== false,
+        sendInvoiceEmail: quickAddFormData.sendInvoiceEmail || false,
         sendInvoiceAttachment: quickAddFormData.sendInvoiceAttachment || false,
-        sendStatementEmail: quickAddFormData.sendStatementEmail !== false,
+        sendStatementEmail: quickAddFormData.sendStatementEmail || false,
         sendStatementAttachment: quickAddFormData.sendStatementAttachment || false,
         sendEmailAsSummary: quickAddFormData.sendEmailAsSummary || false
       };
@@ -480,9 +480,9 @@ const Companies = () => {
       setQuickAddFormData({ 
         name: '', 
         email: '', 
-        sendInvoiceEmail: true, 
+        sendInvoiceEmail: false, 
         sendInvoiceAttachment: false, 
-        sendStatementEmail: true, 
+        sendStatementEmail: false, 
         sendStatementAttachment: false, 
         sendEmailAsSummary: false 
       });
@@ -607,6 +607,53 @@ const Companies = () => {
       fetchCompanies();
     } catch (error) {
       toast.error(`Error ${action}ing companies: ` + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleBulkEDIChange = async (enabled) => {
+    if (selectedCompanyIds.length === 0) return;
+    
+    const count = selectedCompanyIds.length;
+    const action = enabled ? 'enable' : 'disable';
+    if (!window.confirm(`Are you sure you want to ${action} EDI for ${count} company(ies)?`)) return;
+    
+    try {
+      await Promise.all(
+        selectedCompanyIds.map((companyId) => 
+          api.put(`/api/companies/${companyId}`, { edi: enabled })
+        )
+      );
+      toast.success(`EDI ${action}d for ${count} company(ies) successfully!`);
+      setSelectedCompanyIds([]);
+      fetchCompanies();
+    } catch (error) {
+      toast.error(`Error ${action}ing EDI: ` + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleBulkEmailNotificationsChange = async (enabled) => {
+    if (selectedCompanyIds.length === 0) return;
+    
+    const count = selectedCompanyIds.length;
+    const action = enabled ? 'enable' : 'disable';
+    if (!window.confirm(`Are you sure you want to ${action} all email notifications for ${count} company(ies)?`)) return;
+    
+    try {
+      await Promise.all(
+        selectedCompanyIds.map((companyId) => 
+          api.put(`/api/companies/${companyId}`, { 
+            sendInvoiceEmail: enabled,
+            sendInvoiceAttachment: enabled,
+            sendStatementEmail: enabled,
+            sendStatementAttachment: enabled
+          })
+        )
+      );
+      toast.success(`Email notifications ${action}d for ${count} company(ies) successfully!`);
+      setSelectedCompanyIds([]);
+      fetchCompanies();
+    } catch (error) {
+      toast.error(`Error ${action}ing email notifications: ` + (error.response?.data?.message || error.message));
     }
   };
 
@@ -1563,6 +1610,44 @@ const Companies = () => {
                           Bulk ({selectedCompanyIds.length})
                         </button>
                         <ul className="dropdown-menu">
+                          <li>
+                            <button
+                              className="dropdown-item"
+                              type="button"
+                              onClick={() => handleBulkEDIChange(true)}
+                            >
+                              Enable EDI
+                            </button>
+                          </li>
+                          <li>
+                            <button
+                              className="dropdown-item"
+                              type="button"
+                              onClick={() => handleBulkEDIChange(false)}
+                            >
+                              Disable EDI
+                            </button>
+                          </li>
+                          <li><hr className="dropdown-divider" /></li>
+                          <li>
+                            <button
+                              className="dropdown-item"
+                              type="button"
+                              onClick={() => handleBulkEmailNotificationsChange(true)}
+                            >
+                              Enable Email Notifications
+                            </button>
+                          </li>
+                          <li>
+                            <button
+                              className="dropdown-item"
+                              type="button"
+                              onClick={() => handleBulkEmailNotificationsChange(false)}
+                            >
+                              Disable Email Notifications
+                            </button>
+                          </li>
+                          <li><hr className="dropdown-divider" /></li>
                           <li>
                             <button
                               className="dropdown-item"

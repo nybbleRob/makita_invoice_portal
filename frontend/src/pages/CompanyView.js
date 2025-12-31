@@ -9,6 +9,7 @@ const CompanyView = () => {
   const [children, setChildren] = useState([]);
   const [loading, setLoading] = useState(true);
   const [ancestors, setAncestors] = useState([]);
+  const [assignedUsers, setAssignedUsers] = useState([]);
 
   useEffect(() => {
     fetchCompanyDetails();
@@ -22,6 +23,15 @@ const CompanyView = () => {
       setCompany(response.data.company);
       setChildren(response.data.descendants || []);
       setAncestors(response.data.ancestors || []);
+      
+      // Fetch users assigned to this company
+      try {
+        const usersResponse = await api.get('/api/users', { params: { companyIds: id } });
+        setAssignedUsers(usersResponse.data.users || usersResponse.data || []);
+      } catch (userError) {
+        console.error('Error fetching assigned users:', userError);
+        setAssignedUsers([]);
+      }
     } catch (error) {
       console.error('Error fetching company details:', error);
       toast.error('Failed to load company details');
@@ -29,6 +39,30 @@ const CompanyView = () => {
     } finally {
       setLoading(false);
     }
+  };
+  
+  const getRoleBadgeClass = (role) => {
+    const classes = {
+      global_admin: 'bg-red-lt',
+      administrator: 'bg-purple-lt',
+      manager: 'bg-blue-lt',
+      staff: 'bg-green-lt',
+      external_user: 'bg-yellow-lt',
+      notification_contact: 'bg-cyan-lt'
+    };
+    return classes[role] || 'bg-secondary-lt';
+  };
+  
+  const getRoleLabel = (role) => {
+    const labels = {
+      global_admin: 'Global Admin',
+      administrator: 'Administrator',
+      manager: 'Manager',
+      staff: 'Staff',
+      external_user: 'External User',
+      notification_contact: 'Notification Contact'
+    };
+    return labels[role] || role || 'Unknown';
   };
 
   const getTypeBadgeClass = (type) => {
@@ -436,6 +470,50 @@ const CompanyView = () => {
                   {ancestors.length === 0 && children.length === 0 && (
                     <div className="text-center text-muted py-4">
                       <p className="mb-0">No company relationships</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Assigned Users */}
+              <div className="card mt-3">
+                <div className="card-header">
+                  <h3 className="card-title">Assigned Users</h3>
+                  <div className="card-actions">
+                    <span className="badge bg-secondary-lt">{assignedUsers.length} user(s)</span>
+                  </div>
+                </div>
+                <div className="card-body">
+                  {assignedUsers.length === 0 ? (
+                    <div className="text-center text-muted py-4">
+                      <p className="mb-0">No users assigned to this company</p>
+                    </div>
+                  ) : (
+                    <div className="list-group list-group-flush">
+                      {assignedUsers.map((user) => (
+                        <div key={user.id} className="list-group-item d-flex align-items-center justify-content-between py-2">
+                          <div className="d-flex align-items-center gap-2">
+                            <div className="avatar avatar-sm" style={{ backgroundColor: '#206bc4' }}>
+                              {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                            </div>
+                            <div>
+                              <div className="fw-bold">{user.name || 'Unknown'}</div>
+                              <div className="text-muted small">{user.email}</div>
+                            </div>
+                          </div>
+                          <div className="d-flex align-items-center gap-2">
+                            <span className={`badge ${getRoleBadgeClass(user.role)}`}>
+                              {getRoleLabel(user.role)}
+                            </span>
+                            <button
+                              className="btn btn-sm btn-outline-primary"
+                              onClick={() => navigate(`/users/${user.id}/view`)}
+                            >
+                              View
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
