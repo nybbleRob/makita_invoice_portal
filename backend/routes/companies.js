@@ -215,7 +215,6 @@ router.get('/', auth, async (req, res) => {
       where[Op.or] = [
         { name: { [Op.iLike]: `%${search}%` } },
         { code: { [Op.iLike]: `%${search}%` } },
-        { email: { [Op.iLike]: `%${search}%` } },
         { referenceNo: { [Op.iLike]: `%${search}%` } }
       ];
     }
