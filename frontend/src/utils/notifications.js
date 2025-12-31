@@ -8,7 +8,7 @@ let notifications = [
   {
     id: 1,
     type: 'info',
-    title: 'Welcome to eInvoice Portal',
+    title: 'Welcome to Makita Invoice Portal',
     message: 'Your dashboard is ready to use.',
     time: '2 hours ago',
     read: false

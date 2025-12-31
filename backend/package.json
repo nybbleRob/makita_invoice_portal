@@ -1,7 +1,7 @@
 {
   "name": "isg-reporting-backend",
   "version": "1.0.0",
-  "description": "Backend server for eInvoice Portal",
+  "description": "Backend server for Makita Invoice Portal",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

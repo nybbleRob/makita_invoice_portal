@@ -123,7 +123,7 @@ const ResetPassword = () => {
                     style={{ maxHeight: '60px', marginBottom: '1rem' }}
                   />
                 )}
-                <h1 className="mb-2">{settings?.companyName || settings?.siteName || 'eInvoice Portal'}</h1>
+                <h1 className="mb-2">{settings?.companyName || settings?.siteName || 'Makita Invoice Portal'}</h1>
               </div>
               <div className="alert alert-danger" role="alert">
                 {error || 'Invalid or expired reset token'}
@@ -157,7 +157,7 @@ const ResetPassword = () => {
                   style={{ maxHeight: '60px', marginBottom: '1rem' }}
                 />
               )}
-              <h1 className="mb-2">{settings?.companyName || settings?.siteName || 'eInvoice Portal'}</h1>
+              <h1 className="mb-2">{settings?.companyName || settings?.siteName || 'Makita Invoice Portal'}</h1>
               <p className="text-muted">Admin Dashboard</p>
             </div>
             <h2 className="card-title text-center mb-4">Reset password</h2>

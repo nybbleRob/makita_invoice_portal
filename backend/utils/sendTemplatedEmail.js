@@ -13,7 +13,7 @@ async function sendTemplatedEmail(templateName, to, data, settings, requestConte
   const { sendEmail } = require('./emailService');
 
   // Get company name and login URL from settings
-  const companyName = settings?.companyName || 'eInvoice Portal';
+  const companyName = settings?.companyName || 'Makita Invoice Portal';
   const loginUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
   // Merge default data

@@ -1372,9 +1372,9 @@ const Settings = () => {
                         <input
                           type="text"
                           className="form-control"
-                          value={settings.twoFactorAuth?.issuer || 'eInvoice Portal'}
+                          value={settings.twoFactorAuth?.issuer || 'Makita Invoice Portal'}
                           onChange={(e) => handleNestedChange('twoFactorAuth', 'issuer', e.target.value)}
-                          placeholder="eInvoice Portal"
+                          placeholder="Makita Invoice Portal"
                         />
                         <small className="form-hint">This name will appear in authenticator apps</small>
                       </div>
@@ -1524,9 +1524,9 @@ const Settings = () => {
                                 <input
                                   type="text"
                                   className="form-control"
-                                  value={settings.emailProvider?.smtp?.fromName || 'eInvoice Portal'}
+                                  value={settings.emailProvider?.smtp?.fromName || 'Makita Invoice Portal'}
                                   onChange={(e) => handleEmailProviderNestedChange('smtp', 'fromName', e.target.value)}
-                                  placeholder="eInvoice Portal"
+                                  placeholder="Makita Invoice Portal"
                                   disabled={!settings.emailProvider?.enabled}
                                 />
                               </div>
@@ -1659,9 +1659,9 @@ const Settings = () => {
                               <input
                                 type="text"
                                 className="form-control"
-                                value={settings.emailProvider?.resend?.fromName || 'eInvoice Portal'}
+                                value={settings.emailProvider?.resend?.fromName || 'Makita Invoice Portal'}
                                 onChange={(e) => handleEmailProviderNestedChange('resend', 'fromName', e.target.value)}
-                                placeholder="eInvoice Portal"
+                                placeholder="Makita Invoice Portal"
                                 disabled={!settings.emailProvider?.enabled}
                               />
                             </div>
@@ -1708,9 +1708,9 @@ const Settings = () => {
                               <input
                                 type="text"
                                 className="form-control"
-                                value={settings.emailProvider?.smtp2go?.fromName || 'eInvoice Portal'}
+                                value={settings.emailProvider?.smtp2go?.fromName || 'Makita Invoice Portal'}
                                 onChange={(e) => handleEmailProviderNestedChange('smtp2go', 'fromName', e.target.value)}
-                                placeholder="eInvoice Portal"
+                                placeholder="Makita Invoice Portal"
                                 disabled={!settings.emailProvider?.enabled}
                               />
                             </div>

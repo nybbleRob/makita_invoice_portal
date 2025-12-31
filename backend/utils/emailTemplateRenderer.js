@@ -79,7 +79,7 @@ async function renderEmailTemplate(templateName, data, templateModel, settings =
 
   // Merge default data
   const templateData = {
-    companyName: settings?.companyName || data.companyName || 'eInvoice Portal',
+    companyName: settings?.companyName || data.companyName || 'Makita Invoice Portal',
     loginUrl: data.loginUrl || process.env.FRONTEND_URL || 'http://localhost:3000',
     primaryColor: settings?.primaryColor || '#066fd1', // Add primary color for buttons
     ...data

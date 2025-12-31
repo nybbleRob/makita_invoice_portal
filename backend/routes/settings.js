@@ -64,7 +64,7 @@ router.get('/', async (req, res) => {
             password: ''
           },
           fromEmail: '',
-          fromName: 'eInvoice Portal',
+          fromName: 'Makita Invoice Portal',
           rejectUnauthorized: true
         },
         office365: {
@@ -77,12 +77,12 @@ router.get('/', async (req, res) => {
         resend: {
           apiKey: '',
           fromEmail: '',
-          fromName: 'eInvoice Portal'
+          fromName: 'Makita Invoice Portal'
         },
         smtp2go: {
           apiKey: '',
           fromEmail: '',
-          fromName: 'eInvoice Portal'
+          fromName: 'Makita Invoice Portal'
         }
       };
     }

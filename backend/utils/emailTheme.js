@@ -9,7 +9,7 @@
  * @returns {Object} - Theme configuration
  */
 function getEmailTheme(settings) {
-  const companyName = settings?.companyName || 'eInvoice Portal';
+  const companyName = settings?.companyName || 'Makita Invoice Portal';
   const primaryColor = settings?.primaryColor || '#066fd1';
   const logoLight = settings?.logoLight;
   const logoDark = settings?.logoDark;

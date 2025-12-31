@@ -37,7 +37,7 @@ function getEmailProviderConfig(settings) {
           password: process.env.SMTP_PASSWORD || dbConfig.auth?.password || '' // Env var takes priority
         },
         fromEmail: process.env.SMTP_FROM_EMAIL || dbConfig.fromEmail || '',
-        fromName: process.env.SMTP_FROM_NAME || dbConfig.fromName || 'eInvoice Portal',
+        fromName: process.env.SMTP_FROM_NAME || dbConfig.fromName || 'Makita Invoice Portal',
         rejectUnauthorized: process.env.SMTP_REJECT_UNAUTHORIZED !== 'false' && (dbConfig.rejectUnauthorized !== false)
       }
     };
@@ -73,7 +73,7 @@ function getEmailProviderConfig(settings) {
       resend: {
         apiKey: process.env.RESEND_API_KEY || dbConfig.apiKey || '', // Env var takes priority
         fromEmail: process.env.RESEND_FROM_EMAIL || dbConfig.fromEmail || '',
-        fromName: process.env.RESEND_FROM_NAME || dbConfig.fromName || 'eInvoice Portal'
+        fromName: process.env.RESEND_FROM_NAME || dbConfig.fromName || 'Makita Invoice Portal'
       }
     };
   }
@@ -87,7 +87,7 @@ function getEmailProviderConfig(settings) {
       smtp2go: {
         apiKey: process.env.SMTP2GO_API_KEY || dbConfig.apiKey || '', // Env var takes priority
         fromEmail: process.env.SMTP2GO_FROM_EMAIL || dbConfig.fromEmail || '',
-        fromName: process.env.SMTP2GO_FROM_NAME || dbConfig.fromName || 'eInvoice Portal'
+        fromName: process.env.SMTP2GO_FROM_NAME || dbConfig.fromName || 'Makita Invoice Portal'
       }
     };
   }
@@ -464,7 +464,7 @@ async function testEmailProvider(settings, requestContext = {}) {
   try {
     await sendEmail({
       to: testEmail,
-      subject: 'Test Email from eInvoice Portal',
+      subject: 'Test Email from Makita Invoice Portal',
       html: '<p>This is a test email to verify your email provider configuration.</p><p>If you received this, your email settings are working correctly!</p>',
       text: 'This is a test email to verify your email provider configuration. If you received this, your email settings are working correctly!',
       isTestEmail: true,

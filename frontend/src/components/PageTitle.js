@@ -7,7 +7,7 @@ const PageTitle = ({ title }) => {
   const location = useLocation();
 
   useEffect(() => {
-    const siteTitle = settings?.siteTitle || settings?.siteName || 'eInvoice Portal';
+    const siteTitle = settings?.siteTitle || settings?.siteName || 'Makita Invoice Portal';
     const pageTitle = title || getPageTitleFromPath(location.pathname);
     document.title = `${pageTitle} - ${siteTitle}`;
   }, [settings, location.pathname, title]);

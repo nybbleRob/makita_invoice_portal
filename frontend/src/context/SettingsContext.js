@@ -31,8 +31,8 @@ export const SettingsProvider = ({ children }) => {
       console.error('Error fetching settings:', error);
       // Set default settings so the app doesn't break
       setSettings({
-        companyName: 'eInvoice Portal',
-        siteName: 'eInvoice Portal',
+        companyName: 'Makita Invoice Portal',
+        siteName: 'Makita Invoice Portal',
         primaryColor: '#066fd1',
         secondaryColor: '#6c757d'
       });

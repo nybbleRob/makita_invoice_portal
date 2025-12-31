@@ -276,7 +276,7 @@ const Layout = () => {
                   style={{ maxHeight: '32px' }}
                 />
               ) : (
-                <h3 className="mb-0">{settings?.siteTitle || settings?.siteName || 'eInvoice Portal'}</h3>
+                <h3 className="mb-0">{settings?.siteTitle || settings?.siteName || 'Makita Invoice Portal'}</h3>
               )}
             </Link>
           </div>

@@ -1,5 +1,5 @@
 const express = require('express');
-const { User, Company, UserCompany, Sequelize } = require('../models');
+const { User, Company, UserCompany, Sequelize, sequelize } = require('../models');
 const { Op } = Sequelize;
 const { canManageUsers } = require('../middleware/roleCheck');
 const { canManageRole, getManageableRoles, getRoleLabel, ROLE_HIERARCHY } = require('../utils/roleHierarchy');
@@ -94,32 +94,49 @@ router.get('/', canManageUsers, async (req, res) => {
       }
     }
     
+    // Get users with company count (much faster than loading all company data)
     const { count, rows: users } = await User.findAndCountAll({
       where,
-      attributes: { exclude: ['password', 'twoFactorSecret', 'resetPasswordToken', 'resetPasswordExpires'] },
+      attributes: { 
+        exclude: ['password', 'twoFactorSecret', 'resetPasswordToken', 'resetPasswordExpires'],
+        include: [
+          // Add company count as a subquery
+          [
+            sequelize.literal(`(
+              SELECT COUNT(*) FROM user_companies 
+              WHERE user_companies."userId" = "User"."id"
+            )`),
+            'companyCount'
+          ]
+        ]
+      },
       include: [
         {
           model: User,
           as: 'addedByUser',
           attributes: ['id', 'name', 'email'],
           required: false
-        },
-        {
-          model: Company,
-          as: 'companies',
-          attributes: ['id', 'name', 'referenceNo', 'type'],
-          through: { attributes: [] },
-          required: false
         }
+        // Don't include companies here - we'll use companyCount instead
       ],
       order: [['createdAt', 'DESC']],
       limit: limitNum,
       offset: offset,
-      distinct: true // Important for accurate count with includes
+      distinct: true
+    });
+    
+    // Transform users to include companies array with just the count for frontend compatibility
+    const usersWithCompanyInfo = users.map(user => {
+      const userData = user.toJSON();
+      // Create a fake companies array with the correct length for frontend compatibility
+      const companyCount = parseInt(userData.companyCount) || 0;
+      userData.companies = Array(companyCount).fill({ id: null, name: '', referenceNo: '', type: '' });
+      delete userData.companyCount;
+      return userData;
     });
     
     res.json({
-      users,
+      users: usersWithCompanyInfo,
       pagination: {
         total: count,
         page: pageNum,
@@ -323,7 +340,7 @@ router.post('/', canManageUsers, async (req, res) => {
         const { EmailTemplate } = require('../models');
         
         const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
-        const companyName = settings.companyName || 'eInvoice Portal';
+        const companyName = settings.companyName || 'Makita Invoice Portal';
         
         // Try to use email template, fallback to hardcoded if template not found
         try {
@@ -768,7 +785,7 @@ router.post('/:id/reset-password', canManageUsers, async (req, res) => {
       
       const settings = await Settings.getSettings();
       const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
-      const companyName = settings.companyName || 'eInvoice Portal';
+      const companyName = settings.companyName || 'Makita Invoice Portal';
       
       // Try to use email template, fallback to hardcoded if template not found
       let emailContent;

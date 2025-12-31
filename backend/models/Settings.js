@@ -9,16 +9,16 @@ module.exports = (sequelize) => {
     },
     companyName: {
       type: DataTypes.STRING,
-      defaultValue: 'eInvoice Portal'
+      defaultValue: 'Makita Invoice Portal'
     },
     siteTitle: {
       type: DataTypes.STRING,
-      defaultValue: 'eInvoice Portal',
+      defaultValue: 'Makita Invoice Portal',
       comment: 'Site title (e.g., Makita Invoice Portal) - previously siteName'
     },
     siteName: {
       type: DataTypes.STRING,
-      defaultValue: 'eInvoice Portal',
+      defaultValue: 'Makita Invoice Portal',
       comment: 'Deprecated: Use siteTitle instead. Kept for backward compatibility.'
     },
     systemEmail: {
@@ -72,7 +72,7 @@ module.exports = (sequelize) => {
       defaultValue: {
         enabled: false,
         required: false,
-        issuer: 'eInvoice Portal'
+        issuer: 'Makita Invoice Portal'
       }
     },
     emailProvider: {
@@ -90,7 +90,7 @@ module.exports = (sequelize) => {
             password: ''
           },
           fromEmail: '',
-          fromName: 'eInvoice Portal',
+          fromName: 'Makita Invoice Portal',
           rejectUnauthorized: true // Reject unauthorized SSL certificates
         },
         office365: {
@@ -103,12 +103,12 @@ module.exports = (sequelize) => {
         resend: {
           apiKey: '',
           fromEmail: '', // Must be verified in Resend
-          fromName: 'eInvoice Portal'
+          fromName: 'Makita Invoice Portal'
         },
         smtp2go: {
           apiKey: '',
           fromEmail: '', // Must be verified sender
-          fromName: 'eInvoice Portal'
+          fromName: 'Makita Invoice Portal'
         }
       }
     },
@@ -125,7 +125,7 @@ module.exports = (sequelize) => {
           password: ''
         },
         fromEmail: '',
-        fromName: 'eInvoice Portal'
+        fromName: 'Makita Invoice Portal'
       }
     },
     passwordExpiryDays: {

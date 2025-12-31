@@ -215,7 +215,7 @@ async function deleteDocument(document, documentType, settings) {
               documentNumber: documentNumber,
               deletionDate: deletedAt.toLocaleDateString('en-GB'),
               retentionPeriod: settings.documentRetentionPeriod,
-              companyName: settings.companyName || 'eInvoice Portal'
+              companyName: settings.companyName || 'Makita Invoice Portal'
             },
             settings,
             {

@@ -139,6 +139,24 @@ module.exports = (sequelize) => {
   }, {
     tableName: 'users',
     timestamps: true,
+    indexes: [
+      {
+        fields: ['email'],
+        unique: true
+      },
+      {
+        fields: ['role']
+      },
+      {
+        fields: ['isActive']
+      },
+      {
+        fields: ['createdAt']
+      },
+      {
+        fields: ['addedById']
+      }
+    ],
     hooks: {
       beforeCreate: async (user) => {
         if (user.password) {

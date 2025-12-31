@@ -174,7 +174,7 @@ Test Summary:
 
 You can view the detailed results in the Parser Test section of the portal.
 
-This is an automated notification from ${settings.siteTitle || settings.companyName || 'eInvoice Portal'}
+This is an automated notification from ${settings.siteTitle || settings.companyName || 'Makita Invoice Portal'}
       `;
       
       // Send email using the same pattern as other emails
@@ -420,7 +420,7 @@ process.on('SIGINT', async () => {
 // Routes
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'eInvoice Portal API is running',
+    message: 'Makita Invoice Portal API is running',
     version: '1.0.0',
     endpoints: {
       api: '/api',

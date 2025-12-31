@@ -604,7 +604,7 @@ Test Summary:
 
 You can view the detailed results in the Parser Test section of the portal.
 
-This is an automated notification from ${settings.siteTitle || settings.companyName || 'eInvoice Portal'}
+This is an automated notification from ${settings.siteTitle || settings.companyName || 'Makita Invoice Portal'}
       `;
       
       const emailResult = await sendEmail({
@@ -638,7 +638,7 @@ This is an automated notification from ${settings.siteTitle || settings.companyN
       {
         userName: data.userName || 'Test User',
         userEmail: testEmail,
-        companyName: settings.companyName || 'eInvoice Portal',
+        companyName: settings.companyName || 'Makita Invoice Portal',
         loginUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
         resetUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=test-token-123`,
         temporaryPassword: data.temporaryPassword || 'TempPass123!',

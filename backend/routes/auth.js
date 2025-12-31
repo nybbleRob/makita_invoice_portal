@@ -312,7 +312,7 @@ router.post('/forgot-password', async (req, res) => {
             emailSettings.emailProvider?.smtp?.fromName || 
             emailSettings.emailProvider?.resend?.fromName ||
             emailSettings.emailProvider?.smtp2go?.fromName ||
-            'eInvoice Portal';
+            'Makita Invoice Portal';
           
           // Try to use email template, fallback to hardcoded if template not found
           try {
