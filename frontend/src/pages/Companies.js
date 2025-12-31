@@ -1501,6 +1501,16 @@ const Companies = () => {
                         <kbd>Ctrl+K</kbd>
                       </span>
                     </div>
+                    {/* Status Filter */}
+                    <select
+                      className="form-select w-auto"
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                    >
+                      <option value="all">All Status</option>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
                     {/* Type Filter Dropdown */}
                     <div className="dropdown">
                       <button
@@ -1542,16 +1552,6 @@ const Companies = () => {
                         </div>
                       )}
                     </div>
-                    {/* Status Filter */}
-                    <select
-                      className="form-select w-auto"
-                      value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                    >
-                      <option value="all">All Status</option>
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
                     {/* Filter Companies */}
                     <button
                       type="button"
