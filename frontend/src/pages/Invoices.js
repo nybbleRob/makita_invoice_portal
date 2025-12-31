@@ -938,20 +938,6 @@ const Invoices = () => {
                         ? 'Filter by Company' 
                         : `Companies (${selectedCompanyFilters.length})`}
                     </button>
-                    {/* Retention filter */}
-                    {settings?.documentRetentionPeriod && (
-                      <select
-                        className="form-select w-auto"
-                        value={retentionFilter}
-                        onChange={(e) => {
-                          setRetentionFilter(e.target.value);
-                          setPagination(prev => ({ ...prev, page: 1 }));
-                        }}
-                      >
-                        <option value="all">All Retention</option>
-                        <option value="expiring_soonest">Expiring Soonest</option>
-                      </select>
-                    )}
                     {/* Reset filters */}
                     <button 
                       className="btn btn-outline-secondary" 
