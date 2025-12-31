@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import toast from '../utils/toast';
@@ -12,6 +12,7 @@ const Unallocated = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [reasonFilter, setReasonFilter] = useState('all');
+  const searchInputRef = useRef(null);
   const [accountNumberFilter] = useState('');
   const [invoiceNumberFilter] = useState('');
   const [dateFilter] = useState('');
@@ -41,6 +42,21 @@ const Unallocated = () => {
     // Clear selections when page changes or filters change
     setSelectedFiles(new Set());
   }, [pagination.page, debouncedSearch, reasonFilter, debouncedAccountNumber, debouncedInvoiceNumber, debouncedDate]);
+
+  // Ctrl+K keyboard shortcut to focus search
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const fetchDocuments = async () => {
     try {
@@ -318,82 +334,84 @@ const Unallocated = () => {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <div className="container-xl">
-          <div className="row g-2 align-items-center">
-            <div className="col">
-              <h2 className="page-title">Unallocated Documents</h2>
-              <div className="text-muted mt-1">
-                Documents that could not be matched to a company or failed processing
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="page-body">
         <div className="container-xl">
           <div className="card">
             <div className="card-header">
-              <div className="row align-items-center">
-                <div className="col">
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Search documents..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setPagination(prev => ({ ...prev, page: 1 }));
-                    }}
-                  />
+              <div className="row w-100 g-3">
+                {/* Title and description */}
+                <div className="col-lg-3 col-md-4 col-12">
+                  <h3 className="card-title mb-0">Unallocated Documents</h3>
+                  <p className="text-secondary m-0">Documents that could not be matched or failed processing</p>
                 </div>
-                <div className="col-auto">
-                  <select
-                    className="form-select"
-                    value={reasonFilter}
-                    onChange={(e) => {
-                      setReasonFilter(e.target.value);
-                      setPagination(prev => ({ ...prev, page: 1 }));
-                    }}
-                  >
-                    <option value="all">All Reasons</option>
-                    <option value="unallocated">Unallocated</option>
-                    <option value="parsing_error">Parsing Error</option>
-                    <option value="validation_error">Validation Error</option>
-                    <option value="duplicate">Duplicate</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-                <div className="col-auto">
-                  {selectedFiles.size > 0 && (
-                    <button
-                      className="btn btn-danger me-2"
-                      onClick={() => {
-                        setShowDeleteModal(true);
-                        setDeleteReason('');
+                {/* Controls */}
+                <div className="col-lg-9 col-md-8 col-12">
+                  <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
+                    {/* Search */}
+                    <div className="input-group input-group-flat" style={{ maxWidth: '280px' }}>
+                      <span className="input-group-text">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon">
+                          <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
+                          <path d="M21 21l-6 -6"></path>
+                        </svg>
+                      </span>
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        className="form-control"
+                        placeholder="Search..."
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setPagination(prev => ({ ...prev, page: 1 }));
+                        }}
+                      />
+                      <span className="input-group-text">
+                        <kbd>Ctrl+K</kbd>
+                      </span>
+                    </div>
+                    {/* Reason filter */}
+                    <select
+                      className="form-select w-auto"
+                      value={reasonFilter}
+                      onChange={(e) => {
+                        setReasonFilter(e.target.value);
+                        setPagination(prev => ({ ...prev, page: 1 }));
                       }}
-                      disabled={deleting}
                     >
-                      Delete Selected ({selectedFiles.size})
-                    </button>
-                  )}
-                  {currentUser?.role && ['global_admin', 'administrator'].includes(currentUser.role) && (
-                    <>
-                      {pagination.total > 0 && (
-                        <button
-                          className="btn btn-danger me-2"
-                          onClick={() => {
-                            setShowClearAllModal(true);
-                            setClearAllReason('');
-                          }}
-                          disabled={clearingAll}
-                        >
-                          Clear All ({pagination.total})
-                        </button>
-                      )}
-                    </>
-                  )}
+                      <option value="all">All Reasons</option>
+                      <option value="unallocated">Unallocated</option>
+                      <option value="parsing_error">Parsing Error</option>
+                      <option value="validation_error">Validation Error</option>
+                      <option value="duplicate">Duplicate</option>
+                      <option value="other">Other</option>
+                    </select>
+                    {/* Bulk actions */}
+                    {selectedFiles.size > 0 && (
+                      <button
+                        className="btn btn-danger"
+                        onClick={() => {
+                          setShowDeleteModal(true);
+                          setDeleteReason('');
+                        }}
+                        disabled={deleting}
+                      >
+                        Delete Selected ({selectedFiles.size})
+                      </button>
+                    )}
+                    {currentUser?.role && ['global_admin', 'administrator'].includes(currentUser.role) && pagination.total > 0 && (
+                      <button
+                        className="btn btn-danger"
+                        onClick={() => {
+                          setShowClearAllModal(true);
+                          setClearAllReason('');
+                        }}
+                        disabled={clearingAll}
+                      >
+                        Clear All ({pagination.total})
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -425,18 +443,32 @@ const Unallocated = () => {
                     <th>Actions</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className={loading ? 'placeholder-glow' : ''}>
                   {loading ? (
-                    <tr>
-                      <td colSpan="12" className="text-center py-3">
-                        <div className="spinner-border spinner-border-sm" role="status">
-                          <span className="visually-hidden">Loading...</span>
-                        </div>
-                      </td>
-                    </tr>
+                    [...Array(10)].map((_, i) => (
+                      <tr key={`skeleton-${i}`}>
+                        <td><span className="placeholder" style={{ width: '16px', height: '16px', borderRadius: '3px' }}></span></td>
+                        <td><span className="placeholder col-7"></span></td>
+                        <td><span className="placeholder col-8"></span></td>
+                        <td><span className="placeholder col-6"></span></td>
+                        <td><span className="placeholder col-6"></span></td>
+                        <td><span className="placeholder col-10"></span></td>
+                        <td><span className="placeholder col-8"></span></td>
+                        <td><span className="placeholder col-9"></span></td>
+                        <td><span className="placeholder col-5"></span></td>
+                        <td><span className="placeholder col-4"></span></td>
+                        <td><span className="placeholder col-6" style={{ borderRadius: '4px' }}></span></td>
+                        <td><span className="placeholder col-5"></span></td>
+                        <td>
+                          <div className="btn-list">
+                            <span className="placeholder btn btn-sm disabled" style={{ width: '50px' }}></span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
                   ) : documents.length === 0 ? (
                     <tr>
-                      <td colSpan="12" className="text-center py-3 text-muted">
+                      <td colSpan="13" className="text-center py-3 text-muted">
                         No unallocated documents found
                       </td>
                     </tr>

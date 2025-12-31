@@ -21,6 +21,21 @@ const Companies = () => {
     BRANCH: true
   });
   const [statusFilter, setStatusFilter] = useState('all');
+  const searchInputRef = useRef(null);
+  const [showTypeFilterDropdown, setShowTypeFilterDropdown] = useState(false);
+  
+  // Parent company filter modal state
+  const [showParentFilterModal, setShowParentFilterModal] = useState(false);
+  const [parentFilterSearch, setParentFilterSearch] = useState('');
+  const [parentFilterCompanies, setParentFilterCompanies] = useState([]);
+  const [parentFilterLoading, setParentFilterLoading] = useState(false);
+  const [parentFilterPage, setParentFilterPage] = useState(1);
+  const [parentFilterTotal, setParentFilterTotal] = useState(0);
+  const [parentFilterPages, setParentFilterPages] = useState(0);
+  const [tempSelectedParents, setTempSelectedParents] = useState([]);
+  const [selectedParentFilters, setSelectedParentFilters] = useState([]);
+  const [selectedParentIds, setSelectedParentIds] = useState([]);
+  const debouncedParentFilterSearch = useDebounce(parentFilterSearch, 300);
   
   // Modal states
   const [showCorporateModal, setShowCorporateModal] = useState(false);
@@ -147,7 +162,7 @@ const Companies = () => {
   useEffect(() => {
     fetchCompanies();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.page, pagination.limit, debouncedSearch, typeFilters, statusFilter]);
+  }, [pagination.page, pagination.limit, debouncedSearch, typeFilters, statusFilter, selectedParentIds]);
 
   // Handle edit from CompanyView page
   useEffect(() => {
@@ -175,6 +190,101 @@ const Companies = () => {
       fetchParentCompanies(1);
     }
   }, [showBranchModal, showSubsidiaryModal, debouncedParentSearch]);
+
+  // Ctrl+K keyboard shortcut to focus search
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Parent filter modal - fetch companies when search or modal changes
+  useEffect(() => {
+    if (showParentFilterModal) {
+      fetchParentFilterCompanies(debouncedParentFilterSearch, 1);
+    }
+  }, [debouncedParentFilterSearch, showParentFilterModal]);
+
+  const fetchParentFilterCompanies = async (search = '', page = 1) => {
+    try {
+      setParentFilterLoading(true);
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: '20'
+      });
+      if (search.trim()) {
+        params.append('search', search.trim());
+      }
+      const response = await api.get(`/api/companies?${params.toString()}`);
+      const companiesData = response.data.data || response.data.companies || response.data || [];
+      const total = response.data.total || companiesData.length;
+      const pages = response.data.pages || Math.ceil(total / 20);
+      
+      setParentFilterCompanies(Array.isArray(companiesData) ? companiesData : []);
+      setParentFilterTotal(total);
+      setParentFilterPages(pages);
+      setParentFilterPage(page);
+    } catch (error) {
+      console.error('Error fetching companies for filter:', error);
+    } finally {
+      setParentFilterLoading(false);
+    }
+  };
+
+  const openParentFilterModal = () => {
+    setTempSelectedParents([...selectedParentFilters]);
+    setParentFilterSearch('');
+    setShowParentFilterModal(true);
+    fetchParentFilterCompanies('', 1);
+  };
+
+  const handleParentFilterToggle = (company) => {
+    setTempSelectedParents(prev => {
+      const exists = prev.find(c => c.id === company.id);
+      if (exists) {
+        return prev.filter(c => c.id !== company.id);
+      } else {
+        return [...prev, { id: company.id, name: company.name, referenceNo: company.referenceNo }];
+      }
+    });
+  };
+
+  const removeTempSelectedParent = (companyId) => {
+    setTempSelectedParents(prev => prev.filter(c => c.id !== companyId));
+  };
+
+  const applyParentFilter = () => {
+    const parentIds = tempSelectedParents.map(c => c.id);
+    setSelectedParentIds(parentIds);
+    setSelectedParentFilters([...tempSelectedParents]);
+    setShowParentFilterModal(false);
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  const clearParentFilters = () => {
+    setTempSelectedParents([]);
+  };
+
+  const closeParentFilterModal = () => {
+    setShowParentFilterModal(false);
+  };
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setTypeFilters({ CORP: true, SUB: true, BRANCH: true });
+    setSelectedParentIds([]);
+    setSelectedParentFilters([]);
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
 
   const fetchCompanies = async () => {
     try {
@@ -213,6 +323,11 @@ const Companies = () => {
           companiesData = companiesData.filter((company) => activeTypes.includes(company.type));
         }
         
+        // Apply parent filter on frontend if selected
+        if (selectedParentIds.length > 0) {
+          companiesData = companiesData.filter((company) => selectedParentIds.includes(company.id));
+        }
+        
         setCompanies(companiesData);
         setFilteredCompanies(companiesData);
         
@@ -231,6 +346,11 @@ const Companies = () => {
         const activeTypes = Object.keys(typeFilters).filter(key => typeFilters[key]);
         if (activeTypes.length < 3) {
           companiesData = companiesData.filter((company) => activeTypes.includes(company.type));
+        }
+        
+        // Apply parent filter on frontend if selected
+        if (selectedParentIds.length > 0) {
+          companiesData = companiesData.filter((company) => selectedParentIds.includes(company.id));
         }
         
         setCompanies(companiesData);
@@ -1299,134 +1419,81 @@ const Companies = () => {
     );
   };
 
-  if (loading) {
-    return (
-      <div className="page page-center">
-        <div className="container container-tight py-4">
-          <div className="text-center">
-            <div className="spinner-border" role="status">
-              <span className="visually-hidden">Loading...</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div>
-      <div className="page-header d-print-none">
-        <div className="container-fluid">
-          <div className="row g-2 align-items-center">
-            <div className="col">
-              <h2 className="page-title">Companies</h2>
-              <div className="text-muted mt-1">Manage company hierarchy (Corporate, Subsidiary, Branch)</div>
-            </div>
-            <div className="col-auto ms-auto">
-              <div className="btn-list">
-                <button
-                  className="btn btn-primary"
-                  onClick={() => {
-                    setShowCorporateModal(true);
-                    setActiveTab('basic');
-                  }}
-                >
-                  Add Corporate
-                </button>
-                <button
-                  className="btn btn-info"
-                  onClick={() => {
-                    setShowSubsidiaryModal(true);
-                    setActiveTab('basic');
-                  }}
-                >
-                  Add Subsidiary
-                </button>
-                <button
-                  className="btn btn-success"
-                  onClick={() => {
-                    setShowBranchModal(true);
-                    setActiveTab('basic');
-                  }}
-                >
-                  Add Branch
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
+    <div className="page">
       <div className="page-body">
         <div className="container-xl">
           <div className="card">
             <div className="card-header">
-              <div className="row w-full">
-                <div className="col">
+              <div className="row w-100 g-3">
+                {/* Title and description */}
+                <div className="col-lg-3 col-md-4 col-12">
                   <h3 className="card-title mb-0">Companies</h3>
-                  <p className="text-secondary m-0">Manage your company structure</p>
+                  <p className="text-secondary m-0">Manage company hierarchy</p>
                 </div>
-                <div className="col-md-auto col-sm-12">
-                  <div className="ms-auto d-flex flex-wrap btn-list gap-2">
+                {/* Controls */}
+                <div className="col-lg-9 col-md-8 col-12">
+                  <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
                     {/* Search */}
-                    <div className="input-group input-group-flat w-auto">
+                    <div className="input-group input-group-flat" style={{ maxWidth: '280px' }}>
                       <span className="input-group-text">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="24"
-                          height="24"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="icon icon-1"
-                        >
-                          <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
-                          <path d="M21 21l-6 -6" />
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon">
+                          <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
+                          <path d="M21 21l-6 -6"></path>
                         </svg>
                       </span>
                       <input
+                        ref={searchInputRef}
                         type="text"
                         className="form-control"
-                        placeholder="Search companies..."
+                        placeholder="Search..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                       />
+                      <span className="input-group-text">
+                        <kbd>Ctrl+K</kbd>
+                      </span>
                     </div>
-                    {/* Type Filters - Buttons */}
-                    <div className="btn-group" role="group">
-                      <input
-                        type="checkbox"
-                        className="btn-check"
-                        id="filter-corp"
-                        checked={typeFilters.CORP}
-                        onChange={() => handleTypeFilterChange('CORP')}
-                      />
-                      <label className="btn btn-outline-primary" htmlFor="filter-corp">
-                        Corporate
-                      </label>
-                      <input
-                        type="checkbox"
-                        className="btn-check"
-                        id="filter-sub"
-                        checked={typeFilters.SUB}
-                        onChange={() => handleTypeFilterChange('SUB')}
-                      />
-                      <label className="btn btn-outline-info" htmlFor="filter-sub">
-                        Subsidiary
-                      </label>
-                      <input
-                        type="checkbox"
-                        className="btn-check"
-                        id="filter-branch"
-                        checked={typeFilters.BRANCH}
-                        onChange={() => handleTypeFilterChange('BRANCH')}
-                      />
-                      <label className="btn btn-outline-success" htmlFor="filter-branch">
-                        Branch
-                      </label>
+                    {/* Type Filter Dropdown */}
+                    <div className="dropdown">
+                      <button
+                        className="btn btn-outline-secondary dropdown-toggle"
+                        type="button"
+                        onClick={() => setShowTypeFilterDropdown(!showTypeFilterDropdown)}
+                      >
+                        Company Types {Object.values(typeFilters).filter(v => v).length < 3 ? `(${Object.values(typeFilters).filter(v => v).length})` : ''}
+                      </button>
+                      {showTypeFilterDropdown && (
+                        <div className="dropdown-menu show" style={{ position: 'absolute' }}>
+                          <label className="dropdown-item d-flex align-items-center gap-2" style={{ cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              className="form-check-input m-0"
+                              checked={typeFilters.CORP}
+                              onChange={() => handleTypeFilterChange('CORP')}
+                            />
+                            <span className="badge bg-primary-lt">Corporate</span>
+                          </label>
+                          <label className="dropdown-item d-flex align-items-center gap-2" style={{ cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              className="form-check-input m-0"
+                              checked={typeFilters.SUB}
+                              onChange={() => handleTypeFilterChange('SUB')}
+                            />
+                            <span className="badge bg-info-lt">Subsidiary</span>
+                          </label>
+                          <label className="dropdown-item d-flex align-items-center gap-2" style={{ cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              className="form-check-input m-0"
+                              checked={typeFilters.BRANCH}
+                              onChange={() => handleTypeFilterChange('BRANCH')}
+                            />
+                            <span className="badge bg-success-lt">Branch</span>
+                          </label>
+                        </div>
+                      )}
                     </div>
                     {/* Status Filter */}
                     <select
@@ -1438,6 +1505,52 @@ const Companies = () => {
                       <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
                     </select>
+                    {/* Filter Companies */}
+                    <button
+                      type="button"
+                      className={`btn ${selectedParentFilters.length > 0 ? 'btn-primary' : 'btn-outline-secondary'}`}
+                      onClick={openParentFilterModal}
+                    >
+                      {selectedParentFilters.length === 0 
+                        ? 'Filter Companies' 
+                        : `Companies (${selectedParentFilters.length})`}
+                    </button>
+                    {/* Reset */}
+                    <button 
+                      className="btn btn-outline-secondary" 
+                      onClick={handleResetFilters}
+                      title="Reset all filters"
+                    >
+                      Reset
+                    </button>
+                    {/* Add buttons */}
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setShowCorporateModal(true);
+                        setActiveTab('basic');
+                      }}
+                    >
+                      Add Corporate
+                    </button>
+                    <button
+                      className="btn btn-info"
+                      onClick={() => {
+                        setShowSubsidiaryModal(true);
+                        setActiveTab('basic');
+                      }}
+                    >
+                      Add Subsidiary
+                    </button>
+                    <button
+                      className="btn btn-success"
+                      onClick={() => {
+                        setShowBranchModal(true);
+                        setActiveTab('basic');
+                      }}
+                    >
+                      Add Branch
+                    </button>
                     {/* Bulk Actions */}
                     {isAdministrator() && selectedCompanyIds.length > 0 && (
                       <div className="dropdown">
@@ -1447,7 +1560,7 @@ const Companies = () => {
                           data-bs-toggle="dropdown"
                           aria-expanded="false"
                         >
-                          Bulk Actions ({selectedCompanyIds.length})
+                          Bulk ({selectedCompanyIds.length})
                         </button>
                         <ul className="dropdown-menu">
                           <li>
@@ -1456,7 +1569,7 @@ const Companies = () => {
                               type="button"
                               onClick={() => handleBulkStatusChange(true)}
                             >
-                              Activate Companies
+                              Activate
                             </button>
                           </li>
                           <li>
@@ -1465,7 +1578,7 @@ const Companies = () => {
                               type="button"
                               onClick={() => handleBulkStatusChange(false)}
                             >
-                              Deactivate Companies
+                              Deactivate
                             </button>
                           </li>
                           <li><hr className="dropdown-divider" /></li>
@@ -1475,7 +1588,7 @@ const Companies = () => {
                               type="button"
                               onClick={handleBulkDelete}
                             >
-                              Delete Selected Companies
+                              Delete Selected
                             </button>
                           </li>
                         </ul>
@@ -1509,11 +1622,29 @@ const Companies = () => {
                       <th>Actions</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {filteredCompanies.length === 0 ? (
+                  <tbody className={loading ? 'placeholder-glow' : ''}>
+                    {loading ? (
+                      [...Array(10)].map((_, i) => (
+                        <tr key={`skeleton-${i}`}>
+                          <td><span className="placeholder" style={{ width: '16px', height: '16px', borderRadius: '3px' }}></span></td>
+                          <td><span className="placeholder col-10"></span></td>
+                          <td><span className="placeholder col-6" style={{ borderRadius: '4px' }}></span></td>
+                          <td><span className="placeholder col-8"></span></td>
+                          <td><span className="placeholder col-7"></span></td>
+                          <td><span className="placeholder col-5" style={{ borderRadius: '4px' }}></span></td>
+                          <td><span className="placeholder col-6" style={{ borderRadius: '4px' }}></span></td>
+                          <td>
+                            <div className="btn-list">
+                              <span className="placeholder btn btn-sm disabled" style={{ width: '50px' }}></span>
+                              <span className="placeholder btn btn-sm disabled" style={{ width: '60px' }}></span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : filteredCompanies.length === 0 ? (
                       <tr>
                         <td colSpan="8" className="text-center text-muted py-4">
-                          {loading ? 'Loading...' : (pagination.total === 0 ? 'No companies found' : 'No companies match your filters on this page')}
+                          {pagination.total === 0 ? 'No companies found' : 'No companies match your filters on this page'}
                         </td>
                       </tr>
                     ) : (
@@ -2056,6 +2187,138 @@ const Companies = () => {
                   ) : (
                     'Add Contact'
                   )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Parent/Company Filter Modal */}
+      {showParentFilterModal && (
+        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
+          <div className="modal-dialog modal-dialog-centered modal-lg">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Filter Companies</h5>
+                <button type="button" className="btn-close" onClick={closeParentFilterModal}></button>
+              </div>
+              <div className="modal-body">
+                {/* Search */}
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Search companies by name or account number..."
+                    value={parentFilterSearch}
+                    onChange={(e) => setParentFilterSearch(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+
+                {/* Selected companies as pills */}
+                {tempSelectedParents.length > 0 && (
+                  <div className="mb-3 d-flex flex-wrap gap-1">
+                    {tempSelectedParents.map((company) => (
+                      <span 
+                        key={company.id} 
+                        className="badge bg-primary-lt d-inline-flex align-items-center gap-1"
+                      >
+                        {company.name}
+                        {company.referenceNo && <small className="text-muted">({company.referenceNo})</small>}
+                        <button
+                          type="button"
+                          className="btn-close ms-1"
+                          style={{ fontSize: '0.5rem' }}
+                          onClick={() => removeTempSelectedParent(company.id)}
+                          aria-label="Remove"
+                        ></button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Company list */}
+                <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+                  {parentFilterLoading ? (
+                    <div className="text-center py-4">
+                      <div className="spinner-border" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                      </div>
+                    </div>
+                  ) : parentFilterCompanies.length === 0 ? (
+                    <div className="text-muted text-center py-4">No companies found</div>
+                  ) : (
+                    <div className="list-group list-group-flush">
+                      {parentFilterCompanies.map((company) => {
+                        const isSelected = tempSelectedParents.some(c => c.id === company.id);
+                        return (
+                          <label
+                            key={company.id}
+                            className={`list-group-item d-flex align-items-center gap-2 py-2 ${isSelected ? 'bg-primary-lt' : ''}`}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <input
+                              type="checkbox"
+                              className="form-check-input m-0"
+                              checked={isSelected}
+                              onChange={() => handleParentFilterToggle(company)}
+                            />
+                            <span className="flex-grow-1 text-truncate">{company.name}</span>
+                            {company.referenceNo && (
+                              <small className="text-muted">{company.referenceNo}</small>
+                            )}
+                            {company.type && (
+                              <span className={`badge ${company.type === 'CORP' ? 'bg-primary-lt' : company.type === 'SUB' ? 'bg-info-lt' : 'bg-success-lt'}`}>
+                                {company.type}
+                              </span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Pagination */}
+                {parentFilterPages > 1 && (
+                  <div className="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
+                    <small className="text-muted">
+                      Showing {parentFilterCompanies.length} of {parentFilterTotal} companies
+                    </small>
+                    <div className="btn-group">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        disabled={parentFilterPage <= 1 || parentFilterLoading}
+                        onClick={() => fetchParentFilterCompanies(parentFilterSearch, parentFilterPage - 1)}
+                      >
+                        Previous
+                      </button>
+                      <span className="btn btn-sm btn-outline-secondary disabled">
+                        {parentFilterPage} / {parentFilterPages}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        disabled={parentFilterPage >= parentFilterPages || parentFilterLoading}
+                        onClick={() => fetchParentFilterCompanies(parentFilterSearch, parentFilterPage + 1)}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn" onClick={clearParentFilters}>
+                  Clear All
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={closeParentFilterModal}>
+                  Cancel
+                </button>
+                <button type="button" className="btn btn-primary" onClick={applyParentFilter}>
+                  Apply Filter {tempSelectedParents.length > 0 && `(${tempSelectedParents.length})`}
                 </button>
               </div>
             </div>
