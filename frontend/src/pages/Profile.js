@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api, { API_BASE_URL } from '../services/api';
+import api from '../services/api';
 import toast from '../utils/toast';
 import { getRoleLabel } from '../utils/roleLabels';
 import { getInitials, getAvatarColorClass } from '../utils/avatar';
@@ -21,7 +21,6 @@ const Profile = () => {
     confirmPassword: ''
   });
   const [saving, setSaving] = useState(false);
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [twoFactorData, setTwoFactorData] = useState({
     resetPassword: ''
   });
@@ -97,45 +96,6 @@ const Profile = () => {
     }
   };
 
-  const handleAvatarUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setUploadingAvatar(true);
-    const formData = new FormData();
-    formData.append('avatar', file);
-
-    try {
-      const response = await api.post('/api/profile/avatar', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-      setProfile(response.data.user);
-      await refreshUser(); // Update auth context
-      toast.success('Avatar uploaded successfully!');
-    } catch (error) {
-      toast.error('Error uploading avatar: ' + (error.response?.data?.message || error.message));
-    } finally {
-      setUploadingAvatar(false);
-    }
-  };
-
-  const handleAvatarDelete = async () => {
-    // Simple confirmation - user can click again if they change their mind
-    setUploadingAvatar(true);
-    try {
-      const response = await api.delete('/api/profile/avatar');
-      setProfile(response.data.user);
-      await refreshUser(); // Update auth context
-      toast.success('Avatar deleted successfully!');
-    } catch (error) {
-      toast.error('Error deleting avatar: ' + (error.response?.data?.message || error.message));
-    } finally {
-      setUploadingAvatar(false);
-    }
-  };
-
   if (loading) {
     return <div className="loading">Loading profile...</div>;
   }
@@ -195,43 +155,19 @@ const Profile = () => {
                     <div>
                       <h2 className="mb-4">My Account</h2>
                       <h3 className="card-title">Profile Details</h3>
-                      <div className="row align-items-center">
+                      <div className="row align-items-center mb-4">
                         <div className="col-auto">
-                          {profile.avatar ? (
-                            <span className="avatar avatar-xl" style={{ backgroundImage: `url(${API_BASE_URL}${profile.avatar})` }}></span>
-                          ) : (
-                            <span className={`avatar avatar-xl ${getAvatarColorClass(profile.name)} text-white`}>
-                              {getInitials(profile.name)}
-                            </span>
-                          )}
+                          <span className={`avatar avatar-xl ${getAvatarColorClass(profile.name)} text-white`}>
+                            {getInitials(profile.name)}
+                          </span>
                         </div>
-                        <div className="col-auto">
-                          <label className="btn btn-1">
-                            {uploadingAvatar ? 'Uploading...' : 'Change avatar'}
-                            <input
-                              type="file"
-                              className="d-none"
-                              accept="image/*"
-                              onChange={handleAvatarUpload}
-                              disabled={uploadingAvatar}
-                            />
-                          </label>
+                        <div className="col">
+                          <h4 className="mb-1">{profile.name}</h4>
+                          <p className="text-muted mb-0">{profile.email}</p>
                         </div>
-                        {profile.avatar && (
-                          <div className="col-auto">
-                            <button
-                              type="button"
-                              className="btn btn-ghost-danger btn-3"
-                              onClick={handleAvatarDelete}
-                              disabled={uploadingAvatar}
-                            >
-                              Delete avatar
-                            </button>
-                          </div>
-                        )}
                       </div>
 
-                      <h3 className="card-title mt-4">Personal Information</h3>
+                      <h3 className="card-title">Personal Information</h3>
                       <form onSubmit={handleProfileUpdate}>
                         <div className="row g-3">
                           <div className="col-md-6">

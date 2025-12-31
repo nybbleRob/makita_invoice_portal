@@ -431,7 +431,8 @@ router.put('/', globalAdmin, async (req, res) => {
     
     res.json(settingsObj);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Error updating settings:', error);
+    res.status(500).json({ message: error.message });
   }
 });
 
@@ -459,36 +460,6 @@ router.post('/upload/logo-light', globalAdmin, upload.single('logo'), async (req
     res.json({ 
       message: 'Light logo uploaded successfully',
       path: settings.logoLight
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Upload logo (dark)
-router.post('/upload/logo-dark', globalAdmin, upload.single('logo'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ message: 'No file uploaded' });
-    }
-    
-    const settings = await Settings.getSettings();
-    
-    // Delete old logo if exists
-    if (settings.logoDark) {
-      const oldPath = path.join(STORAGE_BASE, path.basename(settings.logoDark));
-      if (fs.existsSync(oldPath)) {
-        fs.unlinkSync(oldPath);
-      }
-    }
-    
-    settings.logoDark = `/uploads/${req.file.filename}`;
-    await settings.save();
-    await Settings.invalidateCache();
-    
-    res.json({ 
-      message: 'Dark logo uploaded successfully',
-      path: settings.logoDark
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -592,7 +563,6 @@ router.delete('/upload/:type', globalAdmin, async (req, res) => {
     
     const fieldMap = {
       'logo-light': 'logoLight',
-      'logo-dark': 'logoDark',
       'favicon': 'favicon',
       'login-background': 'loginBackgroundImage'
     };
@@ -617,8 +587,9 @@ router.delete('/upload/:type', globalAdmin, async (req, res) => {
     
     res.json({ message: `${type} deleted successfully` });
   } catch (error) {
+    console.error('Error deleting image:', error);
     res.status(500).json({ message: error.message });
-    }
+  }
 });
 
 // Test email provider configuration
