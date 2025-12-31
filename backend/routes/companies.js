@@ -661,14 +661,16 @@ router.put('/bulk-update-all', auth, globalAdmin, async (req, res) => {
     // Log activity
     await logActivity({
       type: ActivityType.SETTINGS_UPDATED,
-      description: `Global company settings updated: ${Object.keys(filteredUpdate).join(', ')}`,
+      action: `Global company settings updated: ${Object.keys(filteredUpdate).join(', ')}`,
       userId: req.user.userId,
-      metadata: {
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      details: {
         updatedFields: Object.keys(filteredUpdate),
         values: filteredUpdate,
         companiesAffected: updatedCount
       },
-      ip: req.ip || req.connection?.remoteAddress,
+      ipAddress: req.ip || req.connection?.remoteAddress,
       userAgent: req.get('user-agent')
     });
     
