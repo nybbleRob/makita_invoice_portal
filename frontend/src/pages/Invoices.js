@@ -6,7 +6,6 @@ import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { useDebounce } from '../hooks/useDebounce';
 import DocumentRetentionTimer from '../components/DocumentRetentionTimer';
-import CompanyHierarchyFilter from '../components/CompanyHierarchyFilter';
 
 const Invoices = () => {
   const navigate = useNavigate();
@@ -18,6 +17,16 @@ const Invoices = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
+  const [selectedCompanyFilters, setSelectedCompanyFilters] = useState([]); // Array of {id, name, referenceNo}
+  const [tempSelectedCompanies, setTempSelectedCompanies] = useState([]);
+  const [filterCompanies, setFilterCompanies] = useState([]);
+  const [filterCompanySearch, setFilterCompanySearch] = useState('');
+  const [filterCompanyPage, setFilterCompanyPage] = useState(1);
+  const [filterCompanyTotal, setFilterCompanyTotal] = useState(0);
+  const [filterCompanyPages, setFilterCompanyPages] = useState(0);
+  const [filterCompanyLoading, setFilterCompanyLoading] = useState(false);
+  const [showCompanyFilterModal, setShowCompanyFilterModal] = useState(false);
+  const debouncedFilterCompanySearch = useDebounce(filterCompanySearch, 300);
   const [companies, setCompanies] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 });
   const [sortBy, setSortBy] = useState('createdAt');
@@ -171,6 +180,78 @@ const Invoices = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Company filter modal functions
+  const fetchFilterCompanies = async (search = '', page = 1) => {
+    try {
+      setFilterCompanyLoading(true);
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: '20'
+      });
+      if (search.trim()) {
+        params.append('search', search.trim());
+      }
+      const response = await api.get(`/api/companies?${params.toString()}`);
+      const companiesData = response.data.data || response.data.companies || response.data || [];
+      const total = response.data.total || companiesData.length;
+      const pages = response.data.pages || Math.ceil(total / 20);
+      
+      setFilterCompanies(Array.isArray(companiesData) ? companiesData : []);
+      setFilterCompanyTotal(total);
+      setFilterCompanyPages(pages);
+      setFilterCompanyPage(page);
+    } catch (error) {
+      console.error('Error fetching companies for filter:', error);
+    } finally {
+      setFilterCompanyLoading(false);
+    }
+  };
+
+  // Fetch companies when search or page changes in modal
+  useEffect(() => {
+    if (showCompanyFilterModal) {
+      fetchFilterCompanies(debouncedFilterCompanySearch, 1);
+    }
+  }, [debouncedFilterCompanySearch, showCompanyFilterModal]);
+
+  const openCompanyFilterModal = () => {
+    setTempSelectedCompanies([...selectedCompanyFilters]);
+    setFilterCompanySearch('');
+    setShowCompanyFilterModal(true);
+    fetchFilterCompanies('', 1);
+  };
+
+  const handleCompanyFilterToggle = (company) => {
+    setTempSelectedCompanies(prev => {
+      const exists = prev.find(c => c.id === company.id);
+      if (exists) {
+        return prev.filter(c => c.id !== company.id);
+      } else {
+        return [...prev, { id: company.id, name: company.name, referenceNo: company.referenceNo }];
+      }
+    });
+  };
+
+  const removeTempSelectedCompany = (companyId) => {
+    setTempSelectedCompanies(prev => prev.filter(c => c.id !== companyId));
+  };
+
+  const applyCompanyFilter = () => {
+    const companyIds = tempSelectedCompanies.map(c => c.id);
+    setSelectedCompanyIds(companyIds);
+    setSelectedCompanyFilters([...tempSelectedCompanies]);
+    setShowCompanyFilterModal(false);
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  const clearCompanyFilters = () => {
+    setTempSelectedCompanies([]);
+  };
+
+  const closeCompanyFilterModal = () => {
+    setShowCompanyFilterModal(false);
+  };
 
   const formatDate = (date) => {
     if (!date) return '-';
@@ -890,13 +971,16 @@ const Invoices = () => {
                         ref={searchInputRef}
                         type="text"
                         className="form-control"
-                        placeholder="Search invoices..."
+                        placeholder="Search..."
                         value={searchQuery}
                         onChange={(e) => {
                           setSearchQuery(e.target.value);
                           setPagination(prev => ({ ...prev, page: 1 }));
                         }}
                       />
+                      <span className="input-group-text">
+                        <kbd>Ctrl+K</kbd>
+                      </span>
                     </div>
                     {/* Status filter */}
                     <select
@@ -911,17 +995,17 @@ const Invoices = () => {
                       <option value="ready_new">Ready (New)</option>
                       <option value="viewed">Viewed</option>
                       <option value="downloaded">Downloaded</option>
-                      <option value="queried">Queried</option>
                     </select>
                     {/* Company filter */}
-                    <CompanyHierarchyFilter
-                      companies={companies}
-                      selectedCompanyIds={selectedCompanyIds}
-                      onSelectionChange={(ids) => {
-                        setSelectedCompanyIds(ids);
-                        setPagination(prev => ({ ...prev, page: 1 }));
-                      }}
-                    />
+                    <button
+                      type="button"
+                      className={`btn ${selectedCompanyFilters.length > 0 ? 'btn-primary' : 'btn-outline-secondary'}`}
+                      onClick={openCompanyFilterModal}
+                    >
+                      {selectedCompanyFilters.length === 0 
+                        ? 'Filter by Company' 
+                        : `Companies (${selectedCompanyFilters.length})`}
+                    </button>
                     {/* Retention filter */}
                     {settings?.documentRetentionPeriod && (
                       <select
@@ -1943,6 +2027,136 @@ const Invoices = () => {
       )}
 
       {/* Column Customizer Modal */}
+
+      {/* Company Filter Modal */}
+      {showCompanyFilterModal && (
+        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
+          <div className="modal-dialog modal-dialog-centered modal-lg">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Filter by Company</h5>
+                <button type="button" className="btn-close" onClick={closeCompanyFilterModal}></button>
+              </div>
+              <div className="modal-body">
+                {/* Search */}
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Search companies by name or account number..."
+                    value={filterCompanySearch}
+                    onChange={(e) => setFilterCompanySearch(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+
+                {/* Selected companies as pills */}
+                {tempSelectedCompanies.length > 0 && (
+                  <div className="mb-3 d-flex flex-wrap gap-1">
+                    {tempSelectedCompanies.map((company) => (
+                      <span 
+                        key={company.id} 
+                        className="badge bg-primary-lt d-inline-flex align-items-center gap-1"
+                      >
+                        {company.name}
+                        {company.referenceNo && <small className="text-muted">({company.referenceNo})</small>}
+                        <button
+                          type="button"
+                          className="btn-close ms-1"
+                          style={{ fontSize: '0.5rem' }}
+                          onClick={() => removeTempSelectedCompany(company.id)}
+                          aria-label="Remove"
+                        ></button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Company list */}
+                <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+                  {filterCompanyLoading ? (
+                    <div className="text-center py-4">
+                      <div className="spinner-border" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                      </div>
+                    </div>
+                  ) : filterCompanies.length === 0 ? (
+                    <div className="text-muted text-center py-4">No companies found</div>
+                  ) : (
+                    <div className="list-group list-group-flush">
+                      {filterCompanies.map((company) => {
+                        const isSelected = tempSelectedCompanies.some(c => c.id === company.id);
+                        return (
+                          <label
+                            key={company.id}
+                            className={`list-group-item d-flex align-items-center gap-2 py-2 ${isSelected ? 'bg-primary-lt' : ''}`}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <input
+                              type="checkbox"
+                              className="form-check-input m-0"
+                              checked={isSelected}
+                              onChange={() => handleCompanyFilterToggle(company)}
+                            />
+                            <span className="flex-grow-1 text-truncate">{company.name}</span>
+                            {company.referenceNo && (
+                              <small className="text-muted">{company.referenceNo}</small>
+                            )}
+                            {company.type && (
+                              <span className="badge bg-secondary-lt">{company.type}</span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Pagination */}
+                {filterCompanyPages > 1 && (
+                  <div className="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
+                    <small className="text-muted">
+                      Showing {filterCompanies.length} of {filterCompanyTotal} companies
+                    </small>
+                    <div className="btn-group">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        disabled={filterCompanyPage <= 1 || filterCompanyLoading}
+                        onClick={() => fetchFilterCompanies(filterCompanySearch, filterCompanyPage - 1)}
+                      >
+                        Previous
+                      </button>
+                      <span className="btn btn-sm btn-outline-secondary disabled">
+                        {filterCompanyPage} / {filterCompanyPages}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        disabled={filterCompanyPage >= filterCompanyPages || filterCompanyLoading}
+                        onClick={() => fetchFilterCompanies(filterCompanySearch, filterCompanyPage + 1)}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn" onClick={clearCompanyFilters}>
+                  Clear All
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={closeCompanyFilterModal}>
+                  Cancel
+                </button>
+                <button type="button" className="btn btn-primary" onClick={applyCompanyFilter}>
+                  Apply Filter {tempSelectedCompanies.length > 0 && `(${tempSelectedCompanies.length})`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
