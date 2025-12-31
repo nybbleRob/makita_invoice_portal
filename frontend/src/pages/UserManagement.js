@@ -734,7 +734,80 @@ const UserManagement = () => {
 
 
   if (loading) {
-    return <div className="loading">Loading users...</div>;
+    return (
+      <div>
+        <div className="page-header d-print-none">
+          <div className="container-fluid">
+            <div className="row g-2 align-items-center">
+              <div className="col">
+                <h2 className="page-title">User Management</h2>
+                <div className="text-muted mt-1">Manage users and their permissions</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="page-body">
+          <div className="container-fluid">
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">
+                  <span className="placeholder col-2"></span>
+                </h3>
+              </div>
+              <div className="table-responsive placeholder-glow">
+                <table className="table table-vcenter card-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '40px' }}></th>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Companies</th>
+                      <th>Status</th>
+                      <th>2FA</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...Array(10)].map((_, i) => (
+                      <tr key={i}>
+                        <td>
+                          <span className="placeholder" style={{ width: '16px', height: '16px', borderRadius: '3px' }}></span>
+                        </td>
+                        <td>
+                          <span className="placeholder col-8"></span>
+                        </td>
+                        <td>
+                          <span className="placeholder col-10"></span>
+                        </td>
+                        <td>
+                          <span className="placeholder col-6" style={{ borderRadius: '4px' }}></span>
+                        </td>
+                        <td>
+                          <span className="placeholder col-4"></span>
+                        </td>
+                        <td>
+                          <span className="placeholder col-5" style={{ borderRadius: '4px' }}></span>
+                        </td>
+                        <td>
+                          <span className="placeholder col-5" style={{ borderRadius: '4px' }}></span>
+                        </td>
+                        <td>
+                          <div className="btn-list">
+                            <span className="placeholder btn btn-sm disabled" style={{ width: '50px' }}></span>
+                            <span className="placeholder btn btn-sm disabled" style={{ width: '40px' }}></span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
