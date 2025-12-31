@@ -16,12 +16,25 @@ const CreditNotes = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [companyFilter, setCompanyFilter] = useState('all');
   const [companies, setCompanies] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 });
   const debouncedSearch = useDebounce(searchQuery, 300);
   const [selectedCreditNotes, setSelectedCreditNotes] = useState([]);
   const selectAllCheckboxRef = useRef(null);
+  const searchInputRef = useRef(null);
+  
+  // Company filter modal state
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
+  const [selectedCompanyFilters, setSelectedCompanyFilters] = useState([]);
+  const [tempSelectedCompanies, setTempSelectedCompanies] = useState([]);
+  const [filterCompanies, setFilterCompanies] = useState([]);
+  const [filterCompanySearch, setFilterCompanySearch] = useState('');
+  const [filterCompanyPage, setFilterCompanyPage] = useState(1);
+  const [filterCompanyTotal, setFilterCompanyTotal] = useState(0);
+  const [filterCompanyPages, setFilterCompanyPages] = useState(0);
+  const [filterCompanyLoading, setFilterCompanyLoading] = useState(false);
+  const [showCompanyFilterModal, setShowCompanyFilterModal] = useState(false);
+  const debouncedFilterCompanySearch = useDebounce(filterCompanySearch, 300);
   
   // Delete modal states
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -64,12 +77,22 @@ const CreditNotes = () => {
   const fetchCreditNotes = useCallback(async () => {
     try {
       setLoading(true);
+      
+      // Build company IDs param
+      let companyIdsParam = null;
+      if (selectedCompanyIds.length > 0) {
+        const joined = selectedCompanyIds.join(',');
+        if (joined.length <= 1500) {
+          companyIdsParam = joined;
+        }
+      }
+      
       const params = {
         page: pagination.page,
         limit: pagination.limit,
         search: debouncedSearch,
         ...(statusFilter !== 'all' && { status: statusFilter }),
-        ...(companyFilter !== 'all' && { companyId: companyFilter })
+        ...(companyIdsParam && { companyIds: companyIdsParam })
       };
       
       const response = await api.get('/api/credit-notes', { params });
@@ -104,7 +127,7 @@ const CreditNotes = () => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, debouncedSearch, statusFilter, companyFilter]);
+  }, [pagination.page, pagination.limit, debouncedSearch, statusFilter, selectedCompanyIds]);
 
   const fetchCompanies = useCallback(async () => {
     try {
@@ -120,6 +143,93 @@ const CreditNotes = () => {
     fetchCompanies();
     setSelectedCreditNotes([]); // Clear selections on filter change
   }, [fetchCreditNotes, fetchCompanies]);
+
+  // Ctrl+K keyboard shortcut to focus search
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Company filter modal functions
+  const fetchFilterCompanies = async (search = '', page = 1) => {
+    try {
+      setFilterCompanyLoading(true);
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: '20'
+      });
+      if (search.trim()) {
+        params.append('search', search.trim());
+      }
+      const response = await api.get(`/api/companies?${params.toString()}`);
+      const companiesData = response.data.data || response.data.companies || response.data || [];
+      const total = response.data.total || companiesData.length;
+      const pages = response.data.pages || Math.ceil(total / 20);
+      
+      setFilterCompanies(Array.isArray(companiesData) ? companiesData : []);
+      setFilterCompanyTotal(total);
+      setFilterCompanyPages(pages);
+      setFilterCompanyPage(page);
+    } catch (error) {
+      console.error('Error fetching companies for filter:', error);
+    } finally {
+      setFilterCompanyLoading(false);
+    }
+  };
+
+  // Fetch companies when search or page changes in modal
+  useEffect(() => {
+    if (showCompanyFilterModal) {
+      fetchFilterCompanies(debouncedFilterCompanySearch, 1);
+    }
+  }, [debouncedFilterCompanySearch, showCompanyFilterModal]);
+
+  const openCompanyFilterModal = () => {
+    setTempSelectedCompanies([...selectedCompanyFilters]);
+    setFilterCompanySearch('');
+    setShowCompanyFilterModal(true);
+    fetchFilterCompanies('', 1);
+  };
+
+  const handleCompanyFilterToggle = (company) => {
+    setTempSelectedCompanies(prev => {
+      const exists = prev.find(c => c.id === company.id);
+      if (exists) {
+        return prev.filter(c => c.id !== company.id);
+      } else {
+        return [...prev, { id: company.id, name: company.name, referenceNo: company.referenceNo }];
+      }
+    });
+  };
+
+  const removeTempSelectedCompany = (companyId) => {
+    setTempSelectedCompanies(prev => prev.filter(c => c.id !== companyId));
+  };
+
+  const applyCompanyFilter = () => {
+    const companyIds = tempSelectedCompanies.map(c => c.id);
+    setSelectedCompanyIds(companyIds);
+    setSelectedCompanyFilters([...tempSelectedCompanies]);
+    setShowCompanyFilterModal(false);
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  const clearCompanyFilters = () => {
+    setTempSelectedCompanies([]);
+  };
+
+  const closeCompanyFilterModal = () => {
+    setShowCompanyFilterModal(false);
+  };
 
   const getStatusBadgeClass = (status) => {
     const classes = {
@@ -665,150 +775,134 @@ const CreditNotes = () => {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <div className="container-xl">
-          <div className="row g-2 align-items-center">
-            <div className="col">
-              <h2 className="page-title">Credit Notes</h2>
-            </div>
-            <div className="col-auto ms-auto">
-              {(currentUser?.role === 'global_admin' || 
-                currentUser?.role === 'administrator' || 
-                currentUser?.role === 'manager' || 
-                currentUser?.role === 'staff') && (
-                <>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept=".pdf"
-                    onChange={handleFileSelect}
-                    style={{ display: 'none' }}
-                  />
-                  <button 
-                    className="btn btn-primary"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                      <path d="M14 3v4a1 1 0 0 0 1 1h4" />
-                      <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
-                      <path d="M12 11v6" />
-                      <path d="M9 14l3 -3l3 3" />
-                    </svg>
-                    Upload Credit Notes
-                  </button>
-                  <button 
-                    className="btn btn-info ms-2"
-                    onClick={handleOpenSftpModal}
-                    title="Import credit notes from FTP/SFTP server"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                      <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
-                      <path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
-                      <path d="M7 12a5 5 0 1 0 10 0" />
-                    </svg>
-                    Import via FTP/SFTP
-                  </button>
-                  {importFiles.length > 0 && (
-                    <button 
-                      className="btn btn-success ms-2"
-                      onClick={handleImportCreditNotes}
-                    >
-                      Import {importFiles.length} File{importFiles.length !== 1 ? 's' : ''}
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="page-body">
         <div className="container-xl">
           <div className="card">
             <div className="card-header">
-              <div className="row align-items-center">
-                <div className="col">
-                  <div className="input-group input-group-flat">
-                    <span className="input-group-text">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
-                        <path d="M21 21l-6 -6"></path>
-                      </svg>
-                    </span>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="Search credit notes..."
-                      value={searchQuery}
+              <div className="row w-100 g-3">
+                {/* Title and description */}
+                <div className="col-lg-3 col-md-4 col-12">
+                  <h3 className="card-title mb-0">Credit Notes</h3>
+                  <p className="text-secondary m-0">View and manage credit note documents</p>
+                </div>
+                {/* Controls */}
+                <div className="col-lg-9 col-md-8 col-12">
+                  <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
+                    {/* Search */}
+                    <div className="input-group input-group-flat" style={{ maxWidth: '280px' }}>
+                      <span className="input-group-text">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon">
+                          <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
+                          <path d="M21 21l-6 -6"></path>
+                        </svg>
+                      </span>
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        className="form-control"
+                        placeholder="Search..."
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setPagination(prev => ({ ...prev, page: 1 }));
+                        }}
+                      />
+                      <span className="input-group-text">
+                        <kbd>Ctrl+K</kbd>
+                      </span>
+                    </div>
+                    {/* Status filter */}
+                    <select
+                      className="form-select w-auto"
+                      value={statusFilter}
                       onChange={(e) => {
-                        setSearchQuery(e.target.value);
+                        setStatusFilter(e.target.value);
                         setPagination(prev => ({ ...prev, page: 1 }));
                       }}
-                    />
-                  </div>
-                </div>
-                <div className="col-auto ms-auto d-flex flex-wrap btn-list gap-2">
-                  <select
-                    className="form-select w-auto"
-                    value={statusFilter}
-                    onChange={(e) => {
-                      setStatusFilter(e.target.value);
-                      setPagination(prev => ({ ...prev, page: 1 }));
-                    }}
-                  >
-                    <option value="all">All Status</option>
-                    <option value="draft">Draft</option>
-                    <option value="sent">Sent</option>
-                    <option value="applied">Applied</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                  <select
-                    className="form-select w-auto"
-                    value={companyFilter}
-                    onChange={(e) => {
-                      setCompanyFilter(e.target.value);
-                      setPagination(prev => ({ ...prev, page: 1 }));
-                    }}
-                  >
-                    <option value="all">All Companies</option>
-                    {companies.map(company => (
-                      <option key={company.id} value={company.id}>{company.name}</option>
-                    ))}
-                  </select>
-                  {/* Bulk Actions */}
-                  {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && selectedCreditNotes.length > 0 && (
-                    <>
+                    >
+                      <option value="all">All Status</option>
+                      <option value="ready_new">Ready (New)</option>
+                      <option value="viewed">Viewed</option>
+                      <option value="downloaded">Downloaded</option>
+                    </select>
+                    {/* Company filter */}
+                    <button
+                      type="button"
+                      className={`btn ${selectedCompanyFilters.length > 0 ? 'btn-primary' : 'btn-outline-secondary'}`}
+                      onClick={openCompanyFilterModal}
+                    >
+                      {selectedCompanyFilters.length === 0 
+                        ? 'Filter by Company' 
+                        : `Companies (${selectedCompanyFilters.length})`}
+                    </button>
+                    {/* Upload/Import buttons */}
+                    {(currentUser?.role === 'global_admin' || 
+                      currentUser?.role === 'administrator' || 
+                      currentUser?.role === 'manager' || 
+                      currentUser?.role === 'staff') && (
+                      <>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          multiple
+                          accept=".pdf"
+                          onChange={handleFileSelect}
+                          style={{ display: 'none' }}
+                        />
+                        <button 
+                          className="btn btn-primary"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          Upload
+                        </button>
+                        <button 
+                          className="btn btn-info"
+                          onClick={handleOpenSftpModal}
+                          title="Import credit notes from FTP/SFTP server"
+                        >
+                          FTP Import
+                        </button>
+                        {importFiles.length > 0 && (
+                          <button 
+                            className="btn btn-success"
+                            onClick={handleImportCreditNotes}
+                          >
+                            Import {importFiles.length} File{importFiles.length !== 1 ? 's' : ''}
+                          </button>
+                        )}
+                      </>
+                    )}
+                    {/* Bulk Actions */}
+                    {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && selectedCreditNotes.length > 0 && (
+                      <>
+                        <button 
+                          className="btn btn-primary" 
+                          onClick={handleBulkDownload}
+                          disabled={bulkDeleting}
+                        >
+                          Download ({selectedCreditNotes.length})
+                        </button>
+                        <button 
+                          className="btn btn-danger" 
+                          onClick={() => {
+                            setShowBulkDeleteModal(true);
+                            setBulkDeleteReason('');
+                          }}
+                          disabled={bulkDeleting}
+                        >
+                          Delete ({selectedCreditNotes.length})
+                        </button>
+                      </>
+                    )}
+                    {selectedCreditNotes.length > 0 && (currentUser?.role !== 'global_admin' && currentUser?.role !== 'administrator') && (
                       <button 
                         className="btn btn-primary" 
                         onClick={handleBulkDownload}
-                        disabled={bulkDeleting}
                       >
                         Download ({selectedCreditNotes.length})
                       </button>
-                      <button 
-                        className="btn btn-danger" 
-                        onClick={() => {
-                          setShowBulkDeleteModal(true);
-                          setBulkDeleteReason('');
-                        }}
-                        disabled={bulkDeleting}
-                      >
-                        Delete ({selectedCreditNotes.length})
-                      </button>
-                    </>
-                  )}
-                  {selectedCreditNotes.length > 0 && (currentUser?.role !== 'global_admin' && currentUser?.role !== 'administrator') && (
-                    <button 
-                      className="btn btn-primary" 
-                      onClick={handleBulkDownload}
-                    >
-                      Download ({selectedCreditNotes.length})
-                    </button>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -841,15 +935,29 @@ const CreditNotes = () => {
                     <th>Actions</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className={loading ? 'placeholder-glow' : ''}>
                   {loading ? (
-                    <tr>
-                      <td colSpan={9 + (queriesEnabled ? 1 : 0) + (settings?.documentRetentionPeriod ? 1 : 0) + 1} className="text-center py-3">
-                        <div className="spinner-border spinner-border-sm" role="status">
-                          <span className="visually-hidden">Loading...</span>
-                        </div>
-                      </td>
-                    </tr>
+                    [...Array(10)].map((_, i) => (
+                      <tr key={`skeleton-${i}`}>
+                        <td><span className="placeholder" style={{ width: '16px', height: '16px', borderRadius: '3px' }}></span></td>
+                        <td><span className="placeholder col-7"></span></td>
+                        <td><span className="placeholder col-8"></span></td>
+                        <td><span className="placeholder col-6"></span></td>
+                        <td><span className="placeholder col-5"></span></td>
+                        <td><span className="placeholder col-10"></span></td>
+                        <td><span className="placeholder col-6" style={{ borderRadius: '4px' }}></span></td>
+                        <td><span className="placeholder col-8"></span></td>
+                        <td><span className="placeholder col-9"></span></td>
+                        {queriesEnabled && <td><span className="placeholder col-5"></span></td>}
+                        {settings?.documentRetentionPeriod && <td><span className="placeholder col-6"></span></td>}
+                        <td>
+                          <div className="btn-list">
+                            <span className="placeholder btn btn-sm disabled" style={{ width: '50px' }}></span>
+                            <span className="placeholder btn btn-sm disabled" style={{ width: '60px' }}></span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
                   ) : creditNotes.length === 0 ? (
                     <tr>
                       <td colSpan={11 + (queriesEnabled ? 1 : 0) + (settings?.documentRetentionPeriod ? 1 : 0) + 1} className="text-center py-3 text-muted">
@@ -1672,6 +1780,135 @@ const CreditNotes = () => {
         </div>
       )}
 
+      {/* Company Filter Modal */}
+      {showCompanyFilterModal && (
+        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
+          <div className="modal-dialog modal-dialog-centered modal-lg">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Filter by Company</h5>
+                <button type="button" className="btn-close" onClick={closeCompanyFilterModal}></button>
+              </div>
+              <div className="modal-body">
+                {/* Search */}
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Search companies by name or account number..."
+                    value={filterCompanySearch}
+                    onChange={(e) => setFilterCompanySearch(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+
+                {/* Selected companies as pills */}
+                {tempSelectedCompanies.length > 0 && (
+                  <div className="mb-3 d-flex flex-wrap gap-1">
+                    {tempSelectedCompanies.map((company) => (
+                      <span 
+                        key={company.id} 
+                        className="badge bg-primary-lt d-inline-flex align-items-center gap-1"
+                      >
+                        {company.name}
+                        {company.referenceNo && <small className="text-muted">({company.referenceNo})</small>}
+                        <button
+                          type="button"
+                          className="btn-close ms-1"
+                          style={{ fontSize: '0.5rem' }}
+                          onClick={() => removeTempSelectedCompany(company.id)}
+                          aria-label="Remove"
+                        ></button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Company list */}
+                <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+                  {filterCompanyLoading ? (
+                    <div className="text-center py-4">
+                      <div className="spinner-border" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                      </div>
+                    </div>
+                  ) : filterCompanies.length === 0 ? (
+                    <div className="text-muted text-center py-4">No companies found</div>
+                  ) : (
+                    <div className="list-group list-group-flush">
+                      {filterCompanies.map((company) => {
+                        const isSelected = tempSelectedCompanies.some(c => c.id === company.id);
+                        return (
+                          <label
+                            key={company.id}
+                            className={`list-group-item d-flex align-items-center gap-2 py-2 ${isSelected ? 'bg-primary-lt' : ''}`}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <input
+                              type="checkbox"
+                              className="form-check-input m-0"
+                              checked={isSelected}
+                              onChange={() => handleCompanyFilterToggle(company)}
+                            />
+                            <span className="flex-grow-1 text-truncate">{company.name}</span>
+                            {company.referenceNo && (
+                              <small className="text-muted">{company.referenceNo}</small>
+                            )}
+                            {company.type && (
+                              <span className="badge bg-secondary-lt">{company.type}</span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Pagination */}
+                {filterCompanyPages > 1 && (
+                  <div className="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
+                    <small className="text-muted">
+                      Showing {filterCompanies.length} of {filterCompanyTotal} companies
+                    </small>
+                    <div className="btn-group">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        disabled={filterCompanyPage <= 1 || filterCompanyLoading}
+                        onClick={() => fetchFilterCompanies(filterCompanySearch, filterCompanyPage - 1)}
+                      >
+                        Previous
+                      </button>
+                      <span className="btn btn-sm btn-outline-secondary disabled">
+                        {filterCompanyPage} / {filterCompanyPages}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        disabled={filterCompanyPage >= filterCompanyPages || filterCompanyLoading}
+                        onClick={() => fetchFilterCompanies(filterCompanySearch, filterCompanyPage + 1)}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn" onClick={clearCompanyFilters}>
+                  Clear All
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={closeCompanyFilterModal}>
+                  Cancel
+                </button>
+                <button type="button" className="btn btn-primary" onClick={applyCompanyFilter}>
+                  Apply Filter {tempSelectedCompanies.length > 0 && `(${tempSelectedCompanies.length})`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
