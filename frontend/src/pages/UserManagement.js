@@ -115,6 +115,12 @@ const UserManagement = () => {
 
   // Client-side status filter (status isn't sent to server to avoid complexity)
   useEffect(() => {
+    // Safety check: ensure users is an array
+    if (!Array.isArray(users)) {
+      setFilteredUsers([]);
+      return;
+    }
+    
     let filtered = [...users];
 
     // Status filter (client-side only)
@@ -146,12 +152,18 @@ const UserManagement = () => {
       if (Array.isArray(response.data)) {
         setUsers(response.data);
         setUsersPagination({ total: response.data.length, pages: 1 });
+      } else if (response.data && typeof response.data === 'object') {
+        const usersData = Array.isArray(response.data.users) ? response.data.users : [];
+        setUsers(usersData);
+        setUsersPagination(response.data.pagination || { total: usersData.length, pages: 1 });
       } else {
-        setUsers(response.data.users || []);
-        setUsersPagination(response.data.pagination || { total: 0, pages: 0 });
+        setUsers([]);
+        setUsersPagination({ total: 0, pages: 0 });
       }
     } catch (error) {
       console.error('Error fetching users:', error);
+      setUsers([]); // Reset to empty array on error
+      setUsersPagination({ total: 0, pages: 0 });
     } finally {
       setLoading(false);
     }
