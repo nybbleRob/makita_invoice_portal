@@ -147,7 +147,8 @@ router.get('/', async (req, res) => {
 // Update settings (Global Admin only)
 router.put('/', globalAdmin, async (req, res) => {
   try {
-    const settings = await Settings.getSettings();
+    // Use getSettingsForUpdate to get Sequelize model instance (bypasses cache)
+    const settings = await Settings.getSettingsForUpdate();
     
     // Update basic fields
     if (req.body.companyName !== undefined) {
@@ -443,7 +444,8 @@ router.post('/upload/logo-light', globalAdmin, upload.single('logo'), async (req
       return res.status(400).json({ message: 'No file uploaded' });
     }
     
-    const settings = await Settings.getSettings();
+    // Use getSettingsForUpdate to get Sequelize model instance (bypasses cache)
+    const settings = await Settings.getSettingsForUpdate();
     
     // Delete old logo if exists
     if (settings.logoLight) {
@@ -473,7 +475,8 @@ router.post('/upload/favicon', globalAdmin, upload.single('favicon'), async (req
       return res.status(400).json({ message: 'No file uploaded' });
     }
     
-    const settings = await Settings.getSettings();
+    // Use getSettingsForUpdate to get Sequelize model instance (bypasses cache)
+    const settings = await Settings.getSettingsForUpdate();
     
     // Delete old favicon if exists
     if (settings.favicon) {
@@ -532,7 +535,8 @@ router.post('/upload/login-background', globalAdmin, upload.single('background')
       return res.status(400).json({ message: 'No file uploaded' });
     }
     
-    const settings = await Settings.getSettings();
+    // Use getSettingsForUpdate to get Sequelize model instance (bypasses cache)
+    const settings = await Settings.getSettingsForUpdate();
     
     // Delete old background if exists
     if (settings.loginBackgroundImage) {
@@ -559,7 +563,8 @@ router.post('/upload/login-background', globalAdmin, upload.single('background')
 router.delete('/upload/:type', globalAdmin, async (req, res) => {
   try {
     const { type } = req.params;
-    const settings = await Settings.getSettings();
+    // Use getSettingsForUpdate to get Sequelize model instance (bypasses cache)
+    const settings = await Settings.getSettingsForUpdate();
     
     const fieldMap = {
       'logo-light': 'logoLight',

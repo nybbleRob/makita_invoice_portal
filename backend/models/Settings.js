@@ -328,5 +328,11 @@ module.exports = (sequelize) => {
     }
   };
 
+  // Static method to get settings for update (bypasses cache, returns Sequelize instance)
+  // Use this when you need to modify and save settings
+  Settings.getSettingsForUpdate = async function() {
+    return await getSettingsFromDb();
+  };
+
   return Settings;
 };
