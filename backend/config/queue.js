@@ -1,0 +1,268 @@
+const { Queue } = require('bullmq');
+const IORedis = require('ioredis');
+
+/**
+ * BullMQ queue configuration for file import jobs
+ * Note: Queue will not work without Redis, but app will continue to function
+ */
+
+// Redis connection configuration
+const redisHost = process.env.REDIS_HOST || 'localhost';
+const redisPort = parseInt(process.env.REDIS_PORT) || 6379;
+const redisPassword = process.env.REDIS_PASSWORD || undefined;
+
+// Email rate limiting configuration
+// Default: 4 emails per 60 seconds = ~240/hour (well under typical 250/hour limits)
+const EMAIL_RATE_MAX = parseInt(process.env.EMAIL_RATE_MAX) || 4;
+const EMAIL_RATE_DURATION_MS = parseInt(process.env.EMAIL_RATE_DURATION_MS) || 60000;
+
+// Create shared Redis connection for all queues
+let connection = null;
+let redisAvailable = false;
+
+try {
+  connection = new IORedis({
+    host: redisHost,
+    port: redisPort,
+    password: redisPassword,
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false
+  });
+  
+  // Check if Redis is available
+  connection.on('connect', () => {
+    redisAvailable = true;
+    console.log('✅ BullMQ Redis connection established');
+  });
+  
+  connection.on('error', (err) => {
+    if (redisAvailable) {
+      console.error('❌ BullMQ Redis connection error:', err.message);
+    }
+    redisAvailable = false;
+  });
+} catch (err) {
+  console.log('ℹ️  BullMQ: Redis not configured, queues disabled');
+  connection = null;
+}
+
+// Default job options for different queue types
+const defaultFileImportOptions = {
+  attempts: 3,
+  backoff: {
+    type: 'exponential',
+    delay: 2000
+  },
+  removeOnComplete: {
+    age: 24 * 3600, // Keep completed jobs for 24 hours
+    count: 1000 // Keep max 1000 completed jobs
+  },
+  removeOnFail: {
+    age: 7 * 24 * 3600 // Keep failed jobs for 7 days
+  }
+};
+
+const defaultBulkParsingOptions = {
+  attempts: 2,
+  backoff: {
+    type: 'exponential',
+    delay: 1000
+  },
+  removeOnComplete: {
+    age: 3600, // Keep completed jobs for 1 hour (temp testing)
+    count: 100 // Keep max 100 completed jobs
+  },
+  removeOnFail: {
+    age: 3600 // Keep failed jobs for 1 hour
+  }
+};
+
+const defaultInvoiceImportOptions = {
+  attempts: 2,
+  backoff: {
+    type: 'exponential',
+    delay: 2000
+  },
+  removeOnComplete: {
+    age: 24 * 3600, // Keep completed jobs for 24 hours
+    count: 500 // Keep max 500 completed jobs
+  },
+  removeOnFail: {
+    age: 7 * 24 * 3600 // Keep failed jobs for 7 days
+  }
+};
+
+const defaultEmailOptions = {
+  attempts: 10, // 10 attempts with exponential backoff for reliable delivery
+  backoff: {
+    type: 'exponential',
+    delay: 60000 // Start with 1 minute delay, then 2m, 4m, 8m, 16m, 32m, capped at ~60m
+  },
+  removeOnComplete: {
+    age: 7 * 24 * 3600, // Keep completed jobs for 7 days
+    count: 5000 // Keep max 5000 completed jobs
+  },
+  removeOnFail: {
+    age: 30 * 24 * 3600 // Keep failed jobs for 30 days (for debugging)
+  }
+};
+
+const defaultScheduledTaskOptions = {
+  attempts: 3,
+  backoff: {
+    type: 'exponential',
+    delay: 5000
+  },
+  removeOnComplete: {
+    age: 7 * 24 * 3600, // Keep completed jobs for 7 days
+    count: 100 // Keep max 100 completed jobs
+  },
+  removeOnFail: {
+    age: 30 * 24 * 3600 // Keep failed jobs for 30 days
+  }
+};
+
+// Create dummy queue object for when Redis is not available
+function createDummyQueue() {
+  return {
+    add: () => Promise.resolve({ id: 'no-redis', name: 'no-redis' }),
+    addBulk: () => Promise.resolve([]),
+    close: () => Promise.resolve(),
+    getJobs: () => Promise.resolve([]),
+    getJob: () => Promise.resolve(null),
+    getJobCounts: () => Promise.resolve({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }),
+    getWaitingCount: () => Promise.resolve(0),
+    getActiveCount: () => Promise.resolve(0),
+    getCompletedCount: () => Promise.resolve(0),
+    getFailedCount: () => Promise.resolve(0),
+    getDelayedCount: () => Promise.resolve(0),
+    getWaiting: () => Promise.resolve([]),
+    getActive: () => Promise.resolve([]),
+    getCompleted: () => Promise.resolve([]),
+    getFailed: () => Promise.resolve([]),
+    obliterate: () => Promise.resolve(),
+    drain: () => Promise.resolve(),
+    clean: () => Promise.resolve([]),
+    remove: () => Promise.resolve()
+  };
+}
+
+// File import queue
+let fileImportQueue = null;
+if (connection) {
+  fileImportQueue = new Queue('file-import', {
+    connection,
+    defaultJobOptions: defaultFileImportOptions
+  });
+  console.log('✅ File import queue initialized');
+} else {
+  console.log('ℹ️  File import queue: Not initialized (Redis not configured)');
+  fileImportQueue = createDummyQueue();
+}
+
+// Bulk parsing test queue
+let bulkParsingQueue = null;
+if (connection) {
+  bulkParsingQueue = new Queue('bulk-parsing-test', {
+    connection,
+    defaultJobOptions: defaultBulkParsingOptions
+  });
+  console.log('✅ Bulk parsing queue initialized');
+} else {
+  console.log('ℹ️  Bulk parsing queue: Not initialized (Redis not configured)');
+  bulkParsingQueue = createDummyQueue();
+}
+
+// Invoice import queue
+let invoiceImportQueue = null;
+if (connection) {
+  invoiceImportQueue = new Queue('invoice-import', {
+    connection,
+    defaultJobOptions: defaultInvoiceImportOptions
+  });
+  console.log('✅ Invoice import queue initialized');
+} else {
+  console.log('ℹ️  Invoice import queue: Not initialized (Redis not configured)');
+  invoiceImportQueue = createDummyQueue();
+}
+
+// Email queue with rate limiting
+let emailQueue = null;
+if (connection) {
+  emailQueue = new Queue('email', {
+    connection,
+    defaultJobOptions: defaultEmailOptions
+  });
+  console.log(`✅ Email queue initialized (rate limit: ${EMAIL_RATE_MAX} per ${EMAIL_RATE_DURATION_MS}ms)`);
+} else {
+  console.log('ℹ️  Email queue: Not initialized (Redis not configured)');
+  emailQueue = createDummyQueue();
+}
+
+// Scheduled tasks queue (for cron-like jobs)
+let scheduledTasksQueue = null;
+if (connection) {
+  scheduledTasksQueue = new Queue('scheduled-tasks', {
+    connection,
+    defaultJobOptions: defaultScheduledTaskOptions
+  });
+  console.log('✅ Scheduled tasks queue initialized');
+} else {
+  console.log('ℹ️  Scheduled tasks queue: Not initialized (Redis not configured)');
+  scheduledTasksQueue = createDummyQueue();
+}
+
+// Graceful shutdown - close all queues
+async function closeAllQueues() {
+  console.log('🔄 Closing all queues...');
+  const closePromises = [];
+  
+  if (fileImportQueue && fileImportQueue.close) {
+    closePromises.push(fileImportQueue.close().catch(err => console.error('Error closing fileImportQueue:', err.message)));
+  }
+  if (bulkParsingQueue && bulkParsingQueue.close) {
+    closePromises.push(bulkParsingQueue.close().catch(err => console.error('Error closing bulkParsingQueue:', err.message)));
+  }
+  if (invoiceImportQueue && invoiceImportQueue.close) {
+    closePromises.push(invoiceImportQueue.close().catch(err => console.error('Error closing invoiceImportQueue:', err.message)));
+  }
+  if (emailQueue && emailQueue.close) {
+    closePromises.push(emailQueue.close().catch(err => console.error('Error closing emailQueue:', err.message)));
+  }
+  if (scheduledTasksQueue && scheduledTasksQueue.close) {
+    closePromises.push(scheduledTasksQueue.close().catch(err => console.error('Error closing scheduledTasksQueue:', err.message)));
+  }
+  if (connection && connection.quit) {
+    closePromises.push(connection.quit().catch(err => console.error('Error closing Redis connection:', err.message)));
+  }
+  
+  await Promise.all(closePromises);
+  console.log('✅ All queues closed');
+}
+
+process.on('SIGTERM', async () => {
+  await closeAllQueues();
+});
+
+process.on('SIGINT', async () => {
+  await closeAllQueues();
+});
+
+module.exports = {
+  fileImportQueue,
+  bulkParsingQueue,
+  invoiceImportQueue,
+  emailQueue,
+  scheduledTasksQueue,
+  connection,
+  closeAllQueues,
+  // Export default options for workers to use
+  defaultFileImportOptions,
+  defaultBulkParsingOptions,
+  defaultInvoiceImportOptions,
+  defaultEmailOptions,
+  defaultScheduledTaskOptions,
+  // Export email rate limiting config for worker
+  EMAIL_RATE_MAX,
+  EMAIL_RATE_DURATION_MS
+};

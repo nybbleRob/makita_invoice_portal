@@ -1,0 +1,201 @@
+/* Excel Template Builder - Customizable CSS Variables */
+/* Override these variables in your own CSS or via JavaScript to customize the component */
+.excel-template-builder {
+  /* File Input Settings */
+  --excel-file-input-width: 100%;
+  --excel-file-input-max-width: 100%;
+  --excel-file-input-min-width: 0;
+  --excel-file-input-overflow: hidden;
+  --excel-file-input-text-overflow: ellipsis;
+  --excel-file-input-white-space: nowrap;
+  
+  /* Filename Display Settings */
+  --excel-filename-display-white-space: normal;
+  --excel-filename-display-word-break: break-all;
+  --excel-filename-display-overflow-wrap: break-word;
+  --excel-filename-display-max-width: 100%;
+  
+  /* Container Settings */
+  --excel-container-min-width: 0;
+  --excel-container-max-width: 100%;
+  
+  /* Preview Settings */
+  --excel-preview-min-height: 500px;
+  --excel-preview-body-min-height: 450px;
+  --excel-preview-max-height: 60vh;
+  
+  /* Zoom Settings */
+  --excel-zoom-min: 50;
+  --excel-zoom-max: 200;
+  --excel-zoom-default: 100;
+  --excel-zoom-step: 10;
+}
+
+/* Fix file input width to prevent layout shift - using Tabler's standard approach */
+/* Ensure all parent containers respect width constraints */
+.excel-template-builder .row,
+.excel-template-builder .col-md-3,
+.excel-template-builder .card,
+.excel-template-builder .card-body,
+.excel-template-builder .mb-3 {
+  min-width: var(--excel-container-min-width, 0) !important; /* Critical: prevents flex items from growing beyond container */
+  max-width: var(--excel-container-max-width, 100%) !important;
+}
+
+/* Keep file input from overflowing - Tabler's standard file input */
+.excel-template-builder input[type="file"].form-control {
+  width: var(--excel-file-input-width, 100%) !important;
+  max-width: var(--excel-file-input-max-width, 100%) !important;
+  min-width: var(--excel-file-input-min-width, 0) !important;
+  box-sizing: border-box !important;
+  overflow: var(--excel-file-input-overflow, hidden) !important;
+  text-overflow: var(--excel-file-input-text-overflow, ellipsis) !important;
+  white-space: var(--excel-file-input-white-space, nowrap) !important;
+}
+
+/* Keep the wrapper from overflowing horizontally */
+.excel-template-builder .file-input-wrapper {
+  max-width: 100% !important;
+  overflow: hidden !important; /* stops it pushing layout wider */
+}
+
+/* Allow wrapping + breaking the filename text (prevents width growth) */
+.excel-template-builder .file-name-display {
+  display: block;
+  max-width: var(--excel-filename-display-max-width, 100%);
+  white-space: var(--excel-filename-display-white-space, normal);     /* allow wrapping */
+  word-break: var(--excel-filename-display-word-break, break-all);   /* break long unbroken strings */
+  overflow-wrap: var(--excel-filename-display-overflow-wrap, break-word); /* additional word breaking */
+}
+
+/* Spreadsheet container styles */
+.excel-template-builder .spreadsheet-container {
+  width: 100%;
+  overflow: auto;
+  max-height: var(--excel-preview-max-height, 60vh);
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  position: relative;
+}
+
+.excel-template-builder .spreadsheet-sticky-header {
+  position: sticky;
+  top: 0;
+  background: #f8f9fa;
+  padding: 8px;
+  border-bottom: 1px solid #ddd;
+  z-index: 10;
+  font-size: 0.875rem;
+}
+
+.excel-template-builder .excel-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  text-align: center;
+}
+
+/* Excel Preview Card - Prevent layout shifts */
+.excel-template-builder .excel-preview-card {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  position: sticky !important;
+  top: 20px !important;
+}
+
+.excel-template-builder .excel-preview-body {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: auto !important;
+  position: relative !important;
+}
+
+/* Excel Spreadsheet Container - Prevent width expansion */
+.excel-template-builder .excel-spreadsheet-container {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  position: relative !important;
+}
+
+.excel-template-builder .excel-spreadsheet-wrapper {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  overflow: auto !important;
+  border: 1px solid #ddd !important;
+  border-radius: 4px !important;
+  position: relative !important;
+}
+
+.excel-template-builder .excel-spreadsheet-header {
+  position: sticky !important;
+  top: 0 !important;
+  background: #f8f9fa !important;
+  padding: 8px !important;
+  border-bottom: 1px solid #ddd !important;
+  z-index: 10 !important;
+  font-size: 0.875rem !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.excel-template-builder .excel-spreadsheet-content {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  overflow: auto !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+}
+
+/* Prevent react-spreadsheet from expanding container */
+.excel-template-builder .excel-spreadsheet-content > * {
+  max-width: 100% !important;
+  min-width: 0 !important;
+  overflow: auto !important;
+}
+
+/* Aggressive constraints on react-spreadsheet component and all its children */
+.excel-template-builder .excel-spreadsheet-content [class*="Spreadsheet"],
+.excel-template-builder .excel-spreadsheet-content [class*="spreadsheet"],
+.excel-template-builder .excel-spreadsheet-content table,
+.excel-template-builder .excel-spreadsheet-content div[role="grid"],
+.excel-template-builder .excel-spreadsheet-content div[role="table"] {
+  max-width: 100% !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  overflow: auto !important;
+}
+
+/* Prevent any table or grid from expanding beyond container */
+.excel-template-builder .excel-spreadsheet-wrapper table,
+.excel-template-builder .excel-spreadsheet-wrapper [role="grid"],
+.excel-template-builder .excel-spreadsheet-wrapper [role="table"] {
+  table-layout: auto !important;
+  max-width: 100% !important;
+  width: auto !important;
+}
+
+/* Ensure the col-md-8 column doesn't expand */
+.excel-template-builder .col-md-8 {
+  min-width: 0 !important;
+  max-width: 66.666667% !important;
+  overflow: hidden !important;
+  flex: 0 0 66.666667% !important;
+}
+
+/* Ensure the row doesn't expand */
+.excel-template-builder .row {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+}

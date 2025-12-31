@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@thednp/dommatrix": "^2.0.12"
+  }
+}

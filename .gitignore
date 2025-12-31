@@ -24,6 +24,10 @@ yarn-error.log*
 lerna-debug.log*
 *.log
 
+# PM2 logs
+logs/
+pm2-*.log
+
 # OS
 .DS_Store
 Thumbs.db
@@ -37,3 +41,9 @@ Thumbs.db
 
 # Uploads (optional - uncomment if you don't want to track uploads)
 # backend/uploads/
+
+# Google Cloud credentials
+backend/credentials/
+**/credentials/*.json
+!package.json
+!package-lock.json
