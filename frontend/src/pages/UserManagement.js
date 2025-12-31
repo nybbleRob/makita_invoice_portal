@@ -73,14 +73,31 @@ const UserManagement = () => {
   const [loadingAssignedCompanies, setLoadingAssignedCompanies] = useState({});
   const [assignedCompaniesPagination, setAssignedCompaniesPagination] = useState({});
   
-  // Users table pagination
+  // Users table pagination (server-side)
   const [usersPage, setUsersPage] = useState(1);
+  const [usersPagination, setUsersPagination] = useState({ total: 0, pages: 0 });
   const usersPerPage = 50;
+  
+  // Debounced search for server-side filtering
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setUsersPage(1); // Reset to page 1 when search changes
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => {
-    fetchUsers();
     fetchManageableRoles();
   }, []);
+  
+  // Fetch users when pagination or filters change (server-side)
+  useEffect(() => {
+    fetchUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usersPage, debouncedSearch, roleFilter, selectedCompanyFilters]);
 
   // Handle edit user from UserView navigation
   useEffect(() => {
@@ -96,51 +113,43 @@ const UserManagement = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state, users]);
 
-  // Filter users based on search, status, and role
+  // Client-side status filter (status isn't sent to server to avoid complexity)
   useEffect(() => {
     let filtered = [...users];
 
-    // Search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (user) =>
-          user.name.toLowerCase().includes(query) ||
-          user.email.toLowerCase().includes(query)
-      );
-    }
-
-    // Status filter
+    // Status filter (client-side only)
     if (statusFilter !== 'all') {
       filtered = filtered.filter(
         (user) => (statusFilter === 'active' && user.isActive) || (statusFilter === 'inactive' && !user.isActive)
       );
     }
 
-    // Role filter
-    if (roleFilter !== 'all') {
-      filtered = filtered.filter((user) => user.role === roleFilter);
-    }
-
-    // Company filter (multi-select)
-    if (selectedCompanyFilters.length > 0) {
-      const selectedIds = selectedCompanyFilters.map(c => c.id);
-      filtered = filtered.filter((user) => {
-        // If user has allCompanies, they belong to all companies
-        if (user.allCompanies) return true;
-        // Check if user is assigned to any of the selected companies
-        return user.companies && user.companies.some(c => selectedIds.includes(c.id));
-      });
-    }
-
     setFilteredUsers(filtered);
-    setUsersPage(1); // Reset to first page when filters change
-  }, [users, searchQuery, statusFilter, roleFilter, selectedCompanyFilters]);
+  }, [users, statusFilter]);
 
   const fetchUsers = async () => {
     try {
-      const response = await api.get('/api/users');
-      setUsers(response.data);
+      setLoading(true);
+      const params = {
+        page: usersPage,
+        limit: usersPerPage,
+        search: debouncedSearch,
+        role: roleFilter !== 'all' ? roleFilter : undefined,
+        companyIds: selectedCompanyFilters.length > 0 
+          ? selectedCompanyFilters.map(c => c.id).join(',') 
+          : undefined
+      };
+      
+      const response = await api.get('/api/users', { params });
+      
+      // Handle both old (array) and new (paginated) response formats
+      if (Array.isArray(response.data)) {
+        setUsers(response.data);
+        setUsersPagination({ total: response.data.length, pages: 1 });
+      } else {
+        setUsers(response.data.users || []);
+        setUsersPagination(response.data.pagination || { total: 0, pages: 0 });
+      }
     } catch (error) {
       console.error('Error fetching users:', error);
     } finally {
@@ -215,6 +224,7 @@ const UserManagement = () => {
   const applyCompanyFilter = () => {
     setSelectedCompanyFilters([...tempSelectedCompanies]);
     setShowCompanyFilterModal(false);
+    setUsersPage(1); // Reset to page 1 when filters change
   };
 
   const clearCompanyFilters = () => {
@@ -790,7 +800,7 @@ const UserManagement = () => {
                     <select
                       className="form-select w-auto"
                       value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
+                      onChange={(e) => { setStatusFilter(e.target.value); }}
                     >
                       <option value="all">All Status</option>
                       <option value="active">Active</option>
@@ -800,7 +810,7 @@ const UserManagement = () => {
                     <select
                       className="form-select w-auto"
                       value={roleFilter}
-                      onChange={(e) => setRoleFilter(e.target.value)}
+                      onChange={(e) => { setRoleFilter(e.target.value); setUsersPage(1); }}
                     >
                       <option value="all">All Roles</option>
                       {manageableRoles.map((role) => (
@@ -898,7 +908,7 @@ const UserManagement = () => {
                         </td>
                       </tr>
                     ) : (
-                      filteredUsers.slice((usersPage - 1) * usersPerPage, usersPage * usersPerPage).map((user) => (
+                      filteredUsers.map((user) => (
                         <tr key={user.id}>
                           <td>
                             <input
@@ -982,10 +992,10 @@ const UserManagement = () => {
                 </table>
               </div>
               {/* Users Pagination */}
-              {filteredUsers.length > usersPerPage && (
+              {usersPagination.pages > 1 && (
                 <div className="card-footer d-flex justify-content-between align-items-center">
                   <div className="text-muted">
-                    Showing {((usersPage - 1) * usersPerPage) + 1} to {Math.min(usersPage * usersPerPage, filteredUsers.length)} of {filteredUsers.length} users
+                    Showing {((usersPage - 1) * usersPerPage) + 1} to {Math.min(usersPage * usersPerPage, usersPagination.total)} of {usersPagination.total} users
                   </div>
                   <div className="btn-group">
                     <button
@@ -996,11 +1006,10 @@ const UserManagement = () => {
                     >
                       Previous
                     </button>
-                    {Array.from({ length: Math.ceil(filteredUsers.length / usersPerPage) }, (_, i) => i + 1)
+                    {Array.from({ length: usersPagination.pages }, (_, i) => i + 1)
                       .filter(page => {
-                        const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
                         // Show first, last, and pages around current
-                        return page === 1 || page === totalPages || (page >= usersPage - 2 && page <= usersPage + 2);
+                        return page === 1 || page === usersPagination.pages || (page >= usersPage - 2 && page <= usersPage + 2);
                       })
                       .map((page, idx, arr) => {
                         // Add ellipsis
@@ -1021,8 +1030,8 @@ const UserManagement = () => {
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-primary"
-                      disabled={usersPage >= Math.ceil(filteredUsers.length / usersPerPage)}
-                      onClick={() => setUsersPage(prev => Math.min(Math.ceil(filteredUsers.length / usersPerPage), prev + 1))}
+                      disabled={usersPage >= usersPagination.pages}
+                      onClick={() => setUsersPage(prev => Math.min(usersPagination.pages, prev + 1))}
                     >
                       Next
                     </button>

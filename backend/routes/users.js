@@ -35,6 +35,11 @@ const validateUUID = (id, fieldName = 'ID') => {
 // Get all users (users can only see users they can manage)
 router.get('/', canManageUsers, async (req, res) => {
   try {
+    const { page = 1, limit = 50, search = '', role: roleFilter, companyIds } = req.query;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const offset = (pageNum - 1) * limitNum;
+    
     const manageableRoles = getManageableRoles(req.user.role);
     
     // Filter by manageable roles (global admins can see all users)
@@ -42,7 +47,54 @@ router.get('/', canManageUsers, async (req, res) => {
       ? {} 
       : { role: { [Op.in]: manageableRoles } };
     
-    const users = await User.findAll({
+    // Search filter
+    if (search) {
+      where[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+    
+    // Role filter
+    if (roleFilter && roleFilter !== 'all') {
+      where.role = roleFilter;
+    }
+    
+    // Company filter - if provided, find users associated with these companies
+    let userIdsFromCompanyFilter = null;
+    if (companyIds) {
+      const companyIdArray = companyIds.split(',').filter(id => id);
+      if (companyIdArray.length > 0) {
+        const usersWithCompanies = await User.findAll({
+          attributes: ['id'],
+          include: [{
+            model: Company,
+            as: 'companies',
+            where: { id: { [Op.in]: companyIdArray } },
+            attributes: [],
+            through: { attributes: [] }
+          }]
+        });
+        userIdsFromCompanyFilter = usersWithCompanies.map(u => u.id);
+        
+        // If no users found with these companies, return empty result
+        if (userIdsFromCompanyFilter.length === 0) {
+          return res.json({
+            users: [],
+            pagination: {
+              total: 0,
+              page: pageNum,
+              limit: limitNum,
+              pages: 0
+            }
+          });
+        }
+        
+        where.id = { [Op.in]: userIdsFromCompanyFilter };
+      }
+    }
+    
+    const { count, rows: users } = await User.findAndCountAll({
       where,
       attributes: { exclude: ['password', 'twoFactorSecret', 'resetPasswordToken', 'resetPasswordExpires'] },
       include: [
@@ -60,11 +112,23 @@ router.get('/', canManageUsers, async (req, res) => {
           required: false
         }
       ],
-      order: [['createdAt', 'DESC']]
+      order: [['createdAt', 'DESC']],
+      limit: limitNum,
+      offset: offset,
+      distinct: true // Important for accurate count with includes
     });
     
-    res.json(users);
+    res.json({
+      users,
+      pagination: {
+        total: count,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.ceil(count / limitNum)
+      }
+    });
   } catch (error) {
+    console.error('Error fetching users:', error);
     res.status(500).json({ message: error.message });
   }
 });

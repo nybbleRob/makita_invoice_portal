@@ -124,9 +124,10 @@ const ActivityLogs = () => {
   // Fetch filter options
   const fetchFilterOptions = async () => {
     try {
-      // Fetch users
-      const usersResponse = await api.get('/api/users');
-      setUsers(usersResponse.data || []);
+      // Fetch users (handle both paginated and non-paginated response)
+      const usersResponse = await api.get('/api/users', { params: { limit: 1000 } });
+      const usersData = Array.isArray(usersResponse.data) ? usersResponse.data : (usersResponse.data.users || []);
+      setUsers(usersData);
       
       // Fetch companies
       const companiesResponse = await api.get('/api/companies');
