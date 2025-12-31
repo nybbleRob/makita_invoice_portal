@@ -105,7 +105,7 @@ A modern, full-stack invoice management portal built with React and Node.js. Thi
 
 ## Prerequisites
 
-- Node.js 18+ 
+- Node.js 20 LTS (v20.19.6 recommended)
 - PostgreSQL 14+
 - Redis 6+
 - PM2 (for production)
