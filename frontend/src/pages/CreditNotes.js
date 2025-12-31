@@ -36,6 +36,11 @@ const CreditNotes = () => {
   const [showCompanyFilterModal, setShowCompanyFilterModal] = useState(false);
   const debouncedFilterCompanySearch = useDebounce(filterCompanySearch, 300);
   
+  // Sort and retention filter state
+  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortOrder, setSortOrder] = useState('DESC');
+  const [retentionFilter, setRetentionFilter] = useState('all');
+  
   // Delete modal states
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [creditNoteToDelete, setCreditNoteToDelete] = useState(null);
@@ -92,7 +97,10 @@ const CreditNotes = () => {
         limit: pagination.limit,
         search: debouncedSearch,
         ...(statusFilter !== 'all' && { status: statusFilter }),
-        ...(companyIdsParam && { companyIds: companyIdsParam })
+        ...(companyIdsParam && { companyIds: companyIdsParam }),
+        sortBy,
+        sortOrder,
+        ...(retentionFilter !== 'all' && { retentionFilter })
       };
       
       const response = await api.get('/api/credit-notes', { params });
@@ -127,7 +135,7 @@ const CreditNotes = () => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, debouncedSearch, statusFilter, selectedCompanyIds]);
+  }, [pagination.page, pagination.limit, debouncedSearch, statusFilter, selectedCompanyIds, sortBy, sortOrder, retentionFilter]);
 
   const fetchCompanies = useCallback(async () => {
     try {
@@ -229,6 +237,18 @@ const CreditNotes = () => {
 
   const closeCompanyFilterModal = () => {
     setShowCompanyFilterModal(false);
+  };
+
+  // Reset all filters and sorting
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setSelectedCompanyIds([]);
+    setSelectedCompanyFilters([]);
+    setRetentionFilter('all');
+    setSortBy('createdAt');
+    setSortOrder('DESC');
+    setPagination(prev => ({ ...prev, page: 1 }));
   };
 
   const getStatusBadgeClass = (status) => {
@@ -825,6 +845,31 @@ const CreditNotes = () => {
                       <option value="viewed">Viewed</option>
                       <option value="downloaded">Downloaded</option>
                     </select>
+                    {/* Sort dropdown */}
+                    <select
+                      className="form-select w-auto"
+                      value={`${sortBy}-${sortOrder}`}
+                      onChange={(e) => {
+                        const [newSortBy, newSortOrder] = e.target.value.split('-');
+                        setSortBy(newSortBy);
+                        setSortOrder(newSortOrder);
+                        if (newSortBy === 'retentionExpiryDate') {
+                          setRetentionFilter('expiring_soonest');
+                        } else {
+                          setRetentionFilter('all');
+                        }
+                        setPagination(prev => ({ ...prev, page: 1 }));
+                      }}
+                    >
+                      <option value="createdAt-DESC">Newest First</option>
+                      <option value="issueDate-ASC">Tax Point (Oldest)</option>
+                      <option value="issueDate-DESC">Tax Point (Newest)</option>
+                      <option value="amount-ASC">Amount (Low to High)</option>
+                      <option value="amount-DESC">Amount (High to Low)</option>
+                      {settings?.documentRetentionPeriod && (
+                        <option value="retentionExpiryDate-ASC">Retention Ending Soonest</option>
+                      )}
+                    </select>
                     {/* Company filter */}
                     <button
                       type="button"
@@ -834,6 +879,28 @@ const CreditNotes = () => {
                       {selectedCompanyFilters.length === 0 
                         ? 'Filter by Company' 
                         : `Companies (${selectedCompanyFilters.length})`}
+                    </button>
+                    {/* Retention filter */}
+                    {settings?.documentRetentionPeriod && (
+                      <select
+                        className="form-select w-auto"
+                        value={retentionFilter}
+                        onChange={(e) => {
+                          setRetentionFilter(e.target.value);
+                          setPagination(prev => ({ ...prev, page: 1 }));
+                        }}
+                      >
+                        <option value="all">All Retention</option>
+                        <option value="expiring_soonest">Expiring Soonest</option>
+                      </select>
+                    )}
+                    {/* Reset filters */}
+                    <button 
+                      className="btn btn-outline-secondary" 
+                      onClick={handleResetFilters}
+                      title="Reset all filters and sorting"
+                    >
+                      Reset
                     </button>
                     {/* Upload/Import buttons */}
                     {(currentUser?.role === 'global_admin' || 
@@ -920,16 +987,15 @@ const CreditNotes = () => {
                         onChange={handleSelectAll}
                       />
                     </th>
-                    <th>Document Type</th>
-                    <th>Account Number</th>
+                    <th>Credit Note No.</th>
+                    <th>Date/Tax Point</th>
+                    <th>Account No.</th>
                     <th>Company Name</th>
-                    <th>Date</th>
-                    <th>Document Number</th>
-                    <th>PO Number</th>
-                    <th>Document Status</th>
-                    <th>Status</th>
                     <th>Invoice To</th>
                     <th>Delivery Address</th>
+                    <th>PO Number</th>
+                    <th>Amount</th>
+                    <th>Status</th>
                     {queriesEnabled && <th>Queried</th>}
                     {settings?.documentRetentionPeriod && <th>Retention</th>}
                     <th>Actions</th>
@@ -940,14 +1006,15 @@ const CreditNotes = () => {
                     [...Array(10)].map((_, i) => (
                       <tr key={`skeleton-${i}`}>
                         <td><span className="placeholder" style={{ width: '16px', height: '16px', borderRadius: '3px' }}></span></td>
-                        <td><span className="placeholder col-7"></span></td>
                         <td><span className="placeholder col-8"></span></td>
+                        <td><span className="placeholder col-7"></span></td>
                         <td><span className="placeholder col-6"></span></td>
-                        <td><span className="placeholder col-5"></span></td>
                         <td><span className="placeholder col-10"></span></td>
-                        <td><span className="placeholder col-6" style={{ borderRadius: '4px' }}></span></td>
                         <td><span className="placeholder col-8"></span></td>
                         <td><span className="placeholder col-9"></span></td>
+                        <td><span className="placeholder col-5"></span></td>
+                        <td><span className="placeholder col-4"></span></td>
+                        <td><span className="placeholder col-6" style={{ borderRadius: '4px' }}></span></td>
                         {queriesEnabled && <td><span className="placeholder col-5"></span></td>}
                         {settings?.documentRetentionPeriod && <td><span className="placeholder col-6"></span></td>}
                         <td>
@@ -960,13 +1027,19 @@ const CreditNotes = () => {
                     ))
                   ) : creditNotes.length === 0 ? (
                     <tr>
-                      <td colSpan={11 + (queriesEnabled ? 1 : 0) + (settings?.documentRetentionPeriod ? 1 : 0) + 1} className="text-center py-3 text-muted">
+                      <td colSpan={10 + (queriesEnabled ? 1 : 0) + (settings?.documentRetentionPeriod ? 1 : 0) + 1} className="text-center py-3 text-muted">
                         No credit notes found
                       </td>
                     </tr>
                   ) : (
                     creditNotes.map((creditNote) => {
                       const docStatus = getDocumentStatus(creditNote);
+                      const amount = creditNote.amount || creditNote.metadata?.parsedData?.grossAmount || creditNote.metadata?.parsedData?.totalAmount || 0;
+                      const invoiceTo = creditNote.metadata?.parsedData?.invoiceTo || '-';
+                      const deliveryAddress = creditNote.metadata?.parsedData?.deliveryAddress || '-';
+                      const poNumber = getPONumber(creditNote);
+                      const amountValue = `£${parseFloat(amount).toFixed(2)}`;
+                      
                       return (
                         <tr key={creditNote.id}>
                           <td>
@@ -978,26 +1051,19 @@ const CreditNotes = () => {
                               onChange={() => handleSelectCreditNote(creditNote.id)}
                             />
                           </td>
-                          <td>
-                            <span className="badge bg-info-lt">Credit Note</span>
-                          </td>
+                          <td><strong>{creditNote.creditNumber || creditNote.creditNoteNumber || '-'}</strong></td>
+                          <td>{formatDate(creditNote.issueDate)}</td>
                           <td>{creditNote.company?.referenceNo || creditNote.company?.code || '-'}</td>
                           <td>{creditNote.company?.name || '-'}</td>
-                          <td>{formatDate(creditNote.issueDate)}</td>
-                          <td><strong>{creditNote.creditNumber || creditNote.creditNoteNumber}</strong></td>
-                          <td>{getPONumber(creditNote)}</td>
+                          <td>{invoiceTo}</td>
+                          <td>{deliveryAddress}</td>
+                          <td>{poNumber}</td>
+                          <td>{amountValue}</td>
                           <td>
                             <span className={`badge ${getDocumentStatusBadgeClass(docStatus)}`}>
                               {getDocumentStatusLabel(docStatus)}
                             </span>
                           </td>
-                          <td>
-                            <span className={`badge ${getStatusBadgeClass(creditNote.status)}`}>
-                              {creditNote.status || 'draft'}
-                            </span>
-                          </td>
-                          <td>{creditNote.metadata?.parsedData?.invoiceTo || '-'}</td>
-                          <td>{creditNote.metadata?.parsedData?.deliveryAddress || '-'}</td>
                           {queriesEnabled && (
                             <td>
                               {(() => {

@@ -258,105 +258,12 @@ const Invoices = () => {
     return new Date(date).toLocaleDateString('en-GB');
   };
 
-  // Helper function for sortable column headers
-  const handleSort = (column) => {
-    if (sortBy === column) {
-      // Toggle sort order if clicking same column
-      setSortOrder(prev => prev === 'ASC' ? 'DESC' : 'ASC');
-    } else {
-      // Set new column and default to DESC
-      setSortBy(column);
-      setSortOrder('DESC');
-    }
-    setPagination(prev => ({ ...prev, page: 1 }));
-  };
-
-  const getSortIcon = (column) => {
-    const isActive = sortBy === column;
-    const activeOpacity = 1;
-    const inactiveOpacity = 0.6;
-    
-    return (
-      <span className="d-inline-flex align-items-center ms-1" style={{ gap: '2px' }}>
-        <svg 
-          xmlns="http://www.w3.org/2000/svg" 
-          width="16" 
-          height="16" 
-          viewBox="0 0 24 24" 
-          fill="none" 
-          stroke="currentColor" 
-          strokeWidth="2" 
-          strokeLinecap="round" 
-          strokeLinejoin="round" 
-          className="icon icon-sm icon-tabler icon-tabler-sort-ascending"
-          style={{ 
-            opacity: isActive && sortOrder === 'ASC' ? activeOpacity : inactiveOpacity,
-            cursor: 'pointer'
-          }}
-          title="Sort by Ascending"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (isActive && sortOrder === 'ASC') {
-              // Already ascending, do nothing or toggle to descending
-              handleSort(column);
-            } else {
-              setSortBy(column);
-              setSortOrder('ASC');
-              setPagination(prev => ({ ...prev, page: 1 }));
-            }
-          }}
-        >
-          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-          <path d="M4 6l7 0" />
-          <path d="M4 12l7 0" />
-          <path d="M4 18l9 0" />
-          <path d="M15 9l3 -3l3 3" />
-          <path d="M18 6l0 12" />
-        </svg>
-        <svg 
-          xmlns="http://www.w3.org/2000/svg" 
-          width="16" 
-          height="16" 
-          viewBox="0 0 24 24" 
-          fill="none" 
-          stroke="currentColor" 
-          strokeWidth="2" 
-          strokeLinecap="round" 
-          strokeLinejoin="round" 
-          className="icon icon-sm icon-tabler icon-tabler-sort-descending"
-          style={{ 
-            opacity: isActive && sortOrder === 'DESC' ? activeOpacity : inactiveOpacity,
-            cursor: 'pointer'
-          }}
-          title="Sort by Descending"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (isActive && sortOrder === 'DESC') {
-              // Already descending, do nothing or toggle to ascending
-              handleSort(column);
-            } else {
-              setSortBy(column);
-              setSortOrder('DESC');
-              setPagination(prev => ({ ...prev, page: 1 }));
-            }
-          }}
-        >
-          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-          <path d="M4 6l9 0" />
-          <path d="M4 12l7 0" />
-          <path d="M4 18l7 0" />
-          <path d="M15 15l3 3l3 -3" />
-          <path d="M18 6l0 12" />
-        </svg>
-      </span>
-    );
-  };
-
   // Reset all filters and sorting
   const handleResetFilters = () => {
     setSearchQuery('');
     setStatusFilter('all');
     setSelectedCompanyIds([]);
+    setSelectedCompanyFilters([]);
     setRetentionFilter('all');
     setSortBy('createdAt');
     setSortOrder('DESC');
@@ -996,6 +903,31 @@ const Invoices = () => {
                       <option value="viewed">Viewed</option>
                       <option value="downloaded">Downloaded</option>
                     </select>
+                    {/* Sort dropdown */}
+                    <select
+                      className="form-select w-auto"
+                      value={`${sortBy}-${sortOrder}`}
+                      onChange={(e) => {
+                        const [newSortBy, newSortOrder] = e.target.value.split('-');
+                        setSortBy(newSortBy);
+                        setSortOrder(newSortOrder);
+                        if (newSortBy === 'retentionExpiryDate') {
+                          setRetentionFilter('expiring_soonest');
+                        } else {
+                          setRetentionFilter('all');
+                        }
+                        setPagination(prev => ({ ...prev, page: 1 }));
+                      }}
+                    >
+                      <option value="createdAt-DESC">Newest First</option>
+                      <option value="issueDate-ASC">Tax Point (Oldest)</option>
+                      <option value="issueDate-DESC">Tax Point (Newest)</option>
+                      <option value="amount-ASC">Amount (Low to High)</option>
+                      <option value="amount-DESC">Amount (High to Low)</option>
+                      {settings?.documentRetentionPeriod && (
+                        <option value="retentionExpiryDate-ASC">Retention Ending Soonest</option>
+                      )}
+                    </select>
                     {/* Company filter */}
                     <button
                       type="button"
@@ -1114,57 +1046,16 @@ const Invoices = () => {
                       />
                     </th>
                     <th>Invoice No.</th>
-                    <th 
-                      className="sortable"
-                      style={{ cursor: 'pointer', userSelect: 'none' }}
-                      title="Click icons to sort"
-                    >
-                      <span className="d-inline-flex align-items-center">
-                        Date/Tax Point
-                        {getSortIcon('issueDate')}
-                      </span>
-                    </th>
+                    <th>Date/Tax Point</th>
                     <th>Account No.</th>
                     <th>Company Name</th>
                     <th>Invoice To</th>
                     <th>Delivery Address</th>
                     <th>PO Number</th>
-                    <th 
-                      className="sortable"
-                      style={{ cursor: 'pointer', userSelect: 'none' }}
-                      title="Click icons to sort"
-                    >
-                      <span className="d-inline-flex align-items-center">
-                        Amount
-                        {getSortIcon('amount')}
-                      </span>
-                    </th>
+                    <th>Amount</th>
                     <th>Status</th>
                     {queriesEnabled && <th>Queried</th>}
-                    {settings?.documentRetentionPeriod && (
-                      <th 
-                        className="sortable"
-                        style={{ cursor: 'pointer', userSelect: 'none' }}
-                        onClick={() => {
-                          if (retentionFilter === 'expiring_soonest') {
-                            setRetentionFilter('all');
-                            setSortBy('issueDate');
-                            setSortOrder('DESC');
-                          } else {
-                            setRetentionFilter('expiring_soonest');
-                            setSortBy('retentionExpiryDate');
-                            setSortOrder('ASC');
-                          }
-                          setPagination(prev => ({ ...prev, page: 1 }));
-                        }}
-                        title="Click to sort by retention"
-                      >
-                        <span className="d-inline-flex align-items-center">
-                          Retention
-                          {retentionFilter === 'expiring_soonest' && getSortIcon('retentionExpiryDate')}
-                        </span>
-                      </th>
-                    )}
+                    {settings?.documentRetentionPeriod && <th>Retention</th>}
                     <th>Actions</th>
                   </tr>
                 </thead>
