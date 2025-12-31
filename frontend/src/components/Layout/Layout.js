@@ -5,7 +5,7 @@ import { useSettings } from '../../context/SettingsContext';
 import { getRoleLabel } from '../../utils/roleLabels';
 import { getInitials, getAvatarColorClass } from '../../utils/avatar';
 import PageTitle from '../PageTitle';
-import { API_URL } from '../../services/api';
+import { API_BASE_URL } from '../../services/api';
 
 const Layout = () => {
   const { user, logout } = useAuth();
@@ -271,7 +271,7 @@ const Layout = () => {
             <Link to="/" className="navbar-brand-image">
               {settings?.logoLight ? (
                 <img 
-                  src={`${API_URL}${settings.logoLight}`} 
+                  src={`${API_BASE_URL}${settings.logoLight}`} 
                   alt={settings.siteTitle || settings.siteName || 'Logo'} 
                   style={{ maxHeight: '32px' }}
                 />
@@ -298,7 +298,7 @@ const Layout = () => {
                 onClick={(e) => e.preventDefault()}
               >
                 {user?.avatar ? (
-                  <span className="avatar avatar-sm" style={{ backgroundImage: `url(${API_URL}${user.avatar})` }}></span>
+                  <span className="avatar avatar-sm" style={{ backgroundImage: `url(${API_BASE_URL}${user.avatar})` }}></span>
                 ) : (
                   <span className={`avatar avatar-sm ${getAvatarColorClass(user?.name)} text-white`}>
                     {getInitials(user?.name)}

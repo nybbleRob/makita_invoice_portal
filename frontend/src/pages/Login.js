@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import PageTitle from '../components/PageTitle';
-import { API_URL } from '../services/api';
+import { API_BASE_URL } from '../services/api';
 
 const Login = () => {
   const { settings } = useSettings();
@@ -68,7 +68,7 @@ const Login = () => {
   };
 
   const loginStyle = settings?.loginBackgroundImage ? {
-    backgroundImage: `url(${API_URL}${settings.loginBackgroundImage})`,
+    backgroundImage: `url(${API_BASE_URL}${settings.loginBackgroundImage})`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
@@ -88,7 +88,7 @@ const Login = () => {
             <div className="text-center mb-4">
               {settings?.logoLight && (
                 <img 
-                  src={`${API_URL}${settings.logoLight}`} 
+                  src={`${API_BASE_URL}${settings.logoLight}`} 
                   alt={settings.companyName || settings.siteName || 'Logo'} 
                   style={{ maxHeight: '60px', marginBottom: '1rem' }}
                 />

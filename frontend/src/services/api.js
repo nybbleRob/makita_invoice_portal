@@ -1,9 +1,11 @@
 import axios from 'axios';
 
-export const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+// Empty base URL - all paths already include /api prefix
+// This ensures relative requests work on any domain (production uses Nginx proxy)
+export const API_BASE_URL = '';
 
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },

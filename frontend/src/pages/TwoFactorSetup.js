@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSettings } from '../context/SettingsContext';
 import { useAuth } from '../context/AuthContext';
-import api, { API_URL } from '../services/api';
+import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import PageTitle from '../components/PageTitle';
 
@@ -121,7 +121,7 @@ const TwoFactorSetup = () => {
   };
 
   const loginStyle = settings?.loginBackgroundImage ? {
-    backgroundImage: `url(${API_URL}${settings.loginBackgroundImage})`,
+    backgroundImage: `url(${API_BASE_URL}${settings.loginBackgroundImage})`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
@@ -141,7 +141,7 @@ const TwoFactorSetup = () => {
             <div className="text-center mb-4">
               {settings?.logoLight && (
                 <img 
-                  src={`${API_URL}${settings.logoLight}`} 
+                  src={`${API_BASE_URL}${settings.logoLight}`} 
                   alt={settings.companyName || settings.siteName || 'Logo'} 
                   style={{ maxHeight: '60px', marginBottom: '1rem' }}
                 />

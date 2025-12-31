@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import api, { API_URL } from '../services/api';
+import api, { API_BASE_URL } from '../services/api';
 
 const SettingsContext = createContext();
 
@@ -74,7 +74,7 @@ export const SettingsProvider = ({ children }) => {
     if (settingsData.favicon) {
       const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
       link.rel = 'icon';
-      link.href = `${API_URL}${settingsData.favicon}`;
+      link.href = `${API_BASE_URL}${settingsData.favicon}`;
       document.getElementsByTagName('head')[0].appendChild(link);
     }
 

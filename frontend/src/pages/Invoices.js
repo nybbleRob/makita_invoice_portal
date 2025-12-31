@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
@@ -429,7 +429,7 @@ const Invoices = () => {
       api.post(`/api/invoices/${invoiceId}/view`).catch(err => console.warn('Failed to mark as viewed:', err));
       
       // Get the download URL
-      const baseUrl = process.env.REACT_APP_API_URL || '';
+      const baseUrl = API_BASE_URL;
       const token = localStorage.getItem('token');
       const url = `${baseUrl}/api/invoices/${invoiceId}/download`;
       
@@ -484,7 +484,7 @@ const Invoices = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const url = `${process.env.REACT_APP_API_URL || '/api'}/invoices/bulk-download`;
+      const url = `${API_BASE_URL}/api/invoices/bulk-download`;
       
       const response = await fetch(url, {
         method: 'POST',

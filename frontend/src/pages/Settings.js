@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import api, { API_URL } from '../services/api';
+import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
@@ -2788,7 +2788,7 @@ const Settings = () => {
                           />
                           {settings.logoLight && (
                             <div className="mt-2">
-                              <img src={`${API_URL}${settings.logoLight}`} alt="Light logo" style={{ maxHeight: '50px', display: 'block', marginBottom: '0.5rem' }} />
+                              <img src={`${API_BASE_URL}${settings.logoLight}`} alt="Light logo" style={{ maxHeight: '50px', display: 'block', marginBottom: '0.5rem' }} />
                               <button
                                 type="button"
                                 className="btn btn-ghost-danger btn-sm"
@@ -2810,7 +2810,7 @@ const Settings = () => {
                           />
                           {settings.logoDark && (
                             <div className="mt-2">
-                              <img src={`${API_URL}${settings.logoDark}`} alt="Dark logo" style={{ maxHeight: '50px', display: 'block', marginBottom: '0.5rem' }} />
+                              <img src={`${API_BASE_URL}${settings.logoDark}`} alt="Dark logo" style={{ maxHeight: '50px', display: 'block', marginBottom: '0.5rem' }} />
                               <button
                                 type="button"
                                 className="btn btn-ghost-danger btn-sm"
@@ -2837,7 +2837,7 @@ const Settings = () => {
                           <small className="form-hint">Will be automatically resized to 24x24px</small>
                           {settings.favicon && (
                             <div className="mt-2">
-                              <img src={`${API_URL}${settings.favicon}`} alt="Favicon" style={{ width: '24px', height: '24px', display: 'block', marginBottom: '0.5rem' }} />
+                              <img src={`${API_BASE_URL}${settings.favicon}`} alt="Favicon" style={{ width: '24px', height: '24px', display: 'block', marginBottom: '0.5rem' }} />
                               <span className="d-block text-muted mb-2">24x24px</span>
                               <button
                                 type="button"
@@ -2860,7 +2860,7 @@ const Settings = () => {
                           />
                           {settings.loginBackgroundImage && (
                             <div className="mt-2">
-                              <img src={`${API_URL}${settings.loginBackgroundImage}`} alt="Background" style={{ maxHeight: '100px', width: 'auto', display: 'block', marginBottom: '0.5rem' }} />
+                              <img src={`${API_BASE_URL}${settings.loginBackgroundImage}`} alt="Background" style={{ maxHeight: '100px', width: 'auto', display: 'block', marginBottom: '0.5rem' }} />
                               <button
                                 type="button"
                                 className="btn btn-ghost-danger btn-sm"

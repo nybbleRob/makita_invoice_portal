@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
@@ -127,7 +127,7 @@ const InvoiceView = () => {
       pdfFetchedRef.current = true;
       setLoadingPdf(true);
       const token = localStorage.getItem('token');
-      const baseUrl = process.env.REACT_APP_API_URL || '';
+      const baseUrl = API_BASE_URL;
       const url = `${baseUrl}/api/invoices/${id}/view-pdf`;
       
       const response = await fetch(url, {
@@ -232,7 +232,7 @@ const InvoiceView = () => {
     try {
       setDownloading(true);
       const token = localStorage.getItem('token');
-      const baseUrl = process.env.REACT_APP_API_URL || '';
+      const baseUrl = API_BASE_URL;
       const url = `${baseUrl}/api/invoices/${id}/download`;
       
       const response = await fetch(url, {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSettings } from '../context/SettingsContext';
-import api, { API_URL } from '../services/api';
+import api, { API_BASE_URL } from '../services/api';
 import PageTitle from '../components/PageTitle';
 
 const Register = () => {
@@ -113,7 +113,7 @@ const Register = () => {
             <div className="text-center mb-4">
               {settings?.logoLight && (
                 <img 
-                  src={`${API_URL}${settings.logoLight}`} 
+                  src={`${API_BASE_URL}${settings.logoLight}`} 
                   alt={settings.companyName || settings.siteName || 'Logo'} 
                   style={{ maxHeight: '60px', marginBottom: '1rem' }}
                 />

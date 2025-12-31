@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api, { API_URL } from '../services/api';
+import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { getRoleLabel } from '../utils/roleLabels';
 import { getInitials, getAvatarColorClass } from '../utils/avatar';
@@ -198,7 +198,7 @@ const Profile = () => {
                       <div className="row align-items-center">
                         <div className="col-auto">
                           {profile.avatar ? (
-                            <span className="avatar avatar-xl" style={{ backgroundImage: `url(${API_URL}${profile.avatar})` }}></span>
+                            <span className="avatar avatar-xl" style={{ backgroundImage: `url(${API_BASE_URL}${profile.avatar})` }}></span>
                           ) : (
                             <span className={`avatar avatar-xl ${getAvatarColorClass(profile.name)} text-white`}>
                               {getInitials(profile.name)}
