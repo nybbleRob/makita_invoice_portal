@@ -865,98 +865,40 @@ const Invoices = () => {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <div className="container-xl">
-          <div className="row g-2 align-items-center">
-            <div className="col">
-              <h2 className="page-title">Invoices</h2>
-            </div>
-            <div className="col-auto ms-auto">
-              {(currentUser?.role === 'global_admin' || 
-                currentUser?.role === 'administrator' || 
-                currentUser?.role === 'manager' || 
-                currentUser?.role === 'staff') && (
-                <>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept=".pdf"
-                    onChange={handleFileSelect}
-                    style={{ display: 'none' }}
-                  />
-                  <button 
-                    className="btn btn-primary"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                      <path d="M14 3v4a1 1 0 0 0 1 1h4" />
-                      <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
-                      <path d="M12 11v6" />
-                      <path d="M9 14l3 -3l3 3" />
-                    </svg>
-                    Upload Documents
-                  </button>
-                  <button 
-                    className="btn btn-info ms-2"
-                    onClick={handleOpenSftpModal}
-                    title="Import invoices and credit notes from FTP/SFTP server - system will automatically detect document type"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                      <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
-                      <path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
-                      <path d="M7 12a5 5 0 1 0 10 0" />
-                    </svg>
-                    Import via FTP/SFTP
-                  </button>
-                  {importFiles.length > 0 && (
-                    <button 
-                      className="btn btn-success ms-2"
-                      onClick={handleImportInvoices}
-                    >
-                      Import {importFiles.length} File{importFiles.length !== 1 ? 's' : ''}
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="page-body">
         <div className="container-xl">
           <div className="card">
             <div className="card-header">
-              <div className="row w-full">
-                <div className="col">
-                  <div className="input-group input-group-flat" style={{ minWidth: '50%', maxWidth: '400px' }}>
-                    <span className="input-group-text">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
-                        <path d="M21 21l-6 -6"></path>
-                      </svg>
-                    </span>
-                    <input
-                      ref={searchInputRef}
-                      type="text"
-                      className="form-control"
-                      placeholder="Search invoices..."
-                      value={searchQuery}
-                      onChange={(e) => {
-                        setSearchQuery(e.target.value);
-                        setPagination(prev => ({ ...prev, page: 1 }));
-                      }}
-                    />
-                    <span className="input-group-text">
-                      <kbd>ctrl + K</kbd>
-                    </span>
-                  </div>
+              <div className="row w-100 g-3">
+                {/* Title and description */}
+                <div className="col-lg-3 col-md-4 col-12">
+                  <h3 className="card-title mb-0">Invoices</h3>
+                  <p className="text-secondary m-0">View and manage invoice documents</p>
                 </div>
-                <div className="col-md-auto col-sm-12">
-                  <div className="ms-auto d-flex flex-wrap btn-list gap-2">
+                {/* Controls */}
+                <div className="col-lg-9 col-md-8 col-12">
+                  <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
+                    {/* Search */}
+                    <div className="input-group input-group-flat" style={{ maxWidth: '280px' }}>
+                      <span className="input-group-text">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon">
+                          <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
+                          <path d="M21 21l-6 -6"></path>
+                        </svg>
+                      </span>
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        className="form-control"
+                        placeholder="Search invoices..."
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setPagination(prev => ({ ...prev, page: 1 }));
+                        }}
+                      />
+                    </div>
+                    {/* Status filter */}
                     <select
                       className="form-select w-auto"
                       value={statusFilter}
@@ -971,6 +913,7 @@ const Invoices = () => {
                       <option value="downloaded">Downloaded</option>
                       <option value="queried">Queried</option>
                     </select>
+                    {/* Company filter */}
                     <CompanyHierarchyFilter
                       companies={companies}
                       selectedCompanyIds={selectedCompanyIds}
@@ -979,6 +922,7 @@ const Invoices = () => {
                         setPagination(prev => ({ ...prev, page: 1 }));
                       }}
                     />
+                    {/* Retention filter */}
                     {settings?.documentRetentionPeriod && (
                       <select
                         className="form-select w-auto"
@@ -992,43 +936,94 @@ const Invoices = () => {
                         <option value="expiring_soonest">Expiring Soonest</option>
                       </select>
                     )}
-                  {/* Bulk Actions */}
-                  {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && selectedInvoices.length > 0 && (
-                    <>
+                    {/* Reset filters */}
+                    <button 
+                      className="btn btn-outline-secondary" 
+                      onClick={handleResetFilters}
+                      title="Reset all filters and sorting"
+                    >
+                      Reset
+                    </button>
+                    {/* Upload/Import buttons */}
+                    {(currentUser?.role === 'global_admin' || 
+                      currentUser?.role === 'administrator' || 
+                      currentUser?.role === 'manager' || 
+                      currentUser?.role === 'staff') && (
+                      <>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          multiple
+                          accept=".pdf"
+                          onChange={handleFileSelect}
+                          style={{ display: 'none' }}
+                        />
+                        <button 
+                          className="btn btn-primary"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+                            <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
+                            <path d="M12 11v6" />
+                            <path d="M9 14l3 -3l3 3" />
+                          </svg>
+                          Upload
+                        </button>
+                        <button 
+                          className="btn btn-info"
+                          onClick={handleOpenSftpModal}
+                          title="Import invoices and credit notes from FTP/SFTP server"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+                            <path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+                            <path d="M7 12a5 5 0 1 0 10 0" />
+                          </svg>
+                          FTP Import
+                        </button>
+                        {importFiles.length > 0 && (
+                          <button 
+                            className="btn btn-success"
+                            onClick={handleImportInvoices}
+                          >
+                            Import {importFiles.length} File{importFiles.length !== 1 ? 's' : ''}
+                          </button>
+                        )}
+                      </>
+                    )}
+                    {/* Bulk Actions */}
+                    {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && selectedInvoices.length > 0 && (
+                      <>
+                        <button 
+                          className="btn btn-primary" 
+                          onClick={handleBulkDownload}
+                          disabled={bulkDeleting}
+                        >
+                          Download ({selectedInvoices.length})
+                        </button>
+                        <button 
+                          className="btn btn-danger" 
+                          onClick={() => {
+                            setShowBulkDeleteModal(true);
+                            setBulkDeleteReason('');
+                          }}
+                          disabled={bulkDeleting}
+                        >
+                          Delete ({selectedInvoices.length})
+                        </button>
+                      </>
+                    )}
+                    {selectedInvoices.length > 0 && (currentUser?.role !== 'global_admin' && currentUser?.role !== 'administrator') && (
                       <button 
                         className="btn btn-primary" 
                         onClick={handleBulkDownload}
-                        disabled={bulkDeleting}
                       >
                         Download ({selectedInvoices.length})
                       </button>
-                      <button 
-                        className="btn btn-danger" 
-                        onClick={() => {
-                          setShowBulkDeleteModal(true);
-                          setBulkDeleteReason('');
-                        }}
-                        disabled={bulkDeleting}
-                      >
-                        Delete ({selectedInvoices.length})
-                      </button>
-                    </>
-                  )}
-                  {selectedInvoices.length > 0 && (currentUser?.role !== 'global_admin' && currentUser?.role !== 'administrator') && (
-                    <button 
-                      className="btn btn-primary" 
-                      onClick={handleBulkDownload}
-                    >
-                      Download ({selectedInvoices.length})
-                    </button>
-                  )}
-                  <button 
-                    className="btn btn-outline-secondary" 
-                    onClick={handleResetFilters}
-                    title="Reset all filters and sorting"
-                  >
-                    Reset Filters
-                  </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1102,15 +1097,30 @@ const Invoices = () => {
                     <th>Actions</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className={loading ? 'placeholder-glow' : ''}>
                   {loading ? (
-                    <tr>
-                      <td colSpan={9 + (queriesEnabled ? 1 : 0) + (settings?.documentRetentionPeriod ? 1 : 0) + 1} className="text-center py-3">
-                        <div className="spinner-border spinner-border-sm" role="status">
-                          <span className="visually-hidden">Loading...</span>
-                        </div>
-                      </td>
-                    </tr>
+                    [...Array(10)].map((_, i) => (
+                      <tr key={`skeleton-${i}`}>
+                        <td><span className="placeholder" style={{ width: '16px', height: '16px', borderRadius: '3px' }}></span></td>
+                        <td><span className="placeholder col-8"></span></td>
+                        <td><span className="placeholder col-7"></span></td>
+                        <td><span className="placeholder col-6"></span></td>
+                        <td><span className="placeholder col-10"></span></td>
+                        <td><span className="placeholder col-8"></span></td>
+                        <td><span className="placeholder col-9"></span></td>
+                        <td><span className="placeholder col-5"></span></td>
+                        <td><span className="placeholder col-4"></span></td>
+                        <td><span className="placeholder col-6" style={{ borderRadius: '4px' }}></span></td>
+                        {queriesEnabled && <td><span className="placeholder col-5"></span></td>}
+                        {settings?.documentRetentionPeriod && <td><span className="placeholder col-6"></span></td>}
+                        <td>
+                          <div className="btn-list">
+                            <span className="placeholder btn btn-sm disabled" style={{ width: '50px' }}></span>
+                            <span className="placeholder btn btn-sm disabled" style={{ width: '60px' }}></span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
                   ) : invoices.length === 0 ? (
                     <tr>
                       <td colSpan={10 + (queriesEnabled ? 1 : 0) + (settings?.documentRetentionPeriod ? 1 : 0) + 1} className="text-center py-3 text-muted">

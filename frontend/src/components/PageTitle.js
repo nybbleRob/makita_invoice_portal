@@ -18,12 +18,24 @@ const PageTitle = ({ title }) => {
 const getPageTitleFromPath = (pathname) => {
   const titles = {
     '/': 'Dashboard',
-    '/reports': 'Reports',
+    '/invoices': 'Invoices',
+    '/credit-notes': 'Credit Notes',
+    '/statements': 'Statements',
+    '/companies': 'Companies',
+    '/branches': 'Branches',
     '/users': 'User Management',
+    '/users/pending-accounts': 'Pending Accounts',
     '/settings': 'Settings',
-    '/profile': 'My Profile'
+    '/profile': 'My Profile',
+    '/import': 'Import Data',
+    '/templates': 'Templates',
+    '/activity-logs': 'Activity Logs',
+    '/unallocated': 'Unallocated Documents',
+    '/reports': 'Reports'
   };
-  return titles[pathname] || 'Dashboard';
+  // Handle dynamic routes like /invoices/:id/view
+  const basePath = '/' + pathname.split('/')[1];
+  return titles[pathname] || titles[basePath] || 'Dashboard';
 };
 
 export default PageTitle;
