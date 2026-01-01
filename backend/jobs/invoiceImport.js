@@ -1544,7 +1544,7 @@ async function processInvoiceImport(job) {
       timestamp: new Date().toISOString()
     };
     
-    importStore.addResult(importId, result);
+    await importStore.addResult(importId, result);
     
     // Record job completion for batch notification tracking
     try {
@@ -1633,7 +1633,7 @@ async function processInvoiceImport(job) {
       timestamp: new Date().toISOString()
     };
     
-    importStore.addResult(importId, errorResult);
+    await importStore.addResult(importId, errorResult);
     
     // Record job failure for batch notification tracking
     try {

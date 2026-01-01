@@ -752,7 +752,7 @@ router.post('/import', importUpload.array('files', 500), async (req, res) => {
     
     // Create import session store (similar to bulkTestStore)
     const importStore = require('../utils/importStore');
-    importStore.createImport(importId, req.files.length, req.files.map(f => f.path), userId);
+    await importStore.createImport(importId, req.files.length, req.files.map(f => f.path), userId);
     
     // Add each file to the invoice import queue with pre-calculated duplicate info
     for (const file of req.files) {
@@ -839,7 +839,7 @@ router.get('/import/:importId', async (req, res) => {
   try {
     const { importId } = req.params;
     const importStore = require('../utils/importStore');
-    const importSession = importStore.getImport(importId);
+    const importSession = await importStore.getImport(importId);
     
     if (!importSession) {
       return res.status(404).json({
@@ -876,7 +876,7 @@ router.get('/import/:importId/results', async (req, res) => {
   try {
     const { importId } = req.params;
     const importStore = require('../utils/importStore');
-    const importSession = importStore.getImport(importId);
+    const importSession = await importStore.getImport(importId);
     
     if (!importSession) {
       return res.status(404).json({
