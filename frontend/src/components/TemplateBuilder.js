@@ -5,7 +5,7 @@ import toast from '../utils/toast';
 import { getAvailableFields } from '../utils/standardFields';
 
 // Set up pdfjs worker - use local file from public folder
-pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL || ''}/pdf.worker.min.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL || ''}/pdf.worker.js`;
 
 // Suppress font warnings from pdfjs (harmless but annoying)
 if (typeof window !== 'undefined') {

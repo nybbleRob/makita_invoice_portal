@@ -7,7 +7,7 @@ import { getAvailableFields } from '../utils/fieldDiscovery';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Set worker path for PDF.js - use local worker file from public folder
-pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL || ''}/pdf.worker.min.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL || ''}/pdf.worker.js`;
 
 const InvoiceEdit = () => {
   const { id } = useParams();
