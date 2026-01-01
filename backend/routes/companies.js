@@ -212,11 +212,26 @@ router.get('/', auth, async (req, res) => {
     }
     
     if (search) {
-      where[Op.or] = [
+      const searchConditions = [
         { name: { [Op.iLike]: `%${search}%` } },
-        { code: { [Op.iLike]: `%${search}%` } },
-        { referenceNo: { [Op.iLike]: `%${search}%` } }
+        { code: { [Op.iLike]: `%${search}%` } }
       ];
+      
+      // referenceNo is an INTEGER column, so we need to cast it to TEXT for ILIKE search
+      // Try exact match first if it's a number
+      const searchNum = parseInt(search);
+      if (!isNaN(searchNum)) {
+        searchConditions.push({ referenceNo: searchNum });
+      }
+      // Also search as text pattern
+      searchConditions.push(
+        Sequelize.where(
+          Sequelize.cast(Sequelize.col('Company.referenceNo'), 'TEXT'),
+          { [Op.iLike]: `%${search}%` }
+        )
+      );
+      
+      where[Op.or] = searchConditions;
     }
     
     const queryOptions = {
@@ -906,6 +921,12 @@ router.get('/:id/relationships', auth, async (req, res) => {
         isActive: company.isActive,
         edi: company.edi,
         globalSystemEmail: company.globalSystemEmail,
+        primaryContactId: company.primaryContactId,
+        sendInvoiceEmail: company.sendInvoiceEmail,
+        sendInvoiceAttachment: company.sendInvoiceAttachment,
+        sendStatementEmail: company.sendStatementEmail,
+        sendStatementAttachment: company.sendStatementAttachment,
+        sendEmailAsSummary: company.sendEmailAsSummary,
         metadata: company.metadata
       },
       ancestors: ancestors.map(a => ({

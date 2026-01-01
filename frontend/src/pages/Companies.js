@@ -146,6 +146,7 @@ const Companies = () => {
   const [quickAddFormData, setQuickAddFormData] = useState({ 
     name: '', 
     email: '', 
+    setAsPrimary: true, // Default to setting as primary
     sendInvoiceEmail: false, 
     sendInvoiceAttachment: false, 
     sendStatementEmail: false, 
@@ -397,11 +398,11 @@ const Companies = () => {
   const fetchUsers = async (searchTerm = '') => {
     try {
       setLoadingUsers(true);
-      const response = await api.get('/users', {
+      const response = await api.get('/api/users', {
         params: {
           page: 1,
           limit: 20,
-          search: searchTerm
+          search: searchTerm || '' // Always send search param
         }
       });
       // Ensure we always get an array
@@ -440,38 +441,46 @@ const Companies = () => {
         sendEmailAsSummary: quickAddFormData.sendEmailAsSummary || false
       };
       
+      const setAsPrimary = quickAddFormData.setAsPrimary !== false;
+      
       // If we have a company ID (editing), use the company endpoint
       if (companyId) {
-        const response = await api.post(`/companies/${companyId}/notification-contact`, {
+        const response = await api.post(`/api/companies/${companyId}/notification-contact`, {
           name: quickAddFormData.name || quickAddFormData.email.split('@')[0],
           email: quickAddFormData.email,
-          setAsPrimary: true,
+          setAsPrimary: setAsPrimary,
           ...notificationSettings
         });
         
-        setFormData(prev => ({
-          ...prev,
-          primaryContactId: response.data.user.id,
-          primaryContact: response.data.user,
-          ...notificationSettings
-        }));
+        // Only update primaryContact if setAsPrimary is true
+        if (setAsPrimary) {
+          setFormData(prev => ({
+            ...prev,
+            primaryContactId: response.data.user.id,
+            primaryContact: response.data.user,
+            ...notificationSettings
+          }));
+        }
         
         toast.success(response.data.message);
       } else {
         // Creating new company - create user first, then set as primary contact
-        const response = await api.post('/users', {
+        const response = await api.post('/api/users', {
           name: quickAddFormData.name || quickAddFormData.email.split('@')[0],
           email: quickAddFormData.email,
           role: 'notification_contact',
           ...notificationSettings
         });
         
-        setFormData(prev => ({
-          ...prev,
-          primaryContactId: response.data.id,
-          primaryContact: response.data,
-          ...notificationSettings
-        }));
+        // Only set as primary if checkbox is checked
+        if (setAsPrimary) {
+          setFormData(prev => ({
+            ...prev,
+            primaryContactId: response.data.id,
+            primaryContact: response.data,
+            ...notificationSettings
+          }));
+        }
         
         toast.success('Notification contact created');
       }
@@ -480,6 +489,7 @@ const Companies = () => {
       setQuickAddFormData({ 
         name: '', 
         email: '', 
+        setAsPrimary: true,
         sendInvoiceEmail: false, 
         sendInvoiceAttachment: false, 
         sendStatementEmail: false, 
@@ -2174,6 +2184,26 @@ const Companies = () => {
                     </div>
                   </div>
                   <div className="col-md-6">
+                    {/* Set as Primary Contact option */}
+                    <div className="mb-3">
+                      <label className="row g-0 p-2 border bg-warning-lt" style={{ cursor: 'pointer' }}>
+                        <span className="col">
+                          <strong className="small">Set as Primary Contact</strong>
+                          <div className="text-muted" style={{ fontSize: '11px' }}>This contact will receive company notifications</div>
+                        </span>
+                        <span className="col-auto">
+                          <label className="form-check form-check-single form-switch mb-0">
+                            <input
+                              type="checkbox"
+                              className="form-check-input"
+                              checked={quickAddFormData.setAsPrimary !== false}
+                              onChange={(e) => setQuickAddFormData(prev => ({ ...prev, setAsPrimary: e.target.checked }))}
+                            />
+                          </label>
+                        </span>
+                      </label>
+                    </div>
+                    
                     <label className="form-label">Email Notifications</label>
                     <div className="d-flex flex-column gap-2">
                       <label className="row g-0 p-2 border" style={{ cursor: 'pointer' }}>
@@ -2183,13 +2213,13 @@ const Companies = () => {
                             <input
                               type="checkbox"
                               className="form-check-input"
-                              checked={quickAddFormData.sendInvoiceEmail !== false}
+                              checked={quickAddFormData.sendInvoiceEmail || false}
                               onChange={(e) => setQuickAddFormData(prev => ({ ...prev, sendInvoiceEmail: e.target.checked }))}
                             />
                           </label>
                         </span>
                       </label>
-                      <label className="row g-0 p-2 border" style={{ cursor: 'pointer', opacity: quickAddFormData.sendInvoiceEmail !== false ? 1 : 0.5 }}>
+                      <label className="row g-0 p-2 border" style={{ cursor: 'pointer', opacity: quickAddFormData.sendInvoiceEmail ? 1 : 0.5 }}>
                         <span className="col small">With Attachment</span>
                         <span className="col-auto">
                           <label className="form-check form-check-single form-switch mb-0">
@@ -2198,7 +2228,7 @@ const Companies = () => {
                               className="form-check-input"
                               checked={quickAddFormData.sendInvoiceAttachment || false}
                               onChange={(e) => setQuickAddFormData(prev => ({ ...prev, sendInvoiceAttachment: e.target.checked }))}
-                              disabled={quickAddFormData.sendInvoiceEmail === false}
+                              disabled={!quickAddFormData.sendInvoiceEmail}
                             />
                           </label>
                         </span>
@@ -2210,13 +2240,13 @@ const Companies = () => {
                             <input
                               type="checkbox"
                               className="form-check-input"
-                              checked={quickAddFormData.sendStatementEmail !== false}
+                              checked={quickAddFormData.sendStatementEmail || false}
                               onChange={(e) => setQuickAddFormData(prev => ({ ...prev, sendStatementEmail: e.target.checked }))}
                             />
                           </label>
                         </span>
                       </label>
-                      <label className="row g-0 p-2 border" style={{ cursor: 'pointer', opacity: quickAddFormData.sendStatementEmail !== false ? 1 : 0.5 }}>
+                      <label className="row g-0 p-2 border" style={{ cursor: 'pointer', opacity: quickAddFormData.sendStatementEmail ? 1 : 0.5 }}>
                         <span className="col small">With Attachment</span>
                         <span className="col-auto">
                           <label className="form-check form-check-single form-switch mb-0">
@@ -2225,12 +2255,12 @@ const Companies = () => {
                               className="form-check-input"
                               checked={quickAddFormData.sendStatementAttachment || false}
                               onChange={(e) => setQuickAddFormData(prev => ({ ...prev, sendStatementAttachment: e.target.checked }))}
-                              disabled={quickAddFormData.sendStatementEmail === false}
+                              disabled={!quickAddFormData.sendStatementEmail}
                             />
                           </label>
                         </span>
                       </label>
-                      <label className="row g-0 p-2 border" style={{ cursor: 'pointer' }}>
+                      <label className="row g-0 p-2 border" style={{ cursor: 'pointer', opacity: (quickAddFormData.sendInvoiceEmail || quickAddFormData.sendStatementEmail) ? 1 : 0.5 }}>
                         <span className="col small">Send as Summary</span>
                         <span className="col-auto">
                           <label className="form-check form-check-single form-switch mb-0">
@@ -2239,6 +2269,7 @@ const Companies = () => {
                               className="form-check-input"
                               checked={quickAddFormData.sendEmailAsSummary || false}
                               onChange={(e) => setQuickAddFormData(prev => ({ ...prev, sendEmailAsSummary: e.target.checked }))}
+                              disabled={!quickAddFormData.sendInvoiceEmail && !quickAddFormData.sendStatementEmail}
                             />
                           </label>
                         </span>
@@ -2253,7 +2284,7 @@ const Companies = () => {
                   className="btn btn-secondary"
                   onClick={() => {
                     setShowQuickAddModal(false);
-                    setQuickAddFormData({ name: '', email: '', sendInvoiceEmail: true, sendInvoiceAttachment: false, sendStatementEmail: true, sendStatementAttachment: false, sendEmailAsSummary: false });
+                    setQuickAddFormData({ name: '', email: '', setAsPrimary: true, sendInvoiceEmail: false, sendInvoiceAttachment: false, sendStatementEmail: false, sendStatementAttachment: false, sendEmailAsSummary: false });
                   }}
                 >
                   Cancel
