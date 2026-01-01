@@ -1235,7 +1235,7 @@ async function processInvoiceImport(job) {
           companyId: matchedCompanyId,
           invoiceNumber: isInvoice ? (getParsedValue(parsedData, 'invoiceNumber') || parsedData.invoiceNumber || 'GENERATED') : 'N/A',
           creditNoteNumber: isCreditNote ? (getParsedValue(parsedData, 'creditNumber') || parsedData.creditNumber || 'GENERATED') : 'N/A',
-          issueDate: issueDate?.toISOString(),
+          issueDate: getParsedValue(parsedData, 'invoiceDate') || getParsedValue(parsedData, 'date') || parsedData.date || 'N/A',
           amount: isInvoice ? parseAmount(getParsedValue(parsedData, 'totalAmount') || parsedData.amount) : 'N/A'
         });
         // Continue processing even if document creation fails
