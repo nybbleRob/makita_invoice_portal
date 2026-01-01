@@ -101,17 +101,32 @@ const UserManagement = () => {
 
   // Handle edit user from UserView navigation
   useEffect(() => {
-    if (location.state && location.state.editUserId && users.length > 0) {
-      const userId = location.state.editUserId;
-      const user = users.find(u => u.id === userId);
-      if (user) {
-        openEditModal(user);
+    const handleEditFromNav = async () => {
+      if (location.state && location.state.editUserId) {
+        const userId = location.state.editUserId;
+        // First check if user is in current list
+        const user = users.find(u => u.id === userId);
+        if (user) {
+          openEditModal(user);
+        } else {
+          // If not found in current page, fetch the user directly
+          try {
+            const response = await api.get(`/api/users/${userId}`);
+            if (response.data) {
+              openEditModal(response.data);
+            }
+          } catch (error) {
+            console.error('Error fetching user for edit:', error);
+            toast.error('Failed to load user for editing');
+          }
+        }
         // Clear the state to prevent re-triggering
         navigate(location.pathname, { replace: true, state: {} });
       }
-    }
+    };
+    handleEditFromNav();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state, users]);
+  }, [location.state]);
 
   // Client-side status filter (status isn't sent to server to avoid complexity)
   useEffect(() => {

@@ -511,21 +511,16 @@ const CompanyView = () => {
                         const isPrimaryContact = company.primaryContactId === user.id;
                         return (
                           <div key={user.id} className="list-group-item d-flex align-items-center justify-content-between py-2">
-                            <div className="d-flex align-items-center gap-2">
-                              <div className="avatar avatar-sm bg-primary text-white">
-                                {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                            <div>
+                              <div className="fw-bold">
+                                {user.name || 'Unknown'}
+                                {isPrimaryContact && (
+                                  <span className="badge bg-warning-lt text-warning ms-2" style={{ fontSize: '10px' }}>
+                                    Primary Contact
+                                  </span>
+                                )}
                               </div>
-                              <div>
-                                <div className="fw-bold">
-                                  {user.name || 'Unknown'}
-                                  {isPrimaryContact && (
-                                    <span className="badge bg-warning-lt text-warning ms-2" style={{ fontSize: '10px' }}>
-                                      Primary Contact
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-muted small">{user.email}</div>
-                              </div>
+                              <div className="text-muted small">{user.email}</div>
                             </div>
                             <div className="d-flex align-items-center gap-2">
                               <span className={`badge ${getRoleBadgeClass(user.role)}`}>
