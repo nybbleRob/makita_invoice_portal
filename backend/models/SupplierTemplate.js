@@ -278,12 +278,21 @@ module.exports = (sequelize, DataTypes) => {
       }
     }
     
-    // Lazy load pdfjs-dist
+    // Lazy load pdfjs-dist using dynamic import (ES modules support)
     let pdfjsLib;
     try {
-      pdfjsLib = require('pdfjs-dist');
+      // pdfjs-dist 5.x uses ES modules, so we need dynamic import
+      try {
+        const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        pdfjsLib = pdfjs.default || pdfjs;
+      } catch (legacyError) {
+        // Fall back to main build
+        const pdfjs = await import('pdfjs-dist');
+        pdfjsLib = pdfjs.default || pdfjs;
+      }
     } catch (error) {
-      throw new Error('pdfjs-dist is not installed. Please run: npm install pdfjs-dist');
+      console.error('Failed to load pdfjs-dist:', error.message);
+      throw new Error(`pdfjs-dist failed to load: ${error.message}. Please ensure pdfjs-dist is installed.`);
     }
     // Initialize with only metadata fields
     // Use standard field names directly (no template prefix)
