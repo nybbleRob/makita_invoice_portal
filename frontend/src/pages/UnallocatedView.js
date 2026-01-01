@@ -22,6 +22,7 @@ const UnallocatedView = () => {
   const pdfFetchedRef = useRef(false);
   const [editingData, setEditingData] = useState({});
   const [activeDataTab, setActiveDataTab] = useState('extracted'); // 'extracted' or 'json'
+  const [attemptingAllocation, setAttemptingAllocation] = useState(false);
 
   useEffect(() => {
     // Reset PDF state when id changes
@@ -214,6 +215,43 @@ const UnallocatedView = () => {
       toast.error('Error saving document: ' + (error.response?.data?.message || error.message));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAttemptAllocation = async () => {
+    if (!unallocatedDocument) return;
+
+    // First save any edits
+    try {
+      setAttemptingAllocation(true);
+      
+      // Save the current edits first
+      await api.put(`/api/unallocated/${unallocatedDocument.id}`, {
+        parsedData: editingData,
+        accountNumber: editingData.accountNumber
+      });
+
+      // Then attempt allocation
+      const response = await api.post(`/api/unallocated/${unallocatedDocument.id}/attempt-allocation`);
+      
+      if (response.data.success) {
+        toast.success(`Successfully allocated to ${response.data.company.name}! Created ${response.data.document.type === 'invoice' ? 'Invoice' : 'Credit Note'} ${response.data.document.number}`);
+        
+        // Navigate to the created document
+        if (response.data.document.type === 'invoice') {
+          navigate(`/invoices/${response.data.document.id}/view`);
+        } else {
+          navigate(`/credit-notes/${response.data.document.id}/view`);
+        }
+      } else {
+        toast.error(response.data.message || 'Allocation failed');
+      }
+    } catch (error) {
+      console.error('Error attempting allocation:', error);
+      const errorMsg = error.response?.data?.message || error.message;
+      toast.error('Allocation failed: ' + errorMsg);
+    } finally {
+      setAttemptingAllocation(false);
     }
   };
 
@@ -620,7 +658,7 @@ const UnallocatedView = () => {
                         <button
                           className="btn btn-primary"
                           onClick={handleSave}
-                          disabled={saving}
+                          disabled={saving || attemptingAllocation}
                         >
                           {saving ? (
                             <>
@@ -628,7 +666,28 @@ const UnallocatedView = () => {
                               Saving...
                             </>
                           ) : (
-                            'Save and Requeue'
+                            'Save Changes'
+                          )}
+                        </button>
+                        <button
+                          className="btn btn-success"
+                          onClick={handleAttemptAllocation}
+                          disabled={saving || attemptingAllocation || !editingData.accountNumber}
+                          title={!editingData.accountNumber ? 'Account number is required for allocation' : 'Attempt to allocate this document to a company'}
+                        >
+                          {attemptingAllocation ? (
+                            <>
+                              <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                              Allocating...
+                            </>
+                          ) : (
+                            <>
+                              <svg xmlns="http://www.w3.org/2000/svg" className="icon me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                <path d="M5 12l5 5l10 -10"/>
+                              </svg>
+                              Attempt Allocation
+                            </>
                           )}
                         </button>
                         <button

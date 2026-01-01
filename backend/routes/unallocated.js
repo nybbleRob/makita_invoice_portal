@@ -957,5 +957,256 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+// POST /api/unallocated/:id/attempt-allocation - Re-attempt to allocate an unallocated document
+router.post('/:id/attempt-allocation', async (req, res) => {
+  try {
+    const file = await File.findOne({
+      where: { 
+        id: req.params.id,
+        status: { [Op.in]: ['unallocated', 'failed'] },
+        deletedAt: null
+      }
+    });
+
+    if (!file) {
+      return res.status(404).json({ message: 'Unallocated document not found' });
+    }
+
+    const parsedData = file.parsedData || {};
+    
+    // Extract account number from parsed data
+    const accountNumber = parsedData.accountNumber || parsedData.customerNumber || 
+                         parsedData.account_no || parsedData.accountNo || 
+                         parsedData.customer_number || null;
+    
+    if (!accountNumber) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'No account number found in parsed data. Please edit the document to add an account number first.',
+        parsedFields: Object.keys(parsedData)
+      });
+    }
+
+    // Try to match to a company
+    const accountStr = accountNumber.toString().trim();
+    const accountStrNormalized = accountStr.replace(/[^\d]/g, '');
+    const accountInt = parseInt(accountStrNormalized, 10);
+
+    let matchedCompany = null;
+
+    // Try referenceNo (integer) match first
+    if (!isNaN(accountInt)) {
+      matchedCompany = await Company.findOne({
+        where: { referenceNo: accountInt, isActive: true }
+      });
+    }
+
+    // Try code match
+    if (!matchedCompany) {
+      matchedCompany = await Company.findOne({
+        where: { 
+          code: { [Op.in]: [accountStr, accountStrNormalized] },
+          isActive: true
+        }
+      });
+    }
+
+    if (!matchedCompany) {
+      return res.status(400).json({ 
+        success: false,
+        message: `No matching company found for account number: ${accountNumber}. Please create the company first or verify the account number.`,
+        searchedValues: { original: accountNumber, normalized: accountStrNormalized, asInteger: accountInt }
+      });
+    }
+
+    // Determine document type
+    const docType = (parsedData.documentType || '').toLowerCase();
+    const isCredit = docType.includes('credit') || docType === 'credit_note' || docType === 'creditnote';
+    const isInvoice = !isCredit;
+
+    // Parse date
+    const dateValue = parsedData.invoiceDate || parsedData.date || parsedData.taxPoint || new Date().toISOString();
+    let issueDate;
+    try {
+      if (typeof dateValue === 'string') {
+        // Handle DD/MM/YYYY format
+        const ddmmyyyy = dateValue.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (ddmmyyyy) {
+          issueDate = new Date(parseInt(ddmmyyyy[3]), parseInt(ddmmyyyy[2]) - 1, parseInt(ddmmyyyy[1]));
+        } else {
+          issueDate = new Date(dateValue);
+        }
+      } else {
+        issueDate = new Date(dateValue);
+      }
+      if (isNaN(issueDate.getTime())) {
+        issueDate = new Date();
+      }
+    } catch (e) {
+      issueDate = new Date();
+    }
+
+    // Parse amount
+    const amountValue = parsedData.totalAmount || parsedData.amount || parsedData.invoiceTotal || 0;
+    let amount = 0;
+    if (typeof amountValue === 'string') {
+      amount = parseFloat(amountValue.replace(/[^0-9.-]/g, '')) || 0;
+    } else if (typeof amountValue === 'number') {
+      amount = amountValue;
+    }
+
+    // Parse VAT amount
+    const vatValue = parsedData.vatAmount || parsedData.vatTotal || 0;
+    let vatAmount = 0;
+    if (typeof vatValue === 'string') {
+      vatAmount = parseFloat(vatValue.replace(/[^0-9.-]/g, '')) || 0;
+    } else if (typeof vatValue === 'number') {
+      vatAmount = vatValue;
+    }
+
+    let document = null;
+
+    // Create invoice or credit note
+    if (isInvoice) {
+      const invoiceNumber = parsedData.invoiceNumber || parsedData.documentNumber || 
+                           `INV-${Date.now()}-${file.fileHash?.substring(0, 8) || 'ALLOC'}`;
+
+      // Check for duplicate invoice number
+      const existingInvoice = await Invoice.findOne({
+        where: { 
+          companyId: matchedCompany.id,
+          invoiceNumber: invoiceNumber,
+          deletedAt: null
+        }
+      });
+
+      if (existingInvoice) {
+        return res.status(400).json({
+          success: false,
+          message: `Invoice ${invoiceNumber} already exists for company ${matchedCompany.name}`,
+          existingInvoiceId: existingInvoice.id
+        });
+      }
+
+      document = await Invoice.create({
+        companyId: matchedCompany.id,
+        invoiceNumber: invoiceNumber,
+        issueDate: issueDate,
+        amount: amount,
+        taxAmount: vatAmount,
+        documentStatus: 'ready',
+        status: 'ready',
+        viewedAt: null,
+        fileUrl: file.filePath,
+        uploadedById: req.user.userId,
+        metadata: {
+          allocatedFrom: 'unallocated',
+          allocatedAt: new Date().toISOString(),
+          allocatedBy: req.user.email,
+          originalFileId: file.id,
+          parsedData: parsedData
+        }
+      });
+
+      console.log(`✅ Created invoice ${invoiceNumber} for company ${matchedCompany.name} from unallocated file ${file.id}`);
+    } else {
+      const creditNoteNumber = parsedData.creditNumber || parsedData.creditNoteNumber || 
+                               parsedData.documentNumber || `CN-${Date.now()}-${file.fileHash?.substring(0, 8) || 'ALLOC'}`;
+
+      // Check for duplicate credit note number
+      const existingCreditNote = await CreditNote.findOne({
+        where: { 
+          companyId: matchedCompany.id,
+          creditNoteNumber: creditNoteNumber,
+          deletedAt: null
+        }
+      });
+
+      if (existingCreditNote) {
+        return res.status(400).json({
+          success: false,
+          message: `Credit Note ${creditNoteNumber} already exists for company ${matchedCompany.name}`,
+          existingCreditNoteId: existingCreditNote.id
+        });
+      }
+
+      document = await CreditNote.create({
+        companyId: matchedCompany.id,
+        creditNoteNumber: creditNoteNumber,
+        issueDate: issueDate,
+        amount: amount,
+        taxAmount: vatAmount,
+        documentStatus: 'ready',
+        status: 'ready',
+        viewedAt: null,
+        fileUrl: file.filePath,
+        uploadedById: req.user.userId,
+        metadata: {
+          allocatedFrom: 'unallocated',
+          allocatedAt: new Date().toISOString(),
+          allocatedBy: req.user.email,
+          originalFileId: file.id,
+          parsedData: parsedData
+        }
+      });
+
+      console.log(`✅ Created credit note ${creditNoteNumber} for company ${matchedCompany.name} from unallocated file ${file.id}`);
+    }
+
+    // Update file status to allocated
+    file.status = 'parsed';
+    file.companyId = matchedCompany.id;
+    file.failureReason = null;
+    const metadata = file.metadata || {};
+    metadata.allocatedAt = new Date().toISOString();
+    metadata.allocatedBy = req.user.email;
+    metadata.allocatedDocumentId = document.id;
+    metadata.allocatedDocumentType = isInvoice ? 'invoice' : 'credit_note';
+    file.metadata = metadata;
+    await file.save();
+
+    // Log activity
+    await logActivity({
+      type: ActivityType.UNALLOCATED_ALLOCATED,
+      userId: req.user.userId,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: `Allocated unallocated file ${file.fileName} to ${matchedCompany.name}`,
+      details: { 
+        fileId: file.id, 
+        fileName: file.fileName, 
+        companyId: matchedCompany.id,
+        companyName: matchedCompany.name,
+        documentType: isInvoice ? 'invoice' : 'credit_note',
+        documentId: document.id,
+        documentNumber: isInvoice ? document.invoiceNumber : document.creditNoteNumber
+      },
+      companyId: matchedCompany.id,
+      companyName: matchedCompany.name,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent')
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully allocated to ${matchedCompany.name}`,
+      company: {
+        id: matchedCompany.id,
+        name: matchedCompany.name,
+        referenceNo: matchedCompany.referenceNo
+      },
+      document: {
+        id: document.id,
+        type: isInvoice ? 'invoice' : 'credit_note',
+        number: isInvoice ? document.invoiceNumber : document.creditNoteNumber
+      }
+    });
+
+  } catch (error) {
+    console.error('Error attempting allocation:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router;
 

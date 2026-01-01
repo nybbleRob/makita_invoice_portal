@@ -82,6 +82,7 @@ const ActivityType = {
   UNALLOCATED_EDITED: 'unallocated_edited',
   UNALLOCATED_DELETED: 'unallocated_deleted',
   UNALLOCATED_BULK_DELETE: 'unallocated_bulk_delete',
+  UNALLOCATED_ALLOCATED: 'unallocated_allocated',
   CREDIT_NOTE_BULK_DELETE: 'credit_note_bulk_delete',
   FILE_PURGE: 'file_purge',
   DOCUMENT_QUERIED: 'document_queried',
