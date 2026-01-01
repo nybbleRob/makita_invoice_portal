@@ -445,6 +445,66 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
+// Bulk update all companies - Global Admin only
+// NOTE: This route MUST be before /:id routes to avoid being caught by the param
+router.put('/bulk-update-all', auth, globalAdmin, async (req, res) => {
+  try {
+    const updateData = req.body;
+    
+    // Only allow specific fields to be updated
+    const allowedFields = [
+      'edi',
+      'sendInvoiceEmail',
+      'sendInvoiceAttachment',
+      'sendStatementEmail',
+      'sendStatementAttachment'
+    ];
+    
+    // Filter to only allowed fields
+    const filteredUpdate = {};
+    for (const field of allowedFields) {
+      if (updateData[field] !== undefined) {
+        filteredUpdate[field] = updateData[field];
+      }
+    }
+    
+    if (Object.keys(filteredUpdate).length === 0) {
+      return res.status(400).json({ 
+        message: 'No valid fields to update' 
+      });
+    }
+    
+    // Update all companies
+    const [updatedCount] = await Company.update(filteredUpdate, {
+      where: {}
+    });
+    
+    // Log activity
+    await logActivity({
+      type: ActivityType.SETTINGS_UPDATED,
+      action: `Global company settings updated: ${Object.keys(filteredUpdate).join(', ')}`,
+      userId: req.user.userId,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      details: {
+        updatedFields: Object.keys(filteredUpdate),
+        values: filteredUpdate,
+        companiesAffected: updatedCount
+      },
+      ipAddress: req.ip || req.connection?.remoteAddress,
+      userAgent: req.get('user-agent')
+    });
+    
+    res.json({ 
+      message: 'All companies updated successfully',
+      updated: updatedCount
+    });
+  } catch (error) {
+    console.error('Error bulk updating companies:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Update company
 router.put('/:id', auth, async (req, res) => {
   try {
@@ -621,65 +681,6 @@ router.put('/:id', auth, async (req, res) => {
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.status(400).json({ message: 'Reference number or code already exists' });
     }
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Bulk update all companies - Global Admin only
-router.put('/bulk-update-all', auth, globalAdmin, async (req, res) => {
-  try {
-    const updateData = req.body;
-    
-    // Only allow specific fields to be updated
-    const allowedFields = [
-      'edi',
-      'sendInvoiceEmail',
-      'sendInvoiceAttachment',
-      'sendStatementEmail',
-      'sendStatementAttachment'
-    ];
-    
-    // Filter to only allowed fields
-    const filteredUpdate = {};
-    for (const field of allowedFields) {
-      if (updateData[field] !== undefined) {
-        filteredUpdate[field] = updateData[field];
-      }
-    }
-    
-    if (Object.keys(filteredUpdate).length === 0) {
-      return res.status(400).json({ 
-        message: 'No valid fields to update' 
-      });
-    }
-    
-    // Update all companies
-    const [updatedCount] = await Company.update(filteredUpdate, {
-      where: {}
-    });
-    
-    // Log activity
-    await logActivity({
-      type: ActivityType.SETTINGS_UPDATED,
-      action: `Global company settings updated: ${Object.keys(filteredUpdate).join(', ')}`,
-      userId: req.user.userId,
-      userEmail: req.user.email,
-      userRole: req.user.role,
-      details: {
-        updatedFields: Object.keys(filteredUpdate),
-        values: filteredUpdate,
-        companiesAffected: updatedCount
-      },
-      ipAddress: req.ip || req.connection?.remoteAddress,
-      userAgent: req.get('user-agent')
-    });
-    
-    res.json({ 
-      message: 'All companies updated successfully',
-      updated: updatedCount
-    });
-  } catch (error) {
-    console.error('Error bulk updating companies:', error);
     res.status(500).json({ message: error.message });
   }
 });
