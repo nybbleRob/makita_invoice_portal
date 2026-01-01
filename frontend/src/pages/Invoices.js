@@ -599,14 +599,13 @@ const Invoices = () => {
         // Check if cancelled
         if (importSession.cancelled || importSession.status === 'cancelled') {
           console.log('🛑 Import was cancelled');
-          setTestingSftp(false);
           setImportStatus(null);
+          setShowImportModal(false);
           if (importPollingInterval) {
             clearInterval(importPollingInterval);
             setImportPollingInterval(null);
           }
           toast.info('Import was cancelled');
-          handleCancelSftp();
           return true; // Stop polling
         }
         
@@ -635,29 +634,11 @@ const Invoices = () => {
           }
         }
         
-        // If we're in processing stage and processing is complete
-        if ((sftpStage === 'processing' || sftpStage === 'download') && importSession.status === 'completed') {
-          // Fetch full results
-          const resultsResponse = await api.get(`/api/invoices/import/${id}/results`);
-          const importData = resultsResponse.data.import;
-          setImportResults(importData);
-          
-          // Update status to show success
-          setImportStatus({ ...importSession, ...importData });
-          
-          // Auto-close processing modal and show results modal
-          setShowImportModal(false);
-          
-          // Refresh invoices list
-          fetchInvoices();
-          
-          return true; // Signal to stop polling
-        }
         return false; // Continue polling
       } catch (error) {
         console.error('Error polling import status:', error);
-        setTestingSftp(false);
         setImportStatus(null);
+        setShowImportModal(false);
         setImportPollingInterval(null);
         toast.error('Error checking import status', 8000);
         return true; // Stop polling on error
