@@ -1184,7 +1184,8 @@ const UserManagement = () => {
                       ))}
                     </select>
                   </div>
-                  {!selectedUser && (
+                  {/* Password field for new users - hidden for notification_contact role */}
+                  {!selectedUser && formData.role !== 'notification_contact' && (
                     <div className="mb-3">
                       <label className="form-label">Password</label>
                       <input
@@ -1198,9 +1199,14 @@ const UserManagement = () => {
                       />
                     </div>
                   )}
+                  {!selectedUser && formData.role === 'notification_contact' && (
+                    <div className="alert alert-info mb-3">
+                      <strong>Note:</strong> Notification contacts do not require a password as they do not log in to the portal.
+                    </div>
+                  )}
                   
-                  {/* Password Management Section (only when editing) */}
-                  {selectedUser && (
+                  {/* Password Management Section (only when editing, hidden for notification_contact) */}
+                  {selectedUser && formData.role !== 'notification_contact' && (
                     <>
                       <hr className="my-4" />
                       <h4 className="mb-3">Password Management</h4>
@@ -1336,6 +1342,16 @@ const UserManagement = () => {
                         <small className="form-hint d-block mt-2">
                           Reset Password: Set a new password manually. Reset With Temporary Password: Generates a temporary password and sends it via email.
                         </small>
+                      </div>
+                    </>
+                  )}
+                  {/* Note for notification contacts */}
+                  {selectedUser && formData.role === 'notification_contact' && (
+                    <>
+                      <hr className="my-4" />
+                      <div className="alert alert-info mb-0">
+                        <strong>Notification Contact:</strong> This user does not log in to the portal and does not require a password. 
+                        To grant portal access, change the role to "External User" and set a password.
                       </div>
                     </>
                   )}
