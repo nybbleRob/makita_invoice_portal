@@ -20,6 +20,7 @@ const { processBulkParsingTest } = require('../jobs/bulkParsingTest');
 const { processInvoiceImport } = require('../jobs/invoiceImport');
 const { processEmailJob } = require('../jobs/emailJob');
 const { cleanupOldFiles } = require('../jobs/fileCleanup');
+const { processLocalFolderScan } = require('../jobs/localFolderScanner');
 const { 
   fileImportQueue, 
   bulkParsingQueue, 
@@ -426,9 +427,15 @@ const scheduledTasksWorker = new Worker('scheduled-tasks', async (job) => {
   switch (job.name) {
     case 'file-cleanup':
       console.log('🧹 Running scheduled file cleanup...');
-      const result = await cleanupOldFiles();
-      console.log(`✅ File cleanup completed: ${result.deleted} deleted, ${result.errors || 0} errors`);
-      return result;
+      const cleanupResult = await cleanupOldFiles();
+      console.log(`✅ File cleanup completed: ${cleanupResult.deleted} deleted, ${cleanupResult.errors || 0} errors`);
+      return cleanupResult;
+    
+    case 'local-folder-scan':
+      console.log('📂 Running scheduled local folder scan...');
+      const scanResult = await processLocalFolderScan(job);
+      console.log(`✅ Local folder scan completed: ${scanResult.queued} queued, ${scanResult.skipped} skipped, ${scanResult.errors?.length || 0} errors`);
+      return scanResult;
     
     default:
       console.warn(`⚠️  Unknown scheduled task: ${job.name}`);

@@ -173,18 +173,26 @@ async function setupScheduledJobs() {
     );
     console.log('✅ File cleanup scheduled: Daily at 2:00 AM');
     
-    // You can add more scheduled jobs here:
-    // Example: Weekly report generation
-    // await scheduledTasksQueue.add(
-    //   'weekly-report',
-    //   { task: 'weekly-report' },
-    //   {
-    //     repeat: {
-    //       pattern: '0 9 * * 1', // Every Monday at 9:00 AM
-    //       tz: process.env.TZ || 'UTC'
-    //     }
-    //   }
-    // );
+    // Schedule local folder scan - hourly
+    // Scans FTP_INBOUND_PATH for new files uploaded via vsftpd
+    await scheduledTasksQueue.add(
+      'local-folder-scan',
+      { task: 'local-folder-scan' },
+      {
+        repeat: {
+          pattern: '0 * * * *', // Every hour at minute 0
+          tz: process.env.TZ || 'UTC'
+        },
+        removeOnComplete: {
+          age: 24 * 3600, // Keep completed jobs for 24 hours
+          count: 50
+        },
+        removeOnFail: {
+          age: 7 * 24 * 3600 // Keep failed jobs for 7 days
+        }
+      }
+    );
+    console.log('✅ Local folder scan scheduled: Hourly at minute 0');
     
     console.log('✅ All scheduled jobs configured');
     return true;
