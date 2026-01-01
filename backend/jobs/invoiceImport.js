@@ -34,7 +34,7 @@ async function processInvoiceImport(job) {
   
   try {
     // Update job progress
-    await job.progress(10);
+    await job.updateProgress(10);
     
     // Ensure storage directories exist
     ensureStorageDirs();
@@ -93,7 +93,7 @@ async function processInvoiceImport(job) {
       console.log(`✅ [Import ${importId}] Using pre-calculated hash: ${fileHash.substring(0, 16)}...`);
     }
     
-    await job.progress(20);
+    await job.updateProgress(20);
     
     // If duplicate info was pre-calculated, use it; otherwise check now (backwards compatibility)
     if (isDuplicate && duplicateFileId) {
@@ -315,7 +315,7 @@ async function processInvoiceImport(job) {
       }
     }
     
-    await job.progress(30);
+    await job.updateProgress(30);
     
     // Determine file type
     const fileExt = path.extname(fileName).toLowerCase();
@@ -442,7 +442,7 @@ async function processInvoiceImport(job) {
       // Continue with fallback extraction
     }
     
-    await job.progress(40);
+    await job.updateProgress(40);
     
     let parsedData = {};
     let processingMethod = 'local';
@@ -492,7 +492,7 @@ async function processInvoiceImport(job) {
       throw new Error(`Failed to parse file: ${parseError.message}`);
     }
     
-    await job.progress(60);
+    await job.updateProgress(60);
     
     // Determine file storage structure based on document type and status
     // Structure: documents/{documentType}/{status}/{year}/{month}/{uniqueFileName}
@@ -577,7 +577,7 @@ async function processInvoiceImport(job) {
     // File stays in temp until database insert succeeds
     // Note: Retries are currently disabled - files are processed once only
     
-    await job.progress(70);
+    await job.updateProgress(70);
     
     // Match company by account number
     let matchedCompanyId = null;
@@ -712,7 +712,7 @@ async function processInvoiceImport(job) {
       console.log(`   Parsed data keys: ${Object.keys(parsedData).filter(k => k !== 'templateId' && k !== 'templateName' && k !== 'fieldLabels').join(', ')}`);
     }
     
-    await job.progress(80);
+    await job.updateProgress(80);
     
     // Determine specific failure reasons by checking what's missing
     // Note: accountNumber is already declared above, so we reuse it
@@ -914,7 +914,7 @@ async function processInvoiceImport(job) {
     
     console.log(`📁 [Import ${importId}] File will be stored in: ${finalStatusFolder} folder`);
     
-    await job.progress(90);
+    await job.updateProgress(90);
     
     // Determine document type
     // First try from parsed data (most accurate - from template extraction)
@@ -1514,7 +1514,7 @@ async function processInvoiceImport(job) {
       }
     }
     
-    await job.progress(100);
+    await job.updateProgress(100);
     
     // Clean up temp file (only if it's actually a temp file from SFTP/FTP import)
     // Don't delete if filePath is the same as actualFilePath (already moved)

@@ -217,7 +217,7 @@ async function processFileImport(job) {
     });
     
     // Update job progress
-    await job.progress(25);
+    await job.updateProgress(25);
     
     // Check if file is Excel (reuse fileExt from above, just convert to lowercase)
     const fileExtLower = fileExt.toLowerCase();
@@ -372,7 +372,7 @@ async function processFileImport(job) {
     }
     
     // Update file with parsing results
-    await job.progress(75);
+    await job.updateProgress(75);
     
     // Get folder structure from settings
     const folderStructure = settings.ftp?.folderStructure || {
@@ -507,7 +507,7 @@ async function processFileImport(job) {
         // Don't fail the job if move fails - file is still processed
       }
       
-      await job.progress(100);
+      await job.updateProgress(100);
       
       return {
         success: true,

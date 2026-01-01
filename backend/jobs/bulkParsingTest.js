@@ -19,11 +19,11 @@ async function processBulkParsingTest(job) {
   
   try {
     // Update job progress
-    await job.progress(10);
+    await job.updateProgress(10);
     
     // Read PDF buffer
     const pdfBuffer = fs.readFileSync(filePath);
-    await job.progress(30);
+    await job.updateProgress(30);
     
     // Find PDF template - try to detect document type first
     let template = null;
@@ -93,7 +93,7 @@ async function processBulkParsingTest(job) {
         console.error(`❌ [Bulk Test ${testId}] No template found for detected type: ${detectedDocType}`);
       }
       
-      await job.progress(50);
+      await job.updateProgress(50);
     }
     
     let parsedData = {};
@@ -126,7 +126,7 @@ async function processBulkParsingTest(job) {
         fullText = extractedFieldsList || 'No fields extracted from template coordinates';
       }
       
-      await job.progress(80);
+      await job.updateProgress(80);
     } else if (parser === 'local' && !template) {
       // Fallback to basic extraction if no template
       const { extractInvoiceData } = require('../utils/pdfExtractor');
@@ -135,13 +135,13 @@ async function processBulkParsingTest(job) {
       if (parsedData && parsedData.fullText) {
         fullText = parsedData.fullText;
       }
-      await job.progress(80);
+      await job.updateProgress(80);
     } else {
       // For other parsers (vision, documentai), we'd need to implement them here
       // For now, just extract text
       const extractedText = await extractTextFromPDF(filePath);
       fullText = extractedText.text;
-      await job.progress(80);
+      await job.updateProgress(80);
     }
     
     // Calculate confidence score using improved algorithm
@@ -169,7 +169,7 @@ async function processBulkParsingTest(job) {
       });
     }
     
-    await job.progress(100);
+    await job.updateProgress(100);
     
     return {
       success: true,
