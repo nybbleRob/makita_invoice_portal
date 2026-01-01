@@ -65,6 +65,23 @@ const CompanyView = () => {
     return labels[role] || role || 'Unknown';
   };
 
+  const [settingPrimary, setSettingPrimary] = useState(null);
+
+  const handleSetPrimaryContact = async (userId) => {
+    try {
+      setSettingPrimary(userId);
+      await api.put(`/api/companies/${id}`, { primaryContactId: userId });
+      toast.success('Primary contact updated successfully');
+      // Refresh company data
+      fetchCompanyDetails();
+    } catch (error) {
+      console.error('Error setting primary contact:', error);
+      toast.error(error.response?.data?.message || 'Failed to set primary contact');
+    } finally {
+      setSettingPrimary(null);
+    }
+  };
+
   const getTypeBadgeClass = (type) => {
     const classes = {
       'CORP': 'bg-primary-lt',
@@ -514,6 +531,20 @@ const CompanyView = () => {
                               <span className={`badge ${getRoleBadgeClass(user.role)}`}>
                                 {getRoleLabel(user.role)}
                               </span>
+                              {!isPrimaryContact && (
+                                <button
+                                  className="btn btn-sm btn-outline-warning"
+                                  onClick={() => handleSetPrimaryContact(user.id)}
+                                  disabled={settingPrimary === user.id}
+                                  title="Set as Primary Contact"
+                                >
+                                  {settingPrimary === user.id ? (
+                                    <span className="spinner-border spinner-border-sm" role="status"></span>
+                                  ) : (
+                                    'Make Primary'
+                                  )}
+                                </button>
+                              )}
                               <button
                                 className="btn btn-sm btn-outline-primary"
                                 onClick={() => navigate(`/users/${user.id}/view`)}
