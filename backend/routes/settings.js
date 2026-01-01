@@ -136,6 +136,24 @@ router.get('/', async (req, res) => {
       };
     }
     
+    // Ensure importSettings exists (for backward compatibility with existing databases)
+    if (!settingsObj.importSettings) {
+      settingsObj.importSettings = {
+        enabled: true,
+        frequency: 60,
+        lastRun: null,
+        lastRunDuration: null,
+        lastRunStats: {
+          scanned: 0,
+          queued: 0,
+          processed: 0,
+          failed: 0,
+          duplicates: 0
+        },
+        nextScheduledRun: null
+      };
+    }
+    
     res.json(settingsObj);
   } catch (error) {
     console.error('Error fetching settings:', error);
