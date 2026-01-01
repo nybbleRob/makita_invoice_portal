@@ -512,7 +512,7 @@ const CompanyView = () => {
                         return (
                           <div key={user.id} className="list-group-item d-flex align-items-center justify-content-between py-2">
                             <div className="d-flex align-items-center gap-2">
-                              <div className="avatar avatar-sm" style={{ backgroundColor: isPrimaryContact ? '#f59f00' : '#206bc4' }}>
+                              <div className="avatar avatar-sm bg-primary text-white">
                                 {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
                               </div>
                               <div>
