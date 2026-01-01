@@ -15,6 +15,7 @@ const { File, Settings, User } = require('../models');
 const { invoiceImportQueue, emailQueue } = require('../config/queue');
 const { Op } = require('sequelize');
 const crypto = require('crypto');
+const importLogger = require('../services/importLogger');
 
 // Default paths (can be overridden by environment variables)
 const INBOUND_PATH = process.env.FTP_INBOUND_PATH || '/mnt/data/ftp-inbound';
@@ -116,9 +117,11 @@ async function scanLocalFolder() {
     files: []
   };
   
+  // Start logging the run
+  const runContext = await importLogger.startRun();
+  
   try {
-    console.log('🔍 Starting local folder scan...');
-    console.log(`   Inbound path: ${INBOUND_PATH}`);
+    await importLogger.log.info(`Scanning inbound folder: ${INBOUND_PATH}`);
     
     // Check if inbound directory exists
     if (!fs.existsSync(INBOUND_PATH)) {
@@ -272,21 +275,42 @@ async function scanLocalFolder() {
       }
     }
     
-    console.log(`✅ Local folder scan completed:`);
-    console.log(`   Scanned: ${results.scanned}`);
-    console.log(`   Queued: ${results.queued}`);
-    console.log(`   Skipped: ${results.skipped}`);
-    console.log(`   Duplicates: ${results.duplicates}`);
-    console.log(`   Errors: ${results.errors.length}`);
+    // Log completion using importLogger
+    await importLogger.endRun(runContext, results);
+    
+    // Update settings with last run info
+    try {
+      const settings = await Settings.getSettingsForUpdate();
+      const currentSettings = settings.importSettings || {};
+      settings.importSettings = {
+        ...currentSettings,
+        lastRun: new Date().toISOString(),
+        lastRunDuration: Date.now() - runContext.startTime,
+        lastRunStats: {
+          scanned: results.scanned,
+          queued: results.queued,
+          processed: results.queued, // Will be updated by invoice import job
+          failed: results.errors.length,
+          duplicates: results.duplicates
+        }
+      };
+      await settings.save();
+      await Settings.invalidateCache();
+    } catch (settingsError) {
+      console.error('Failed to update settings with run info:', settingsError.message);
+    }
     
     return results;
     
   } catch (error) {
-    console.error('❌ Local folder scan error:', error.message);
+    await importLogger.log.error(`Local folder scan failed: ${error.message}`);
     results.errors.push({
       fileName: null,
       error: error.message
     });
+    
+    // Still end the run to record the failure
+    await importLogger.endRun(runContext, results);
     throw error;
   }
 }

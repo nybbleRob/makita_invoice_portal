@@ -251,8 +251,10 @@ router.put('/', globalAdmin, async (req, res) => {
         ...req.body.smtp
       };
       
-      // If emailProvider is not set, migrate smtp to emailProvider
-      if (!settings.emailProvider || !settings.emailProvider.enabled) {
+      // If emailProvider is not set at all (null/undefined), migrate smtp to emailProvider
+      // Note: We only migrate if emailProvider doesn't exist, NOT if enabled is false
+      // (enabled: false is a valid state that should be preserved)
+      if (settings.emailProvider === null || settings.emailProvider === undefined) {
         settings.emailProvider = {
           enabled: settings.smtp.enabled,
           provider: 'smtp',

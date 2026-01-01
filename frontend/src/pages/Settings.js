@@ -31,6 +31,14 @@ const Settings = () => {
   const [updatingGlobalEDI, setUpdatingGlobalEDI] = useState(false);
   const [updatingGlobalEmail, setUpdatingGlobalEmail] = useState(false);
   
+  // Import Settings state
+  const [importSettings, setImportSettings] = useState(null);
+  const [importLogs, setImportLogs] = useState([]);
+  const [loadingImportSettings, setLoadingImportSettings] = useState(false);
+  const [loadingImportLogs, setLoadingImportLogs] = useState(false);
+  const [triggeringImport, setTriggeringImport] = useState(false);
+  const [savingImportSettings, setSavingImportSettings] = useState(false);
+  
 
   useEffect(() => {
     if (user?.role === 'global_admin') {
@@ -71,6 +79,90 @@ const Settings = () => {
       console.error('Error fetching settings:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Fetch import settings when import-settings section is active
+  const fetchImportSettings = async () => {
+    setLoadingImportSettings(true);
+    try {
+      const response = await api.get('/api/import-settings');
+      setImportSettings(response.data);
+    } catch (error) {
+      console.error('Error fetching import settings:', error);
+    } finally {
+      setLoadingImportSettings(false);
+    }
+  };
+
+  // Fetch import logs
+  const fetchImportLogs = async () => {
+    setLoadingImportLogs(true);
+    try {
+      const response = await api.get('/api/import-settings/logs?count=100');
+      setImportLogs(response.data.logs || []);
+    } catch (error) {
+      console.error('Error fetching import logs:', error);
+    } finally {
+      setLoadingImportLogs(false);
+    }
+  };
+
+  // Auto-refresh import logs every 30 seconds when on import settings section
+  useEffect(() => {
+    if (activeSection === 'import-settings') {
+      fetchImportSettings();
+      fetchImportLogs();
+      
+      const logsInterval = setInterval(() => {
+        fetchImportLogs();
+      }, 30000); // 30 seconds
+      
+      return () => clearInterval(logsInterval);
+    }
+  }, [activeSection]);
+
+  // Trigger manual import
+  const handleTriggerImport = async () => {
+    setTriggeringImport(true);
+    try {
+      const response = await api.post('/api/import-settings/trigger');
+      toast.success(response.data.message || 'Import scan completed');
+      fetchImportSettings();
+      fetchImportLogs();
+    } catch (error) {
+      console.error('Error triggering import:', error);
+      toast.error('Error triggering import: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setTriggeringImport(false);
+    }
+  };
+
+  // Save import settings (frequency, enabled)
+  const handleSaveImportSettings = async (updates) => {
+    setSavingImportSettings(true);
+    try {
+      await api.put('/api/import-settings', updates);
+      toast.success('Import settings updated');
+      fetchImportSettings();
+    } catch (error) {
+      console.error('Error saving import settings:', error);
+      toast.error('Error saving import settings: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setSavingImportSettings(false);
+    }
+  };
+
+  // Clear import logs
+  const handleClearImportLogs = async () => {
+    if (!window.confirm('Are you sure you want to clear all import logs?')) return;
+    try {
+      await api.delete('/api/import-settings/logs');
+      toast.success('Import logs cleared');
+      fetchImportLogs();
+    } catch (error) {
+      console.error('Error clearing import logs:', error);
+      toast.error('Error clearing import logs');
     }
   };
 
@@ -523,6 +615,12 @@ const Settings = () => {
                       FTP/SFTP Import
                     </button>
                     <button
+                      className={`list-group-item list-group-item-action d-flex align-items-center ${activeSection === 'import-settings' ? 'active' : ''}`}
+                      onClick={() => setActiveSection('import-settings')}
+                    >
+                      Import Settings
+                    </button>
+                    <button
                       className={`list-group-item list-group-item-action d-flex align-items-center ${activeSection === 'parsing' ? 'active' : ''}`}
                       onClick={() => setActiveSection('parsing')}
                     >
@@ -849,6 +947,267 @@ const Settings = () => {
                             </div>
                           </div>
                         </div>
+                      )}
+                    </>
+                  )}
+
+                  {activeSection === 'import-settings' && (
+                    <>
+                      <h2 className="mb-4">Import Settings</h2>
+                      <p className="card-subtitle mb-4">Configure the automated import scheduler and view import logs.</p>
+                      
+                      {loadingImportSettings ? (
+                        <div className="text-center py-4">
+                          <div className="spinner-border text-primary" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Scheduler Configuration */}
+                          <div className="card mb-4">
+                            <div className="card-header">
+                              <h3 className="card-title mb-0">Scheduler Configuration</h3>
+                            </div>
+                            <div className="card-body">
+                              <div className="row g-3">
+                                <div className="col-md-6">
+                                  <label className="form-label">Import Frequency</label>
+                                  <select
+                                    className="form-select"
+                                    value={importSettings?.frequency || 60}
+                                    onChange={(e) => handleSaveImportSettings({ frequency: parseInt(e.target.value) })}
+                                    disabled={savingImportSettings}
+                                  >
+                                    {importSettings?.validFrequencies?.map(freq => (
+                                      <option key={freq.value} value={freq.value}>{freq.label}</option>
+                                    )) || (
+                                      <>
+                                        <option value={15}>15 minutes</option>
+                                        <option value={30}>30 minutes</option>
+                                        <option value={60}>1 hour</option>
+                                        <option value={120}>2 hours</option>
+                                        <option value={240}>4 hours</option>
+                                        <option value={360}>6 hours</option>
+                                        <option value={720}>12 hours</option>
+                                        <option value={1440}>24 hours</option>
+                                      </>
+                                    )}
+                                  </select>
+                                </div>
+                                <div className="col-md-6">
+                                  <label className="form-label">Status</label>
+                                  <div className="form-check form-switch mt-2">
+                                    <input
+                                      className="form-check-input"
+                                      type="checkbox"
+                                      checked={importSettings?.enabled !== false}
+                                      onChange={(e) => handleSaveImportSettings({ enabled: e.target.checked })}
+                                      disabled={savingImportSettings}
+                                    />
+                                    <span className="form-check-label">
+                                      {importSettings?.enabled !== false ? 'Enabled' : 'Disabled'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div className="row g-3 mt-3">
+                                <div className="col-md-6">
+                                  <div className="d-flex align-items-center">
+                                    <span className="text-muted me-2">Next scheduled run:</span>
+                                    <strong>
+                                      {importSettings?.nextScheduledRun 
+                                        ? new Date(importSettings.nextScheduledRun).toLocaleString()
+                                        : 'Not scheduled'}
+                                    </strong>
+                                  </div>
+                                </div>
+                                <div className="col-md-6">
+                                  <button
+                                    className="btn btn-primary"
+                                    onClick={handleTriggerImport}
+                                    disabled={triggeringImport}
+                                  >
+                                    {triggeringImport ? (
+                                      <>
+                                        <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                                        Running...
+                                      </>
+                                    ) : (
+                                      'Run Import Now'
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Import Statistics */}
+                          <div className="card mb-4">
+                            <div className="card-header">
+                              <h3 className="card-title mb-0">Import Statistics</h3>
+                            </div>
+                            <div className="card-body">
+                              <div className="row g-4">
+                                <div className="col-sm-6 col-lg-3">
+                                  <div className="card card-sm">
+                                    <div className="card-body">
+                                      <div className="d-flex align-items-center">
+                                        <div>
+                                          <div className="subheader">Total Scans</div>
+                                          <div className="h3 mb-0">{importSettings?.stats?.totalScans || 0}</div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="col-sm-6 col-lg-3">
+                                  <div className="card card-sm">
+                                    <div className="card-body">
+                                      <div className="d-flex align-items-center">
+                                        <div>
+                                          <div className="subheader">Files Processed</div>
+                                          <div className="h3 mb-0 text-success">{importSettings?.stats?.totalSuccessful || 0}</div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="col-sm-6 col-lg-3">
+                                  <div className="card card-sm">
+                                    <div className="card-body">
+                                      <div className="d-flex align-items-center">
+                                        <div>
+                                          <div className="subheader">Failed</div>
+                                          <div className="h3 mb-0 text-danger">{importSettings?.stats?.totalFailed || 0}</div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="col-sm-6 col-lg-3">
+                                  <div className="card card-sm">
+                                    <div className="card-body">
+                                      <div className="d-flex align-items-center">
+                                        <div>
+                                          <div className="subheader">Last Run</div>
+                                          <div className="h5 mb-0">
+                                            {importSettings?.stats?.lastRunAt 
+                                              ? new Date(importSettings.stats.lastRunAt).toLocaleString()
+                                              : 'Never'}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {importSettings?.lastRun && (
+                                <div className="mt-3 p-3 bg-light rounded">
+                                  <h4 className="mb-2">Last Run Details</h4>
+                                  <div className="row">
+                                    <div className="col-md-3">
+                                      <small className="text-muted">Duration:</small><br/>
+                                      <strong>{importSettings.lastRun.duration ? `${(importSettings.lastRun.duration / 1000).toFixed(1)}s` : 'N/A'}</strong>
+                                    </div>
+                                    <div className="col-md-3">
+                                      <small className="text-muted">Files Scanned:</small><br/>
+                                      <strong>{importSettings.lastRun.results?.scanned || 0}</strong>
+                                    </div>
+                                    <div className="col-md-3">
+                                      <small className="text-muted">Files Queued:</small><br/>
+                                      <strong className="text-success">{importSettings.lastRun.results?.queued || 0}</strong>
+                                    </div>
+                                    <div className="col-md-3">
+                                      <small className="text-muted">Errors:</small><br/>
+                                      <strong className={importSettings.lastRun.results?.errors?.length ? 'text-danger' : ''}>
+                                        {importSettings.lastRun.results?.errors?.length || 0}
+                                      </strong>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Terminal-Style Log Viewer */}
+                          <div className="card">
+                            <div className="card-header d-flex justify-content-between align-items-center">
+                              <h3 className="card-title mb-0">Import Logs</h3>
+                              <div className="btn-list">
+                                <button
+                                  className="btn btn-sm btn-outline-secondary"
+                                  onClick={fetchImportLogs}
+                                  disabled={loadingImportLogs}
+                                >
+                                  {loadingImportLogs ? (
+                                    <span className="spinner-border spinner-border-sm" role="status"></span>
+                                  ) : (
+                                    'Refresh'
+                                  )}
+                                </button>
+                                <button
+                                  className="btn btn-sm btn-outline-danger"
+                                  onClick={handleClearImportLogs}
+                                >
+                                  Clear Logs
+                                </button>
+                              </div>
+                            </div>
+                            <div 
+                              className="card-body p-0"
+                              style={{
+                                backgroundColor: '#1a1a2e',
+                                fontFamily: 'Monaco, Consolas, "Courier New", monospace',
+                                fontSize: '13px',
+                                maxHeight: '400px',
+                                overflowY: 'auto'
+                              }}
+                            >
+                              {importLogs.length === 0 ? (
+                                <div className="p-3 text-center" style={{ color: '#6c757d' }}>
+                                  No import logs available. Logs will appear here when imports run.
+                                </div>
+                              ) : (
+                                <div className="p-2">
+                                  {importLogs.map((log, index) => {
+                                    const color = log.level === 'success' ? '#00ff88' :
+                                                  log.level === 'error' ? '#ff4444' :
+                                                  log.level === 'warning' ? '#ffaa00' :
+                                                  log.level === 'debug' ? '#888888' : '#ffffff';
+                                    const icon = log.level === 'success' ? '✓' :
+                                                 log.level === 'error' ? '✗' :
+                                                 log.level === 'warning' ? '⚠' :
+                                                 log.level === 'debug' ? '…' : '›';
+                                    return (
+                                      <div 
+                                        key={log.id || index} 
+                                        style={{ 
+                                          color, 
+                                          padding: '2px 8px',
+                                          borderBottom: '1px solid #2a2a4e'
+                                        }}
+                                      >
+                                        <span style={{ color: '#666', marginRight: '8px' }}>
+                                          {new Date(log.timestamp).toLocaleTimeString()}
+                                        </span>
+                                        <span style={{ marginRight: '8px' }}>{icon}</span>
+                                        {log.message}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                            <div className="card-footer" style={{ backgroundColor: '#1a1a2e', borderTop: '1px solid #2a2a4e' }}>
+                              <small style={{ color: '#666' }}>
+                                Auto-refreshes every 30 seconds • Showing last {importLogs.length} entries
+                              </small>
+                            </div>
+                          </div>
+                        </>
                       )}
                     </>
                   )}

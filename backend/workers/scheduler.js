@@ -141,6 +141,41 @@ async function getHealthStatus() {
 }
 
 /**
+ * Get cron pattern from frequency in minutes
+ */
+function getCronPattern(frequencyMinutes) {
+  if (frequencyMinutes < 60) {
+    // Every X minutes
+    return `*/${frequencyMinutes} * * * *`;
+  } else if (frequencyMinutes === 60) {
+    // Every hour at minute 0
+    return '0 * * * *';
+  } else if (frequencyMinutes < 1440) {
+    // Every X hours
+    const hours = frequencyMinutes / 60;
+    return `0 */${hours} * * *`;
+  } else {
+    // Daily at midnight
+    return '0 0 * * *';
+  }
+}
+
+/**
+ * Get frequency label for logging
+ */
+function getFrequencyLabel(frequencyMinutes) {
+  if (frequencyMinutes < 60) {
+    return `every ${frequencyMinutes} minutes`;
+  } else if (frequencyMinutes === 60) {
+    return 'hourly';
+  } else if (frequencyMinutes < 1440) {
+    return `every ${frequencyMinutes / 60} hours`;
+  } else {
+    return 'daily';
+  }
+}
+
+/**
  * Schedule repeatable jobs
  */
 async function setupScheduledJobs() {
@@ -173,26 +208,48 @@ async function setupScheduledJobs() {
     );
     console.log('✅ File cleanup scheduled: Daily at 2:00 AM');
     
-    // Schedule local folder scan - hourly
-    // Scans FTP_INBOUND_PATH for new files uploaded via vsftpd
-    await scheduledTasksQueue.add(
-      'local-folder-scan',
-      { task: 'local-folder-scan' },
-      {
-        repeat: {
-          pattern: '0 * * * *', // Every hour at minute 0
-          tz: process.env.TZ || 'UTC'
-        },
-        removeOnComplete: {
-          age: 24 * 3600, // Keep completed jobs for 24 hours
-          count: 50
-        },
-        removeOnFail: {
-          age: 7 * 24 * 3600 // Keep failed jobs for 7 days
-        }
+    // Get import frequency from settings
+    let frequencyMinutes = 60; // Default: hourly
+    let importEnabled = true;
+    
+    try {
+      // Load settings from database
+      const { Settings } = require('../models');
+      const settings = await Settings.getSettings();
+      if (settings.importSettings) {
+        frequencyMinutes = settings.importSettings.frequency || 60;
+        importEnabled = settings.importSettings.enabled !== false;
       }
-    );
-    console.log('✅ Local folder scan scheduled: Hourly at minute 0');
+    } catch (settingsError) {
+      console.warn('⚠️  Could not load import settings, using defaults:', settingsError.message);
+    }
+    
+    // Schedule local folder scan based on settings
+    if (importEnabled) {
+      const cronPattern = getCronPattern(frequencyMinutes);
+      const frequencyLabel = getFrequencyLabel(frequencyMinutes);
+      
+      await scheduledTasksQueue.add(
+        'local-folder-scan',
+        { task: 'local-folder-scan' },
+        {
+          repeat: {
+            pattern: cronPattern,
+            tz: process.env.TZ || 'UTC'
+          },
+          removeOnComplete: {
+            age: 24 * 3600, // Keep completed jobs for 24 hours
+            count: 50
+          },
+          removeOnFail: {
+            age: 7 * 24 * 3600 // Keep failed jobs for 7 days
+          }
+        }
+      );
+      console.log(`✅ Local folder scan scheduled: ${frequencyLabel} (${cronPattern})`);
+    } else {
+      console.log('ℹ️  Local folder scan is disabled in settings');
+    }
     
     console.log('✅ All scheduled jobs configured');
     return true;

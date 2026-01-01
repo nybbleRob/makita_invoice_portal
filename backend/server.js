@@ -501,6 +501,7 @@ app.use('/api/activity-logs', require('./routes/activityLogs'));
 app.use('/api/registration', require('./routes/registration'));
 app.use('/api/pending-registrations', require('./routes/pendingRegistrations'));
 app.use('/api/users/import', require('./routes/userImport'));
+app.use('/api/import-settings', require('./routes/importSettings'));
 
 // Error handling middleware
 app.use((err, req, res, next) => {

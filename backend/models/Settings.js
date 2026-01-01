@@ -238,6 +238,24 @@ module.exports = (sequelize) => {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
       comment: 'Enable/disable the document queries feature system-wide. When disabled, all query features are hidden.'
+    },
+    importSettings: {
+      type: DataTypes.JSONB,
+      defaultValue: {
+        enabled: true,
+        frequency: 60, // Minutes between scans (15, 30, 60, 120, 240, 360, 720, 1440)
+        lastRun: null, // ISO timestamp of last run
+        lastRunDuration: null, // Duration in milliseconds
+        lastRunStats: {
+          scanned: 0,
+          queued: 0,
+          processed: 0,
+          failed: 0,
+          duplicates: 0
+        },
+        nextScheduledRun: null // ISO timestamp of next scheduled run
+      },
+      comment: 'FTP/Local folder import scheduler settings'
     }
   }, {
     tableName: 'settings',
