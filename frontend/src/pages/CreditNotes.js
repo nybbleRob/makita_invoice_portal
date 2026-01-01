@@ -60,15 +60,6 @@ const CreditNotes = () => {
   const [importPollingInterval, setImportPollingInterval] = useState(null);
   const fileInputRef = useRef(null);
   
-  // SFTP import states
-  const [showSftpModal, setShowSftpModal] = useState(false);
-  const [testingSftp, setTestingSftp] = useState(false);
-  const [sftpFiles, setSftpFiles] = useState([]);
-  const [sftpConnectionStatus, setSftpConnectionStatus] = useState(null);
-  // Only PDF for invoices/credit notes - Excel is only for statements
-  const [sftpStage, setSftpStage] = useState('connect'); // 'connect', 'download', 'processing'
-  const [sftpImportId, setSftpImportId] = useState(null);
-
   
   // Cleanup polling interval on unmount
   useEffect(() => {
@@ -656,143 +647,6 @@ const CreditNotes = () => {
     }
   };
 
-  // SFTP Import handlers - Auto connect on modal open
-  useEffect(() => {
-    if (showSftpModal && sftpStage === 'connect' && !sftpConnectionStatus && !testingSftp) {
-      handleTestSftpConnection();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showSftpModal, sftpStage]);
-
-  const handleTestSftpConnection = async () => {
-    try {
-      setTestingSftp(true);
-      setSftpConnectionStatus(null);
-      setSftpFiles([]);
-
-      const response = await api.post('/api/credit-notes/sftp/test-connection', {
-        fileType: 'pdf' // Only PDF for credit notes
-      });
-      
-      if (response.data.success) {
-        setSftpConnectionStatus({
-          success: true,
-          message: response.data.message,
-          fileCount: response.data.fileCount
-        });
-        setSftpFiles(response.data.files || []);
-      } else {
-        setSftpConnectionStatus({
-          success: false,
-          message: response.data.message
-        });
-      }
-    } catch (error) {
-      console.error('Error testing FTP/SFTP connection:', error);
-      setSftpConnectionStatus({
-        success: false,
-        message: error.response?.data?.message || error.message || 'Failed to test FTP/SFTP connection'
-      });
-    } finally {
-      setTestingSftp(false);
-    }
-  };
-
-  const handleNext = async () => {
-    if (sftpStage === 'connect' && sftpConnectionStatus?.success && getFilteredFiles().length > 0) {
-      // Move to download stage
-      setSftpStage('download');
-      // Start download
-      handleStartDownload();
-    }
-  };
-
-  const handleStartDownload = async () => {
-    try {
-      setTestingSftp(true);
-      
-      // Get filtered files based on selection
-      const filteredFiles = getFilteredFiles();
-      
-      if (filteredFiles.length === 0) {
-        toast.error('No files match the selected file type filter.');
-        return;
-      }
-      
-      // Send file type filter to backend (only PDF for credit notes)
-      const response = await api.post('/api/credit-notes/sftp/import', {
-        fileType: 'pdf'
-      });
-      
-      if (response.data.success) {
-        setSftpImportId(response.data.importId);
-        // Initialize import status with the response data
-        setImportStatus({
-          importId: response.data.importId,
-          totalFiles: response.data.totalFiles || getFilteredFiles().length,
-          downloadedFiles: 0,
-          processedFiles: 0,
-          status: 'downloading'
-        });
-        // Start polling for download progress immediately
-        pollImportStatus(response.data.importId);
-      } else {
-        toast.error(response.data.message || 'Failed to import from FTP/SFTP');
-        setTestingSftp(false);
-      }
-    } catch (error) {
-      console.error('Error importing from FTP/SFTP:', error);
-      toast.error('Error importing from FTP/SFTP: ' + (error.response?.data?.message || error.message));
-      setTestingSftp(false);
-    }
-  };
-
-  const handleCancelSftp = async () => {
-    // If there's an active import, cancel it on the backend
-    if (sftpImportId) {
-      try {
-        await api.post(`/api/credit-notes/import/${sftpImportId}/cancel`);
-        console.log('✅ Import cancelled on backend');
-        toast.info('Import cancelled successfully');
-      } catch (error) {
-        console.error('Error cancelling import:', error);
-        toast.error('Error cancelling import: ' + (error.response?.data?.message || error.message));
-        // Continue with cleanup even if cancel request fails
-      }
-    }
-    
-    // Stop polling
-    if (importPollingInterval) {
-      clearInterval(importPollingInterval);
-      setImportPollingInterval(null);
-    }
-    
-    // Reset state
-    setShowSftpModal(false);
-    setSftpConnectionStatus(null);
-    setSftpFiles([]);
-    setSftpStage('connect');
-    setSftpImportId(null);
-    setImportStatus(null);
-    setTestingSftp(false);
-  };
-
-  const handleOpenSftpModal = () => {
-    setShowSftpModal(true);
-    setSftpStage('connect');
-    setSftpConnectionStatus(null);
-    setSftpFiles([]);
-    setSftpImportId(null);
-  };
-
-  // Filter files - only PDF for credit notes
-  const getFilteredFiles = () => {
-    return sftpFiles.filter(file => {
-      const name = file.name.toLowerCase();
-      return name.endsWith('.pdf');
-    });
-  };
-
   return (
     <div className="page">
       <div className="page-body">
@@ -907,13 +761,6 @@ const CreditNotes = () => {
                           onClick={() => fileInputRef.current?.click()}
                         >
                           Upload
-                        </button>
-                        <button 
-                          className="btn btn-info"
-                          onClick={handleOpenSftpModal}
-                          title="Import credit notes from FTP/SFTP server"
-                        >
-                          FTP Import
                         </button>
                         {importFiles.length > 0 && (
                           <button 
@@ -1180,47 +1027,20 @@ const CreditNotes = () => {
                 <div className="spinner-border text-primary mb-3" role="status">
                   <span className="visually-hidden">Processing...</span>
                 </div>
-                {importStatus?.status === 'downloading' ? (
-                  <>
-                    <h3>Downloading Files...</h3>
-                    <p className="text-muted mb-3">
-                      Download {importStatus.downloadedFiles || 0} of {importStatus.totalFiles || 0} file{importStatus.totalFiles !== 1 ? 's' : ''}
-                    </p>
-                    {importStatus.currentFile && (
-                      <p className="text-muted small">
-                        Current: {importStatus.currentFile}
-                      </p>
-                    )}
-                    {importStatus && importStatus.totalFiles > 0 && (
-                      <div className="progress mt-3">
-                        <div 
-                          className="progress-bar progress-bar-striped progress-bar-animated" 
-                          role="progressbar" 
-                          style={{ width: `${((importStatus.downloadedFiles || 0) / importStatus.totalFiles) * 100}%` }}
-                        >
-                          {Math.round(((importStatus.downloadedFiles || 0) / importStatus.totalFiles) * 100)}%
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <h3>Processing {importStatus?.totalFiles || 0} file(s)...</h3>
-                    <p className="text-muted">
-                      Processing {importStatus?.processedFiles || 0} of {importStatus?.totalFiles || 0} files
-                    </p>
-                    {importStatus && importStatus.totalFiles > 0 && (
-                      <div className="progress">
-                        <div 
-                          className="progress-bar" 
-                          role="progressbar" 
-                          style={{ width: `${(importStatus.processedFiles / importStatus.totalFiles) * 100}%` }}
-                        >
-                          {Math.round((importStatus.processedFiles / importStatus.totalFiles) * 100)}%
-                        </div>
-                      </div>
-                    )}
-                  </>
+                <h3>Processing {importStatus?.totalFiles || 0} file(s)...</h3>
+                <p className="text-muted">
+                  Processed {importStatus?.processedFiles || 0} of {importStatus?.totalFiles || 0} files
+                </p>
+                {importStatus && importStatus.totalFiles > 0 && (
+                  <div className="progress">
+                    <div 
+                      className="progress-bar progress-bar-striped progress-bar-animated" 
+                      role="progressbar" 
+                      style={{ width: `${((importStatus?.processedFiles || 0) / importStatus.totalFiles) * 100}%` }}
+                    >
+                      {Math.round(((importStatus?.processedFiles || 0) / importStatus.totalFiles) * 100)}%
+                    </div>
+                  </div>
                 )}
               </div>
               <div className="modal-footer">
@@ -1636,196 +1456,6 @@ const CreditNotes = () => {
                 >
                   {deleting ? 'Deleting...' : 'Delete Credit Note'}
                 </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* FTP/SFTP Import Modal - Multi-Step */}
-      {showSftpModal && (
-        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
-          <div className="modal-dialog modal-dialog-centered modal-xl">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Import via FTP/SFTP</h5>
-                <button type="button" className="btn-close" onClick={handleCancelSftp}></button>
-              </div>
-              <div className="modal-body">
-                {/* Connect Stage */}
-                {sftpStage === 'connect' && (
-                  <div className="text-center py-4">
-                    {!sftpConnectionStatus && (
-                      <>
-                        <div className="spinner-border text-primary mb-3" role="status">
-                          <span className="visually-hidden">Connecting...</span>
-                        </div>
-                        <h4>Connecting to FTP/SFTP Server...</h4>
-                        <p className="text-muted">Please wait while we establish a connection.</p>
-                      </>
-                    )}
-                    {sftpConnectionStatus && sftpConnectionStatus.success && (
-                      <>
-                        <div className="mb-3">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-lg text-success" width="48" height="48" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                            <path d="M5 12l5 5l10 -10" />
-                          </svg>
-                        </div>
-                        <div className="alert alert-success mb-3">
-                          <strong>✓ Connection Established</strong>
-                        </div>
-                        <p className="mb-4">
-                          Found <strong>{getFilteredFiles().length}</strong> PDF file{getFilteredFiles().length !== 1 ? 's' : ''} ready for import
-                        </p>
-                      </>
-                    )}
-                    {sftpConnectionStatus && !sftpConnectionStatus.success && (
-                      <>
-                        <div className="alert alert-danger mb-3">
-                          <strong>Connection Failed!</strong><br />
-                          {sftpConnectionStatus.message}
-                        </div>
-                        <button
-                          className="btn btn-primary"
-                          onClick={handleTestSftpConnection}
-                          disabled={testingSftp}
-                        >
-                          {testingSftp ? (
-                            <>
-                              <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                              Retrying...
-                            </>
-                          ) : (
-                            'Retry Connection'
-                          )}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {/* Download/Processing/Complete Stage - Single view that transitions */}
-                {(sftpStage === 'download' || sftpStage === 'processing') && (
-                  <div className="text-center py-4">
-                    {(() => {
-                      // Check if import is completed
-                      const isCompleted = importStatus?.status === 'completed';
-                      
-                      if (isCompleted) {
-                        // Show success view
-                        const summary = importStatus?.summary || {};
-                        return (
-                          <>
-                            <div className="mb-3">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-lg text-success" width="48" height="48" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                                <path d="M5 12l5 5l10 -10" />
-                              </svg>
-                            </div>
-                            <h4 className="text-success mb-3">Import Completed Successfully!</h4>
-                            <div className="text-muted mb-3">
-                              <p className="mb-1">
-                                <strong>Processed:</strong> {importStatus?.processedFiles || 0} of {importStatus?.totalFiles || 0} files
-                              </p>
-                              <p className="mb-1">
-                                <strong>Matched to Companies:</strong> {summary.matched || 0}
-                              </p>
-                              <p className="mb-1">
-                                <strong>Unallocated:</strong> {summary.unallocated || 0}
-                              </p>
-                              {summary.failed > 0 && (
-                                <p className="mb-1 text-warning">
-                                  <strong>Failed:</strong> {summary.failed || 0}
-                                </p>
-                              )}
-                            </div>
-                          </>
-                        );
-                      }
-                      
-                      // Check if downloads are complete
-                      const downloadsComplete = (importStatus?.downloadedFiles || 0) >= (importStatus?.totalFiles || 0) && (importStatus?.totalFiles || 0) > 0;
-                      const isProcessing = downloadsComplete || importStatus?.status === 'queuing' || importStatus?.status === 'processing';
-                      
-                      if (isProcessing) {
-                        // Show processing view
-                        return (
-                          <>
-                            <div className="spinner-border text-primary mb-3" role="status">
-                              <span className="visually-hidden">Processing...</span>
-                            </div>
-                            <h4>Processing Files...</h4>
-                            <p className="text-muted mb-3">
-                              Processing {importStatus?.processedFiles || 0} of {importStatus?.totalFiles || 0} files
-                            </p>
-                            {importStatus && importStatus.totalFiles > 0 && (
-                              <div className="progress mb-3">
-                                <div 
-                                  className="progress-bar" 
-                                  role="progressbar" 
-                                  style={{ width: `${((importStatus.processedFiles || 0) / importStatus.totalFiles) * 100}%` }}
-                                >
-                                  {Math.round(((importStatus.processedFiles || 0) / importStatus.totalFiles) * 100)}%
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        );
-                      } else {
-                        // Show download view
-                        return (
-                          <>
-                            <div className="spinner-border text-primary mb-3" role="status">
-                              <span className="visually-hidden">Downloading...</span>
-                            </div>
-                            <h4>Downloading Files...</h4>
-                            {importStatus?.currentFile && (
-                              <p className="text-muted mb-2" style={{ fontSize: '0.875rem' }}>
-                                Current: {importStatus.currentFile}
-                              </p>
-                            )}
-                            <p className="text-muted mb-3">
-                              Download {importStatus?.downloadedFiles || 0} of {importStatus?.totalFiles || 0} file{importStatus?.totalFiles !== 1 ? 's' : ''}
-                            </p>
-                            {importStatus && importStatus.totalFiles > 0 && (
-                              <div className="progress mb-3">
-                                <div 
-                                  className="progress-bar progress-bar-striped progress-bar-animated" 
-                                  role="progressbar" 
-                                  style={{ width: `${((importStatus.downloadedFiles || 0) / importStatus.totalFiles) * 100}%` }}
-                                >
-                                  {Math.round(((importStatus.downloadedFiles || 0) / importStatus.totalFiles) * 100)}%
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        );
-                      }
-                    })()}
-                  </div>
-                )}
-              </div>
-              <div className="modal-footer">
-                {sftpStage === 'connect' && sftpConnectionStatus?.success && (
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={handleNext}
-                    disabled={getFilteredFiles().length === 0}
-                  >
-                    Next
-                  </button>
-                )}
-                {importStatus?.status === 'completed' ? (
-                  <button type="button" className="btn btn-primary" onClick={handleCancelSftp}>
-                    OK
-                  </button>
-                ) : (
-                  <button type="button" className="btn btn-danger" onClick={handleCancelSftp}>
-                    Cancel
-                  </button>
-                )}
               </div>
             </div>
           </div>
