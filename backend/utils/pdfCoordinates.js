@@ -5,6 +5,7 @@
 
 const pdfParse = require('pdf-parse');
 let pdfjsLib = null;
+let pdfjsLoadPromise = null;
 
 // Polyfill DOMMatrix for Node.js environment
 if (typeof global.DOMMatrix === 'undefined') {
@@ -17,16 +18,39 @@ if (typeof global.DOMMatrix === 'undefined') {
   }
 }
 
-// Lazy load pdfjs-dist only when needed
-function getPdfjsLib() {
-  if (!pdfjsLib) {
-    try {
-      pdfjsLib = require('pdfjs-dist');
-    } catch (error) {
-      throw new Error('pdfjs-dist is not installed. Please run: npm install pdfjs-dist');
-    }
+// Lazy load pdfjs-dist only when needed (using dynamic import for ES modules)
+async function getPdfjsLib() {
+  if (pdfjsLib) {
+    return pdfjsLib;
   }
-  return pdfjsLib;
+  
+  if (pdfjsLoadPromise) {
+    return pdfjsLoadPromise;
+  }
+  
+  pdfjsLoadPromise = (async () => {
+    try {
+      // pdfjs-dist 5.x uses ES modules, so we need dynamic import
+      // Try the legacy CommonJS build first for better Node.js compatibility
+      try {
+        const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        pdfjsLib = pdfjs.default || pdfjs;
+        console.log('✅ pdfjs-dist loaded (legacy build)');
+        return pdfjsLib;
+      } catch (legacyError) {
+        // Fall back to main build
+        const pdfjs = await import('pdfjs-dist');
+        pdfjsLib = pdfjs.default || pdfjs;
+        console.log('✅ pdfjs-dist loaded (main build)');
+        return pdfjsLib;
+      }
+    } catch (error) {
+      console.error('❌ Failed to load pdfjs-dist:', error.message);
+      throw new Error(`pdfjs-dist failed to load: ${error.message}. Please ensure pdfjs-dist is installed: npm install pdfjs-dist`);
+    }
+  })();
+  
+  return pdfjsLoadPromise;
 }
 
 // Page cache to avoid reloading the same page multiple times
@@ -77,7 +101,7 @@ async function extractTextFromNormalizedRegion(pdfBuffer, coordinates, pdfDoc = 
           ? pdfBuffer 
           : new Uint8Array(pdfBuffer);
       
-      const pdfjs = getPdfjsLib();
+      const pdfjs = await getPdfjsLib();
       const loadingTask = pdfjs.getDocument({ data: pdfData });
       pdf = await loadingTask.promise;
     }
@@ -174,7 +198,7 @@ async function extractTextFromRegion(pdfBuffer, coordinates) {
         ? pdfBuffer 
         : new Uint8Array(pdfBuffer);
     
-    const pdfjs = getPdfjsLib();
+    const pdfjs = await getPdfjsLib();
     const loadingTask = pdfjs.getDocument({ data: pdfData });
     const pdf = await loadingTask.promise;
     
