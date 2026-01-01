@@ -1520,20 +1520,32 @@ const UserManagement = () => {
                                 <div className="text-center py-3 text-muted">No companies found</div>
                               ) : (
                                 <>
-                                  {companySearchResults.map((company) => (
-                                    <label key={company.id} className="form-check mb-2">
-                                      <input
-                                        type="checkbox"
-                                        className="form-check-input"
-                                        checked={formData.companyIds?.includes(company.id) || false}
-                                        onChange={() => handleCompanyToggle(company.id)}
-                                        disabled={formData.allCompanies}
-                                      />
-                                      <span className="form-check-label">
-                                        {company.name} {company.referenceNo && `(${company.referenceNo})`}
-                                      </span>
-                                    </label>
-                                  ))}
+                                  {/* Sort: assigned companies first, then alphabetically */}
+                                  {[...companySearchResults]
+                                    .sort((a, b) => {
+                                      const aAssigned = formData.companyIds?.includes(a.id) || false;
+                                      const bAssigned = formData.companyIds?.includes(b.id) || false;
+                                      if (aAssigned && !bAssigned) return -1;
+                                      if (!aAssigned && bAssigned) return 1;
+                                      return (a.name || '').localeCompare(b.name || '');
+                                    })
+                                    .map((company) => {
+                                      const isAssigned = formData.companyIds?.includes(company.id) || false;
+                                      return (
+                                        <label key={company.id} className={`form-check mb-2 ${isAssigned ? 'bg-primary-lt rounded px-2 py-1' : ''}`}>
+                                          <input
+                                            type="checkbox"
+                                            className="form-check-input"
+                                            checked={isAssigned}
+                                            onChange={() => handleCompanyToggle(company.id)}
+                                            disabled={formData.allCompanies}
+                                          />
+                                          <span className="form-check-label">
+                                            {company.name} {company.referenceNo && `(${company.referenceNo})`}
+                                          </span>
+                                        </label>
+                                      );
+                                    })}
                                   {companyPagination.pages > 1 && (
                                     <div className="d-flex justify-content-between align-items-center mt-3">
                                       <button
