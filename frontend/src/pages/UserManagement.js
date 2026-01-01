@@ -1359,95 +1359,104 @@ const UserManagement = () => {
                     
                     {/* Right Column - Email Preferences & Company Assignment */}
                     <div className="col-md-6 d-flex flex-column">
-                        {/* Email Preferences (for all roles) */}
-                        <h4 className="mb-3">Email Preferences</h4>
-                        <div className="divide-y mb-4">
-                              <div>
-                                <label className="row">
-                                  <span className="col">Send Invoice Email?</span>
-                                  <span className="col-auto">
-                                    <label className="form-check form-check-single form-switch">
-                                      <input
-                                        className="form-check-input"
-                                        type="checkbox"
-                                        name="sendInvoiceEmail"
-                                        checked={formData.sendInvoiceEmail || false}
-                                        onChange={handleInputChange}
-                                      />
-                                    </label>
-                                  </span>
-                                </label>
-                              </div>
-                              <div>
-                                <label className="row">
-                                  <span className="col">With Invoice Attachment?</span>
-                                  <span className="col-auto">
-                                    <label className="form-check form-check-single form-switch">
-                                      <input
-                                        className="form-check-input"
-                                        type="checkbox"
-                                        name="sendInvoiceAttachment"
-                                        checked={formData.sendInvoiceAttachment || false}
-                                        onChange={handleInputChange}
-                                        disabled={!formData.sendInvoiceEmail}
-                                      />
-                                    </label>
-                                  </span>
-                                </label>
-                              </div>
-                              <div>
-                                <label className="row">
-                                  <span className="col">Send Statement Email?</span>
-                                  <span className="col-auto">
-                                    <label className="form-check form-check-single form-switch">
-                                      <input
-                                        className="form-check-input"
-                                        type="checkbox"
-                                        name="sendStatementEmail"
-                                        checked={formData.sendStatementEmail || false}
-                                        onChange={handleInputChange}
-                                      />
-                                    </label>
-                                  </span>
-                                </label>
-                              </div>
-                              <div>
-                                <label className="row">
-                                  <span className="col">With Statement Attachment?</span>
-                                  <span className="col-auto">
-                                    <label className="form-check form-check-single form-switch">
-                                      <input
-                                        className="form-check-input"
-                                        type="checkbox"
-                                        name="sendStatementAttachment"
-                                        checked={formData.sendStatementAttachment || false}
-                                        onChange={handleInputChange}
-                                        disabled={!formData.sendStatementEmail}
-                                      />
-                                    </label>
-                                  </span>
-                                </label>
-                              </div>
-                              <div>
-                                <label className="row">
-                                  <span className="col">Send Email as Summary?</span>
-                                  <span className="col-auto">
-                                    <label className="form-check form-check-single form-switch">
-                                      <input
-                                        className="form-check-input"
-                                        type="checkbox"
-                                        name="sendEmailAsSummary"
-                                        checked={formData.sendEmailAsSummary || false}
-                                        onChange={handleInputChange}
-                                        disabled={!formData.sendInvoiceEmail && !formData.sendStatementEmail}
-                                      />
-                                    </label>
-                                  </span>
-                                </label>
-                                <small className="text-muted d-block mt-1">
-                                  If enabled, receive one summary email per import instead of individual emails per document
-                                </small>
-                              </div>
+                        {/* Email Notifications - Compact Grid Layout */}
+                        <div className="mb-4">
+                          <label className="form-label">Email Notifications</label>
+                          <div className="row g-2">
+                            <div className="col-6">
+                              <label className="row g-0 p-2 border" style={{ cursor: 'pointer' }}>
+                                <span className="col small">Upload Email</span>
+                                <span className="col-auto">
+                                  <label className="form-check form-check-single form-switch mb-0">
+                                    <input
+                                      type="checkbox"
+                                      className="form-check-input"
+                                      name="sendInvoiceEmail"
+                                      checked={formData.sendInvoiceEmail || false}
+                                      onChange={handleInputChange}
+                                    />
+                                  </label>
+                                </span>
+                              </label>
+                            </div>
+                            <div className="col-6">
+                              <label 
+                                className="row g-0 p-2 border" 
+                                style={{ cursor: formData.sendInvoiceEmail ? 'pointer' : 'default', opacity: formData.sendInvoiceEmail ? 1 : 0.5 }}
+                              >
+                                <span className="col small">With Attachment</span>
+                                <span className="col-auto">
+                                  <label className="form-check form-check-single form-switch mb-0">
+                                    <input
+                                      type="checkbox"
+                                      className="form-check-input"
+                                      name="sendInvoiceAttachment"
+                                      checked={formData.sendInvoiceAttachment || false}
+                                      onChange={handleInputChange}
+                                      disabled={!formData.sendInvoiceEmail}
+                                    />
+                                  </label>
+                                </span>
+                              </label>
+                            </div>
+                            <div className="col-6">
+                              <label className="row g-0 p-2 border" style={{ cursor: 'pointer' }}>
+                                <span className="col small">Statement Email</span>
+                                <span className="col-auto">
+                                  <label className="form-check form-check-single form-switch mb-0">
+                                    <input
+                                      type="checkbox"
+                                      className="form-check-input"
+                                      name="sendStatementEmail"
+                                      checked={formData.sendStatementEmail || false}
+                                      onChange={handleInputChange}
+                                    />
+                                  </label>
+                                </span>
+                              </label>
+                            </div>
+                            <div className="col-6">
+                              <label 
+                                className="row g-0 p-2 border" 
+                                style={{ cursor: formData.sendStatementEmail ? 'pointer' : 'default', opacity: formData.sendStatementEmail ? 1 : 0.5 }}
+                              >
+                                <span className="col small">With Attachment</span>
+                                <span className="col-auto">
+                                  <label className="form-check form-check-single form-switch mb-0">
+                                    <input
+                                      type="checkbox"
+                                      className="form-check-input"
+                                      name="sendStatementAttachment"
+                                      checked={formData.sendStatementAttachment || false}
+                                      onChange={handleInputChange}
+                                      disabled={!formData.sendStatementEmail}
+                                    />
+                                  </label>
+                                </span>
+                              </label>
+                            </div>
+                            <div className="col-12">
+                              <label 
+                                className="row g-0 p-2 border" 
+                                style={{ cursor: (formData.sendInvoiceEmail || formData.sendStatementEmail) ? 'pointer' : 'default', opacity: (formData.sendInvoiceEmail || formData.sendStatementEmail) ? 1 : 0.5 }}
+                              >
+                                <span className="col small">Send as Summary</span>
+                                <span className="col-auto">
+                                  <label className="form-check form-check-single form-switch mb-0">
+                                    <input
+                                      type="checkbox"
+                                      className="form-check-input"
+                                      name="sendEmailAsSummary"
+                                      checked={formData.sendEmailAsSummary || false}
+                                      onChange={handleInputChange}
+                                      disabled={!formData.sendInvoiceEmail && !formData.sendStatementEmail}
+                                    />
+                                  </label>
+                                </span>
+                              </label>
+                            </div>
+                          </div>
+                          <small className="form-hint mt-1">Receive one summary email per import instead of individual emails</small>
                         </div>
                         
                         {/* Company Assignment */}
