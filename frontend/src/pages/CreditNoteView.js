@@ -9,7 +9,7 @@ import { getAvailableFields } from '../utils/fieldDiscovery';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Set worker path for PDF.js - use local worker file from public folder
-pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL || ''}/pdf.worker.min.js`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL || ''}/pdf.worker.min.mjs`;
 
 // Suppress font warnings from pdfjs (harmless but annoying)
 if (typeof window !== 'undefined') {
