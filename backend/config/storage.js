@@ -39,8 +39,9 @@ const PROCESSED_INVOICES = path.join(PROCESSED_BASE, 'invoices');
 const PROCESSED_CREDITNOTES = path.join(PROCESSED_BASE, 'creditnotes');
 const PROCESSED_STATEMENTS = path.join(PROCESSED_BASE, 'statements');
 
-// Legacy storage base (for backward compatibility with existing code)
-const STORAGE_BASE = process.env.FILE_STORAGE_PATH || path.join(__dirname, '..', 'uploads');
+// Legacy storage base (for templates, avatars, branding - stays in backend/uploads)
+// These do NOT go on the data drive - they stay local to the application
+const STORAGE_BASE = path.join(__dirname, '..', 'uploads');
 
 // ============================================
 // STORAGE PATHS OBJECT
