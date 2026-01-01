@@ -877,8 +877,10 @@ router.post('/import', importUpload.array('files', 500), async (req, res) => {
         originalName: file.originalname,
         importId: importId,
         userId: userId,
+        source: 'manual-upload', // Mark as manual upload
         documentType: 'credit_note' // Specify this is for credit notes
       }, {
+        priority: 1, // High priority - process before scheduled FTP imports
         attempts: 3, // Retry up to 3 times if job fails
         backoff: {
           type: 'exponential',

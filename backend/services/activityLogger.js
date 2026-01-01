@@ -99,7 +99,9 @@ const ActivityType = {
   LOGS_CLEARED: 'logs_cleared',
   LOG_DELETED: 'log_deleted',
   LOGS_BULK_DELETED: 'logs_bulk_deleted',
-  FILE_PURGE: 'file_purge'
+  FILE_PURGE: 'file_purge',
+  IMPORT_BATCH_COMPLETE: 'import_batch_complete',
+  IMPORT_BATCH_NOTIFICATION: 'import_batch_notification'
 };
 
 /**

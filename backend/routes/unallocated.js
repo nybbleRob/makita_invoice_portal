@@ -7,7 +7,13 @@ const { fileImportQueue } = require('../config/queue');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const fs = require('fs');
 const path = require('path');
-const { STORAGE_BASE } = require('../config/storage');
+const { 
+  STORAGE_BASE, 
+  UNPROCESSED_FAILED, 
+  PROCESSED_BASE,
+  getProcessedFilePath,
+  ensureDir 
+} = require('../config/storage');
 const router = express.Router();
 
 // Only staff, managers, admins can access
@@ -1153,15 +1159,59 @@ router.post('/:id/attempt-allocation', async (req, res) => {
       console.log(`✅ Created credit note ${creditNoteNumber} for company ${matchedCompany.name} from unallocated file ${file.id}`);
     }
 
+    // Move file from unprocessed to processed folder
+    const oldFilePath = file.filePath;
+    let newFilePath = oldFilePath;
+    
+    if (oldFilePath && fs.existsSync(oldFilePath)) {
+      try {
+        // Determine document type folder
+        const docTypeFolder = isInvoice ? 'invoices' : 'creditnotes';
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        
+        // Build new path: /mnt/data/processed/{docType}/YYYY/MM/DD/filename
+        const processedDir = path.join(PROCESSED_BASE, docTypeFolder, String(year), month, day);
+        ensureDir(processedDir);
+        
+        const fileName = path.basename(oldFilePath);
+        newFilePath = path.join(processedDir, fileName);
+        
+        // Handle filename conflicts
+        let counter = 1;
+        while (fs.existsSync(newFilePath)) {
+          const ext = path.extname(fileName);
+          const base = path.basename(fileName, ext);
+          newFilePath = path.join(processedDir, `${base}_${counter}${ext}`);
+          counter++;
+        }
+        
+        // Move the file
+        fs.renameSync(oldFilePath, newFilePath);
+        console.log(`📁 Moved file from ${oldFilePath} to ${newFilePath}`);
+        
+        // Update document's fileUrl
+        document.fileUrl = newFilePath;
+        await document.save();
+      } catch (moveError) {
+        console.error(`⚠️ Failed to move file: ${moveError.message}`);
+        // Continue with allocation even if move fails
+      }
+    }
+
     // Update file status to allocated
     file.status = 'parsed';
     file.companyId = matchedCompany.id;
+    file.filePath = newFilePath; // Update to new path
     file.failureReason = null;
     const metadata = file.metadata || {};
     metadata.allocatedAt = new Date().toISOString();
     metadata.allocatedBy = req.user.email;
     metadata.allocatedDocumentId = document.id;
     metadata.allocatedDocumentType = isInvoice ? 'invoice' : 'credit_note';
+    metadata.previousFilePath = oldFilePath; // Keep track of old path
     file.metadata = metadata;
     await file.save();
 

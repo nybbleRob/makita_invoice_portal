@@ -647,6 +647,18 @@ router.post('/import', importUpload.array('files', 500), async (req, res) => {
     const importId = uuidv4();
     const userId = req.user.userId;
     
+    // Register batch for notification tracking
+    try {
+      const { registerBatch } = require('../services/batchNotificationService');
+      registerBatch(importId, req.files.length, {
+        userId: userId,
+        userEmail: req.user.email,
+        source: 'manual-upload'
+      });
+    } catch (batchError) {
+      console.warn('Failed to register batch:', batchError.message);
+    }
+    
     // Log file upload
     await logActivity({
       type: ActivityType.FILE_UPLOAD,
@@ -769,11 +781,13 @@ router.post('/import', importUpload.array('files', 500), async (req, res) => {
         originalName: fileInfo.originalName,
         importId: importId,
         userId: userId,
+        source: 'manual-upload', // Mark as manual upload
         // Pre-calculated duplicate info to avoid re-checking in job
         fileHash: fileInfo.hash,
         isDuplicate: isDuplicate,
         duplicateFileId: duplicateFileId
       }, {
+        priority: 1, // High priority - process before scheduled FTP imports
         attempts: 3, // Retry up to 3 times if job fails
         backoff: {
           type: 'exponential',

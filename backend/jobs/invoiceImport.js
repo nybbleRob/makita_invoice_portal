@@ -10,7 +10,16 @@ const crypto = require('crypto');
 const { File, Template, Company, Invoice, CreditNote, User, Sequelize, Settings } = require('../models');
 const { Op } = Sequelize;
 const { extractTextFromPDF } = require('../utils/pdfExtractor');
-const { ensureStorageDirs, getStorageDir, getFilePath } = require('../config/storage');
+const { 
+  ensureStorageDirs, 
+  getStorageDir, 
+  getFilePath,
+  getProcessedFilePath,
+  getUnprocessedFilePath,
+  PROCESSED_BASE,
+  UNPROCESSED_FAILED,
+  ensureDir
+} = require('../config/storage');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const { calculateDocumentRetentionDates } = require('../utils/documentRetention');
 
@@ -494,11 +503,10 @@ async function processInvoiceImport(job) {
     
     await job.updateProgress(60);
     
-    // Determine file storage structure based on document type and status
-    // Structure: documents/{documentType}/{status}/{year}/{month}/{uniqueFileName}
-    // Example: documents/invoices/allocated/2025/01/1765489168262-843833206.pdf
-    //          documents/invoices/unallocated/2025/01/1765489168262-843833206.pdf
-    //          documents/credit_notes/allocated/2025/01/1765489168262-843833206.pdf
+    // Determine file storage structure based on document type
+    // NEW STRUCTURE:
+    // - Processed (allocated): /mnt/data/processed/{invoices|creditnotes|statements}/YYYY/MM/DD/
+    // - Unprocessed (failed): /mnt/data/unprocessed/failed/YYYY-MM-DD/
     
     // Helper to get parsed values by standard field name
     const { getParsedValue } = require('../utils/parsedDataHelper');
@@ -507,33 +515,18 @@ async function processInvoiceImport(job) {
     const detectedDocType = (getParsedValue(parsedData, 'documentType') || parsedData.documentType)?.toLowerCase() || 'invoice';
     let docTypeFolder = 'invoices'; // Default folder
     if (detectedDocType.includes('credit') || detectedDocType === 'credit_note') {
-      docTypeFolder = 'credit_notes';
+      docTypeFolder = 'creditnotes';
     } else if (detectedDocType.includes('statement')) {
       docTypeFolder = 'statements';
     } else {
       docTypeFolder = 'invoices';
     }
     
-    // Determine status folder - SIMPLIFIED: Only 'allocated' or 'unallocated'
+    // Date components for folder structure
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
-    
-    // Simple logic: If company matched and parsing successful → 'allocated', otherwise → 'unallocated'
-    // We'll determine this after matching, but set initial folder structure
-    // Use STORAGE_BASE directly to get to documents folder
-    const { STORAGE_BASE } = require('../config/storage');
-    const documentsBaseDir = path.join(STORAGE_BASE, 'documents');
-    const docTypeDir = path.join(documentsBaseDir, docTypeFolder);
-    const yearDir = path.join(docTypeDir, String(year));
-    const monthDir = path.join(yearDir, month);
-    
-    // Ensure base directories exist (we'll create allocated/unallocated subdirs later)
-    [documentsBaseDir, docTypeDir, yearDir, monthDir].forEach(dir => {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-    });
+    const day = String(now.getDate()).padStart(2, '0');
     
     // IMPORTANT: Preserve original filename from FTP/SFTP
     // The temp file has a unique name (sftp-{timestamp}-{random}-{index}.pdf) to avoid collisions,
@@ -551,24 +544,19 @@ async function processInvoiceImport(job) {
     let uniqueFileName = sanitizedFileName;
     let counter = 1;
     
-    // Check for conflicts in both allocated and unallocated folders
-    // We'll determine which folder to use after matching, but check both for conflicts
-    const allocatedCheckDir = path.join(docTypeDir, 'allocated', String(year), month);
-    const unallocatedCheckDir = path.join(docTypeDir, 'unallocated', String(year), month);
+    // Build paths for both processed and unprocessed locations
+    // Processed: /mnt/data/processed/{docType}/YYYY/MM/DD/
+    // Unprocessed: /mnt/data/unprocessed/failed/YYYY-MM-DD/
+    const processedCheckDir = path.join(PROCESSED_BASE, docTypeFolder, String(year), month, day);
+    const unprocessedCheckDir = path.join(UNPROCESSED_FAILED, `${year}-${month}-${day}`);
     
-    // Check if file exists in either location
-    let checkPath = path.join(allocatedCheckDir, uniqueFileName);
-    if (!fs.existsSync(checkPath)) {
-      checkPath = path.join(unallocatedCheckDir, uniqueFileName);
-    }
+    // Check for conflicts in processed folder
+    let checkPath = path.join(processedCheckDir, uniqueFileName);
     
     while (fs.existsSync(checkPath)) {
       const nameWithoutExt = path.basename(sanitizedFileName, fileExt);
       uniqueFileName = `${nameWithoutExt}_${counter}${fileExt}`;
-      checkPath = path.join(allocatedCheckDir, uniqueFileName);
-      if (!fs.existsSync(checkPath)) {
-        checkPath = path.join(unallocatedCheckDir, uniqueFileName);
-      }
+      checkPath = path.join(processedCheckDir, uniqueFileName);
       counter++;
     }
     
@@ -891,28 +879,29 @@ async function processInvoiceImport(job) {
       fileStatus = 'parsed'; // Still parsed, but needs review
     }
     
-    // SIMPLIFIED: Determine final file path - allocated or unallocated
-    // Success = company matched → 'allocated'
-    // Failure = no company match → 'unallocated'
-    // Duplicates also go to 'unallocated' for staff review
-    const finalStatusFolder = (matchedCompanyId && !isDuplicate) ? 'allocated' : 'unallocated';
+    // SIMPLIFIED: Determine final file path
+    // Success (company matched) → /mnt/data/processed/{docType}/YYYY/MM/DD/
+    // Failure (no match or duplicate) → /mnt/data/unprocessed/failed/YYYY-MM-DD/
+    const isAllocated = matchedCompanyId && !isDuplicate;
     
-    // Create the final directory structure
-    const statusDir = path.join(docTypeDir, finalStatusFolder);
-    const statusYearDir = path.join(statusDir, String(year));
-    const statusMonthDir = path.join(statusYearDir, month);
+    let actualFilePath;
+    let finalStatusFolder;
     
-    // Ensure directories exist
-    [statusDir, statusYearDir, statusMonthDir].forEach(dir => {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-    });
-    
-    // Final file path
-    const actualFilePath = path.join(statusMonthDir, uniqueFileName);
-    
-    console.log(`📁 [Import ${importId}] File will be stored in: ${finalStatusFolder} folder`);
+    if (isAllocated) {
+      // Processed: /mnt/data/processed/{invoices|creditnotes|statements}/YYYY/MM/DD/filename
+      finalStatusFolder = 'processed';
+      const processedDir = path.join(PROCESSED_BASE, docTypeFolder, String(year), month, day);
+      ensureDir(processedDir);
+      actualFilePath = path.join(processedDir, uniqueFileName);
+      console.log(`📁 [Import ${importId}] File will be stored in: ${PROCESSED_BASE}/${docTypeFolder}/${year}/${month}/${day}/`);
+    } else {
+      // Unprocessed: /mnt/data/unprocessed/failed/YYYY-MM-DD/filename
+      finalStatusFolder = 'unprocessed';
+      const unprocessedDir = path.join(UNPROCESSED_FAILED, `${year}-${month}-${day}`);
+      ensureDir(unprocessedDir);
+      actualFilePath = path.join(unprocessedDir, uniqueFileName);
+      console.log(`📁 [Import ${importId}] File will be stored in: ${UNPROCESSED_FAILED}/${year}-${month}-${day}/`);
+    }
     
     await job.updateProgress(90);
     
@@ -1557,6 +1546,14 @@ async function processInvoiceImport(job) {
     
     importStore.addResult(importId, result);
     
+    // Record job completion for batch notification tracking
+    try {
+      const { recordJobCompletion } = require('../services/batchNotificationService');
+      await recordJobCompletion(importId, result);
+    } catch (batchError) {
+      console.warn(`⚠️  [Import ${importId}] Failed to record batch completion:`, batchError.message);
+    }
+    
     // Log file import activity (success or failure)
     try {
       let user = null;
@@ -1637,6 +1634,14 @@ async function processInvoiceImport(job) {
     };
     
     importStore.addResult(importId, errorResult);
+    
+    // Record job failure for batch notification tracking
+    try {
+      const { recordJobCompletion } = require('../services/batchNotificationService');
+      await recordJobCompletion(importId, errorResult);
+    } catch (batchError) {
+      console.warn(`⚠️  [Import ${importId}] Failed to record batch failure:`, batchError.message);
+    }
     
     // Log file import failure
     try {

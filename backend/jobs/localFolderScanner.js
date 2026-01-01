@@ -1,12 +1,14 @@
 /**
  * Local Folder Scanner Job
- * Scans the local FTP inbound folder for new PDF files and queues them for import.
- * This is used for files uploaded via vsftpd to the server's local filesystem.
+ * Scans the FTP upload folder for new PDF files and queues them for import.
  * 
- * Environment variables:
- * - FTP_INBOUND_PATH: Path to scan for new files (default: /mnt/data/ftp-inbound)
- * - FTP_PROCESSED_PATH: Path to move successfully processed files (default: /mnt/data/ftp-processed)
- * - FTP_FAILED_PATH: Path to move failed files (default: /mnt/data/ftp-failed)
+ * Processing Flow:
+ * 1. Scan FTP_UPLOAD_PATH for new files
+ * 2. Calculate hash for each file
+ * 3. Check if hash exists in database (duplicate detection)
+ * 4. If duplicate: move to unprocessed/duplicates/
+ * 5. If new: queue for processing, file stays in upload folder until processed
+ * 6. Invoice import job moves file to processed/ or unprocessed/failed/ after processing
  */
 
 const fs = require('fs');
@@ -17,16 +19,22 @@ const { Op } = require('sequelize');
 const crypto = require('crypto');
 const importLogger = require('../services/importLogger');
 
-// Default paths (can be overridden by environment variables)
-const INBOUND_PATH = process.env.FTP_INBOUND_PATH || '/mnt/data/ftp-inbound';
-const PROCESSED_PATH = process.env.FTP_PROCESSED_PATH || '/mnt/data/ftp-processed';
-const FAILED_PATH = process.env.FTP_FAILED_PATH || '/mnt/data/ftp-failed';
+// Import storage configuration
+const {
+  FTP_UPLOAD_PATH,
+  UNPROCESSED_DUPLICATES,
+  UNPROCESSED_FAILED,
+  ensureDir,
+  getUnprocessedFilePath
+} = require('../config/storage');
 
 // Supported file extensions
 const SUPPORTED_EXTENSIONS = ['.pdf', '.xlsx', '.xls'];
 
 /**
- * Calculate file hash for duplicate detection
+ * Calculate file hash (SHA-256) for duplicate detection
+ * @param {string} filePath - Path to the file
+ * @returns {Promise<string>} SHA-256 hash of the file
  */
 function calculateFileHash(filePath) {
   return new Promise((resolve, reject) => {
@@ -40,57 +48,45 @@ function calculateFileHash(filePath) {
 }
 
 /**
- * Ensure directory exists
+ * Move file to duplicates folder
+ * @param {string} filePath - Current file path
+ * @param {string} fileName - File name
+ * @returns {string} New file path
  */
-function ensureDir(dirPath) {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-}
-
-/**
- * Get dated subfolder path (e.g., /mnt/data/ftp-processed/2026-01-01)
- */
-function getDatedFolder(basePath) {
-  const dateStr = new Date().toISOString().split('T')[0];
-  const datedPath = path.join(basePath, dateStr);
-  ensureDir(datedPath);
-  return datedPath;
-}
-
-/**
- * Move file to processed folder
- */
-function moveToProcessed(filePath, fileName) {
-  const destFolder = getDatedFolder(PROCESSED_PATH);
-  const destPath = path.join(destFolder, fileName);
+function moveToDuplicates(filePath, fileName) {
+  const destPath = getUnprocessedFilePath('duplicate', fileName);
   
   // Handle duplicate filenames by adding timestamp
   let finalPath = destPath;
   if (fs.existsSync(destPath)) {
     const ext = path.extname(fileName);
     const base = path.basename(fileName, ext);
-    finalPath = path.join(destFolder, `${base}-${Date.now()}${ext}`);
+    const dir = path.dirname(destPath);
+    finalPath = path.join(dir, `${base}-${Date.now()}${ext}`);
   }
   
   fs.renameSync(filePath, finalPath);
-  console.log(`✅ Moved to processed: ${finalPath}`);
+  console.log(`📋 Moved duplicate to: ${finalPath}`);
   return finalPath;
 }
 
 /**
- * Move file to failed folder
+ * Move file to failed folder with error log
+ * @param {string} filePath - Current file path
+ * @param {string} fileName - File name
+ * @param {string} error - Error message
+ * @returns {string} New file path
  */
 function moveToFailed(filePath, fileName, error) {
-  const destFolder = getDatedFolder(FAILED_PATH);
-  const destPath = path.join(destFolder, fileName);
+  const destPath = getUnprocessedFilePath('failed', fileName);
   
   // Handle duplicate filenames
   let finalPath = destPath;
   if (fs.existsSync(destPath)) {
     const ext = path.extname(fileName);
     const base = path.basename(fileName, ext);
-    finalPath = path.join(destFolder, `${base}-${Date.now()}${ext}`);
+    const dir = path.dirname(destPath);
+    finalPath = path.join(dir, `${base}-${Date.now()}${ext}`);
   }
   
   fs.renameSync(filePath, finalPath);
@@ -104,7 +100,22 @@ function moveToFailed(filePath, fileName, error) {
 }
 
 /**
- * Scan the local inbound folder and queue files for import
+ * Check if file hash exists in database (duplicate detection)
+ * @param {string} fileHash - SHA-256 hash of the file
+ * @returns {Promise<boolean>} True if duplicate exists
+ */
+async function isDuplicateHash(fileHash) {
+  const existingFile = await File.findOne({
+    where: {
+      fileHash,
+      deletedAt: null
+    }
+  });
+  return !!existingFile;
+}
+
+/**
+ * Scan the FTP upload folder and queue files for import
  * @returns {Promise<Object>} Scan results
  */
 async function scanLocalFolder() {
@@ -121,22 +132,23 @@ async function scanLocalFolder() {
   const runContext = await importLogger.startRun();
   
   try {
-    await importLogger.log.info(`Scanning inbound folder: ${INBOUND_PATH}`);
+    await importLogger.log.info(`Scanning FTP upload folder: ${FTP_UPLOAD_PATH}`);
     
-    // Check if inbound directory exists
-    if (!fs.existsSync(INBOUND_PATH)) {
-      console.log(`⚠️  Inbound folder does not exist: ${INBOUND_PATH}`);
+    // Check if upload directory exists
+    if (!fs.existsSync(FTP_UPLOAD_PATH)) {
+      console.log(`⚠️  FTP upload folder does not exist: ${FTP_UPLOAD_PATH}`);
       console.log('   Creating folder...');
-      ensureDir(INBOUND_PATH);
+      ensureDir(FTP_UPLOAD_PATH);
+      await importLogger.log.warn(`Created missing FTP upload folder: ${FTP_UPLOAD_PATH}`);
       return results;
     }
     
-    // Ensure processed and failed directories exist
-    ensureDir(PROCESSED_PATH);
-    ensureDir(FAILED_PATH);
+    // Ensure unprocessed directories exist
+    ensureDir(UNPROCESSED_DUPLICATES);
+    ensureDir(UNPROCESSED_FAILED);
     
-    // Read files from inbound directory
-    const files = fs.readdirSync(INBOUND_PATH);
+    // Read files from upload directory
+    const files = fs.readdirSync(FTP_UPLOAD_PATH);
     
     // Filter for supported file types
     const supportedFiles = files.filter(file => {
@@ -144,11 +156,13 @@ async function scanLocalFolder() {
       return SUPPORTED_EXTENSIONS.includes(ext);
     });
     
-    console.log(`📁 Found ${supportedFiles.length} supported file(s) in inbound folder`);
+    console.log(`📁 Found ${supportedFiles.length} supported file(s) in FTP upload folder`);
     results.scanned = supportedFiles.length;
     
     if (supportedFiles.length === 0) {
       console.log('ℹ️  No files to process');
+      await importLogger.log.info('No files to process');
+      await importLogger.endRun(runContext, results);
       return results;
     }
     
@@ -158,13 +172,17 @@ async function scanLocalFolder() {
       order: [['createdAt', 'ASC']]
     });
     
-    // Get existing queued jobs to check for duplicates
+    // Generate batch import ID for all files in this scan
+    const batchImportId = `ftp-batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Get existing queued jobs to check for already-queued files
     const existingJobs = await invoiceImportQueue.getJobs(['waiting', 'wait', 'active', 'delayed']);
     const queuedFileNames = new Set(existingJobs.map(job => job.data?.fileName).filter(Boolean));
+    const queuedHashes = new Set(existingJobs.map(job => job.data?.fileHash).filter(Boolean));
     
     // Process each file
     for (const fileName of supportedFiles) {
-      const filePath = path.join(INBOUND_PATH, fileName);
+      const filePath = path.join(FTP_UPLOAD_PATH, fileName);
       
       try {
         const stats = fs.statSync(filePath);
@@ -177,9 +195,9 @@ async function scanLocalFolder() {
           continue;
         }
         
-        // Skip if already in queue
+        // Skip if already in queue by filename
         if (queuedFileNames.has(fileName)) {
-          console.log(`⏭️  File already queued: ${fileName}`);
+          console.log(`⏭️  File already queued (by name): ${fileName}`);
           results.skipped++;
           continue;
         }
@@ -187,31 +205,28 @@ async function scanLocalFolder() {
         // Calculate hash for duplicate detection
         const fileHash = await calculateFileHash(filePath);
         
-        // Check for duplicate in database (excluding deleted files)
-        const existingFile = await File.findOne({
-          where: {
-            fileHash,
-            deletedAt: null
-          }
-        });
+        // Skip if hash already in queue
+        if (queuedHashes.has(fileHash)) {
+          console.log(`⏭️  File already queued (by hash): ${fileName}`);
+          results.skipped++;
+          continue;
+        }
         
-        if (existingFile) {
-          console.log(`⏭️  Duplicate file (hash match): ${fileName}`);
+        // Check for duplicate in database (hash-based)
+        const isDuplicate = await isDuplicateHash(fileHash);
+        
+        if (isDuplicate) {
+          console.log(`📋 Duplicate detected (hash match): ${fileName}`);
+          await importLogger.log.info(`Duplicate file detected: ${fileName}`);
           
-          // Move to processed/duplicates folder
-          const duplicatesFolder = path.join(PROCESSED_PATH, 'duplicates');
-          ensureDir(duplicatesFolder);
-          const datedDuplicatesFolder = path.join(duplicatesFolder, new Date().toISOString().split('T')[0]);
-          ensureDir(datedDuplicatesFolder);
-          
-          const destPath = path.join(datedDuplicatesFolder, fileName);
-          fs.renameSync(filePath, destPath);
+          // Move to duplicates folder immediately
+          moveToDuplicates(filePath, fileName);
           
           results.duplicates++;
           continue;
         }
         
-        // Check for recently processed (within last hour)
+        // Check for recently processed file with same name (within last hour)
         const recentFile = await File.findOne({
           where: {
             fileName,
@@ -227,21 +242,21 @@ async function scanLocalFolder() {
           continue;
         }
         
-        // Generate unique import ID
-        const importId = `local-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        
-        // Queue file for import
+        // Queue file for import using batch import ID
+        // The invoice import job will move the file to processed/ or unprocessed/failed/
         await invoiceImportQueue.add('invoice-import', {
           filePath: filePath,
           fileName: fileName,
           originalName: fileName,
-          importId: importId,
+          importId: batchImportId, // Use batch ID for notification tracking
           userId: systemUser?.id || null,
-          source: 'local-ftp',
+          source: 'ftp-upload',
           fileHash: fileHash,
-          documentType: 'auto' // Auto-detect from template matching
+          documentType: 'auto', // Auto-detect from template matching
+          priority: 0 // Normal priority (manual uploads get priority 1)
         }, {
-          jobId: `local-import-${Date.now()}-${fileName}`,
+          jobId: `ftp-import-${Date.now()}-${fileHash.substring(0, 8)}`,
+          priority: 0, // Normal priority
           attempts: 3,
           backoff: {
             type: 'exponential',
@@ -251,22 +266,27 @@ async function scanLocalFolder() {
           removeOnFail: false
         });
         
-        console.log(`✅ Queued file: ${fileName} (import: ${importId})`);
+        console.log(`✅ Queued file: ${fileName} (batch: ${batchImportId})`);
+        await importLogger.log.info(`Queued: ${fileName}`);
+        
         results.queued++;
         results.files.push({
           fileName,
           fileSize: stats.size,
+          fileHash,
           importId
         });
         
       } catch (fileError) {
         console.error(`❌ Error processing file ${fileName}:`, fileError.message);
+        await importLogger.log.error(`Error: ${fileName} - ${fileError.message}`);
+        
         results.errors.push({
           fileName,
           error: fileError.message
         });
         
-        // Move failed file
+        // Move failed file to unprocessed/failed
         try {
           moveToFailed(filePath, fileName, fileError.message);
         } catch (moveError) {
@@ -275,7 +295,23 @@ async function scanLocalFolder() {
       }
     }
     
-    // Log completion using importLogger
+    // Register batch for notification tracking (after we know final count)
+    if (results.queued > 0) {
+      try {
+        const { registerBatch } = require('../services/batchNotificationService');
+        registerBatch(batchImportId, results.queued, {
+          userId: systemUser?.id || null,
+          userEmail: systemUser?.email || 'system',
+          source: 'ftp-scan'
+        });
+        console.log(`📋 Registered batch ${batchImportId} with ${results.queued} jobs for notification tracking`);
+      } catch (batchError) {
+        console.warn('Failed to register batch:', batchError.message);
+      }
+    }
+    
+    // Log completion
+    await importLogger.log.info(`Scan complete: ${results.scanned} scanned, ${results.queued} queued, ${results.duplicates} duplicates, ${results.errors.length} errors`);
     await importLogger.endRun(runContext, results);
     
     // Update settings with last run info
@@ -289,9 +325,9 @@ async function scanLocalFolder() {
         lastRunStats: {
           scanned: results.scanned,
           queued: results.queued,
-          processed: results.queued, // Will be updated by invoice import job
-          failed: results.errors.length,
-          duplicates: results.duplicates
+          duplicates: results.duplicates,
+          skipped: results.skipped,
+          errors: results.errors.length
         }
       };
       await settings.save();
@@ -303,7 +339,7 @@ async function scanLocalFolder() {
     return results;
     
   } catch (error) {
-    await importLogger.log.error(`Local folder scan failed: ${error.message}`);
+    await importLogger.log.error(`Folder scan failed: ${error.message}`);
     results.errors.push({
       fileName: null,
       error: error.message
@@ -320,7 +356,7 @@ async function scanLocalFolder() {
  * @param {Object} job - BullMQ job object
  */
 async function processLocalFolderScan(job) {
-  console.log(`📋 Processing local folder scan job: ${job.id}`);
+  console.log(`📋 Processing FTP folder scan job: ${job.id}`);
   
   const results = await scanLocalFolder();
   
@@ -342,6 +378,12 @@ async function processLocalFolderScan(job) {
 async function sendScanSummaryEmail(results) {
   const { Settings, User } = require('../models');
   const settings = await Settings.getSettings();
+  
+  // Check if email is enabled
+  if (!settings?.emailProvider?.enabled) {
+    console.log('ℹ️  Email not enabled, skipping scan summary email');
+    return;
+  }
   
   // Get global admin emails
   const admins = await User.findAll({
@@ -380,12 +422,12 @@ async function sendScanSummaryEmail(results) {
           <td style="padding: 10px; border: 1px solid #dee2e6; color: #198754;">${results.queued}</td>
         </tr>
         <tr style="background: #f8f9fa;">
-          <td style="padding: 10px; border: 1px solid #dee2e6;"><strong>Skipped</strong></td>
-          <td style="padding: 10px; border: 1px solid #dee2e6;">${results.skipped}</td>
+          <td style="padding: 10px; border: 1px solid #dee2e6;"><strong>Duplicates (Moved)</strong></td>
+          <td style="padding: 10px; border: 1px solid #dee2e6;">${results.duplicates}</td>
         </tr>
         <tr>
-          <td style="padding: 10px; border: 1px solid #dee2e6;"><strong>Duplicates</strong></td>
-          <td style="padding: 10px; border: 1px solid #dee2e6;">${results.duplicates}</td>
+          <td style="padding: 10px; border: 1px solid #dee2e6;"><strong>Skipped</strong></td>
+          <td style="padding: 10px; border: 1px solid #dee2e6;">${results.skipped}</td>
         </tr>
         <tr style="background: #f8f9fa;">
           <td style="padding: 10px; border: 1px solid #dee2e6;"><strong>Errors</strong></td>
@@ -394,12 +436,14 @@ async function sendScanSummaryEmail(results) {
       </table>
   `;
   
-  // Add queued files list
+  // Add queued files list (limit to first 20)
   if (results.files.length > 0) {
+    const displayFiles = results.files.slice(0, 20);
     html += `
       <h3>Files Queued for Import:</h3>
       <ul style="padding-left: 20px;">
-        ${results.files.map(f => `<li>${f.fileName} (${(f.fileSize / 1024).toFixed(1)} KB)</li>`).join('')}
+        ${displayFiles.map(f => `<li>${f.fileName} (${(f.fileSize / 1024).toFixed(1)} KB)</li>`).join('')}
+        ${results.files.length > 20 ? `<li><em>...and ${results.files.length - 20} more</em></li>` : ''}
       </ul>
     `;
   }
@@ -429,7 +473,7 @@ async function sendScanSummaryEmail(results) {
       to: admin.email,
       subject,
       html,
-      text: `FTP Import Scan Results\n\nScanned: ${results.scanned}\nQueued: ${results.queued}\nSkipped: ${results.skipped}\nDuplicates: ${results.duplicates}\nErrors: ${results.errors.length}`,
+      text: `FTP Import Scan Results\n\nScanned: ${results.scanned}\nQueued: ${results.queued}\nDuplicates: ${results.duplicates}\nSkipped: ${results.skipped}\nErrors: ${results.errors.length}`,
       metadata: {
         type: 'ftp-scan-summary',
         userId: null,
@@ -441,14 +485,16 @@ async function sendScanSummaryEmail(results) {
   }
 }
 
-// Export configuration paths for use in other modules
+// Export functions and paths
 module.exports = {
   scanLocalFolder,
   processLocalFolderScan,
-  moveToProcessed,
+  moveToDuplicates,
   moveToFailed,
-  INBOUND_PATH,
-  PROCESSED_PATH,
-  FAILED_PATH
+  calculateFileHash,
+  isDuplicateHash,
+  // Re-export paths for convenience
+  FTP_UPLOAD_PATH,
+  UNPROCESSED_DUPLICATES,
+  UNPROCESSED_FAILED
 };
-
