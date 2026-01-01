@@ -65,6 +65,7 @@ const UserManagement = () => {
   const [companyPagination, setCompanyPagination] = useState({ page: 1, limit: 30, total: 0, pages: 0 });
   const [loadingCompanies, setLoadingCompanies] = useState(false);
   const debouncedCompanySearch = useDebounce(companySearchQuery, 300);
+  const [userAssignedCompanyObjects, setUserAssignedCompanyObjects] = useState([]); // Full company objects for currently edited user
   
   // Assigned Companies Modal state
   const [showAssignedCompaniesModal, setShowAssignedCompaniesModal] = useState(false);
@@ -463,6 +464,7 @@ const UserManagement = () => {
     });
     setCompanySearchQuery('');
     setCompanySearchResults([]);
+    setUserAssignedCompanyObjects([]);
   };
 
   const handleUpdateUser = async (e) => {
@@ -497,6 +499,7 @@ const UserManagement = () => {
     setShowModal(false);
     setShowPasswordModal(false);
     setSelectedUser(null);
+    setUserAssignedCompanyObjects([]);
     resetForm();
   };
 
@@ -630,15 +633,19 @@ const UserManagement = () => {
     // Fetch user's assigned companies (for ALL roles)
     try {
       const response = await api.get(`/api/users/${user.id}/companies`);
+      const assignedCompanyList = response.data.companies || [];
       setFormData(prev => ({
         ...prev,
         allCompanies: response.data.allCompanies || false,
-        companyIds: response.data.companies.map(c => c.id) || []
+        companyIds: assignedCompanyList.map(c => c.id)
       }));
+      // Store full company objects so they appear first in the list
+      setUserAssignedCompanyObjects(assignedCompanyList);
       // Load companies for assignment UI
       fetchCompaniesForAssignment(1, '');
     } catch (error) {
       console.error('Error fetching user companies:', error);
+      setUserAssignedCompanyObjects([]);
     }
     
     setShowModal(true);
@@ -1516,20 +1523,28 @@ const UserManagement = () => {
                             <div className="flex-grow-1" style={{ minHeight: '250px', maxHeight: '300px', overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: '4px', padding: '10px' }}>
                               {loadingCompanies ? (
                                 <div className="text-center py-3 text-muted">Loading companies...</div>
-                              ) : companySearchResults.length === 0 ? (
+                              ) : companySearchResults.length === 0 && userAssignedCompanyObjects.length === 0 ? (
                                 <div className="text-center py-3 text-muted">No companies found</div>
                               ) : (
                                 <>
-                                  {/* Sort: assigned companies first, then alphabetically */}
-                                  {[...companySearchResults]
-                                    .sort((a, b) => {
+                                  {/* Merge assigned companies with search results, assigned first */}
+                                  {(() => {
+                                    // Get IDs of companies already in search results
+                                    const searchResultIds = new Set(companySearchResults.map(c => c.id));
+                                    // Filter assigned companies not already in search results
+                                    const assignedNotInSearch = userAssignedCompanyObjects.filter(c => !searchResultIds.has(c.id));
+                                    // Combine: assigned first (sorted), then search results (sorted)
+                                    const assignedSorted = [...assignedNotInSearch].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                                    const searchSorted = [...companySearchResults].sort((a, b) => {
                                       const aAssigned = formData.companyIds?.includes(a.id) || false;
                                       const bAssigned = formData.companyIds?.includes(b.id) || false;
                                       if (aAssigned && !bAssigned) return -1;
                                       if (!aAssigned && bAssigned) return 1;
                                       return (a.name || '').localeCompare(b.name || '');
-                                    })
-                                    .map((company) => {
+                                    });
+                                    const allCompanies = [...assignedSorted, ...searchSorted];
+                                    
+                                    return allCompanies.map((company) => {
                                       const isAssigned = formData.companyIds?.includes(company.id) || false;
                                       return (
                                         <label key={company.id} className={`form-check mb-2 ${isAssigned ? 'bg-primary-lt rounded px-2 py-1' : ''}`}>
@@ -1545,7 +1560,8 @@ const UserManagement = () => {
                                           </span>
                                         </label>
                                       );
-                                    })}
+                                    });
+                                  })()}
                                   {companyPagination.pages > 1 && (
                                     <div className="d-flex justify-content-between align-items-center mt-3">
                                       <button

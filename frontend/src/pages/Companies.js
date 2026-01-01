@@ -947,9 +947,35 @@ const Companies = () => {
                   <div className="card">
                     <div className="card-header">
                       <ul className="nav nav-tabs card-header-tabs" data-bs-toggle="tabs">
+                        <li className="nav-item">
+                          <a
+                            href="#basic-info"
+                            className={`nav-link ${activeTab === 'basic' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setActiveTab('basic');
+                            }}
+                          >
+                            Basic Info
+                          </a>
+                        </li>
+                        <li className="nav-item">
+                          <a
+                            href="#address"
+                            className={`nav-link ${activeTab === 'address' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setActiveTab('address');
+                            }}
+                          >
+                            Address
+                          </a>
+                        </li>
                       </ul>
                     </div>
                     <div className="card-body">
+                      <div className="tab-content">
+                        <div className={`tab-pane ${activeTab === 'basic' ? 'active show' : ''}`} id="basic-info">
                           <div className="row">
                             {/* Left Column - Company Details */}
                             <div className="col-md-6">
@@ -1008,8 +1034,10 @@ const Companies = () => {
                                   <small className="form-hint">Toggle to activate or deactivate this company</small>
                                 </div>
                               )}
-                              
-                              {/* Parent Company Selection - for Branches/Subsidiaries */}
+                            </div>
+                            
+                            {/* Right Column - Parent Company (for Branch/Subsidiary) */}
+                            <div className="col-md-6">
                               {needsParent && (
                                 <div className="mb-3">
                                   <label className={`form-label ${!isEditing ? 'required' : ''}`}>Parent Company</label>
@@ -1025,7 +1053,7 @@ const Companies = () => {
                                       onChange={(e) => setParentSearchQuery(e.target.value)}
                                     />
                                   </div>
-                                  <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #e0e0e0' }}>
+                                  <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid #e0e0e0' }}>
                                     {loadingParents ? (
                                       <div className="text-center p-2">
                                         <div className="spinner-border spinner-border-sm" role="status"></div>
@@ -1068,82 +1096,82 @@ const Companies = () => {
                                 </div>
                               )}
                             </div>
-                            
-                            {/* Right Column - Address */}
-                            <div className="col-md-6">
-                              <div className="mb-3">
-                                <label className="form-label">Address Line 1</label>
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  value={formData.address.line1}
-                                  onChange={(e) => setFormData(prev => ({
-                                    ...prev,
-                                    address: { ...prev.address, line1: e.target.value }
-                                  }))}
-                                  placeholder="Street address"
-                                />
-                              </div>
-                              <div className="mb-3">
-                                <label className="form-label">Address Line 2</label>
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  value={formData.address.line2}
-                                  onChange={(e) => setFormData(prev => ({
-                                    ...prev,
-                                    address: { ...prev.address, line2: e.target.value }
-                                  }))}
-                                  placeholder="Apartment, suite, etc."
-                                />
-                              </div>
-                              <div className="row">
-                                <div className="col-6 mb-3">
-                                  <label className="form-label">City</label>
-                                  <input
-                                    type="text"
-                                    className="form-control"
-                                    value={formData.address.city}
-                                    onChange={(e) => setFormData(prev => ({
-                                      ...prev,
-                                      address: { ...prev.address, city: e.target.value }
-                                    }))}
-                                    placeholder="City"
-                                  />
-                                </div>
-                                <div className="col-6 mb-3">
-                                  <label className="form-label">Postcode</label>
-                                  <input
-                                    type="text"
-                                    className="form-control"
-                                    value={formData.address.zip}
-                                    onChange={(e) => setFormData(prev => ({
-                                      ...prev,
-                                      address: { ...prev.address, zip: e.target.value }
-                                    }))}
-                                    placeholder="Postcode"
-                                  />
-                                </div>
-                              </div>
-                              <div className="mb-3">
-                                <label className="form-label">Country</label>
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  value={formData.address.country}
-                                  onChange={(e) => setFormData(prev => ({
-                                    ...prev,
-                                    address: { ...prev.address, country: e.target.value }
-                                  }))}
-                                  placeholder="Country"
-                                />
-                              </div>
+                          </div>
+                        </div>
+                        <div className={`tab-pane ${activeTab === 'address' ? 'active show' : ''}`} id="address">
+                          <div className="row">
+                            <div className="col-md-6 mb-3">
+                              <label className="form-label">Address Line 1</label>
+                              <input
+                                type="text"
+                                className="form-control"
+                                value={formData.address.line1}
+                                onChange={(e) => setFormData(prev => ({
+                                  ...prev,
+                                  address: { ...prev.address, line1: e.target.value }
+                                }))}
+                                placeholder="Street address"
+                              />
+                            </div>
+                            <div className="col-md-6 mb-3">
+                              <label className="form-label">Address Line 2</label>
+                              <input
+                                type="text"
+                                className="form-control"
+                                value={formData.address.line2}
+                                onChange={(e) => setFormData(prev => ({
+                                  ...prev,
+                                  address: { ...prev.address, line2: e.target.value }
+                                }))}
+                                placeholder="Apartment, suite, etc."
+                              />
+                            </div>
+                            <div className="col-md-4 mb-3">
+                              <label className="form-label">City</label>
+                              <input
+                                type="text"
+                                className="form-control"
+                                value={formData.address.city}
+                                onChange={(e) => setFormData(prev => ({
+                                  ...prev,
+                                  address: { ...prev.address, city: e.target.value }
+                                }))}
+                                placeholder="City"
+                              />
+                            </div>
+                            <div className="col-md-4 mb-3">
+                              <label className="form-label">Postcode</label>
+                              <input
+                                type="text"
+                                className="form-control"
+                                value={formData.address.zip}
+                                onChange={(e) => setFormData(prev => ({
+                                  ...prev,
+                                  address: { ...prev.address, zip: e.target.value }
+                                }))}
+                                placeholder="Postcode"
+                              />
+                            </div>
+                            <div className="col-md-4 mb-3">
+                              <label className="form-label">Country</label>
+                              <input
+                                type="text"
+                                className="form-control"
+                                value={formData.address.country}
+                                onChange={(e) => setFormData(prev => ({
+                                  ...prev,
+                                  address: { ...prev.address, country: e.target.value }
+                                }))}
+                                placeholder="Country"
+                              />
                             </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  <div className="modal-footer">
+                  </div>
+                </div>
+                <div className="modal-footer">
                   <button
                     type="button"
                     className="btn btn-danger"
