@@ -1143,7 +1143,6 @@ const Companies = () => {
                         </div>
                       </div>
                     </div>
-                  </div>
                   <div className="modal-footer">
                   <button
                     type="button"
