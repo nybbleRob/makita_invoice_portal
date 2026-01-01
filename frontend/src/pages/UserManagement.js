@@ -1547,7 +1547,7 @@ const UserManagement = () => {
                                     return allCompanies.map((company) => {
                                       const isAssigned = formData.companyIds?.includes(company.id) || false;
                                       return (
-                                        <label key={company.id} className={`form-check mb-2 ${isAssigned ? 'bg-primary-lt rounded px-2 py-1' : ''}`}>
+                                        <label key={company.id} className="form-check mb-2">
                                           <input
                                             type="checkbox"
                                             className="form-check-input"
@@ -1555,7 +1555,7 @@ const UserManagement = () => {
                                             onChange={() => handleCompanyToggle(company.id)}
                                             disabled={formData.allCompanies}
                                           />
-                                          <span className="form-check-label">
+                                          <span className={`form-check-label ${isAssigned ? 'fw-bold' : ''}`}>
                                             {company.name} {company.referenceNo && `(${company.referenceNo})`}
                                           </span>
                                         </label>
