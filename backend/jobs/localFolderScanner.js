@@ -274,7 +274,7 @@ async function scanLocalFolder() {
           fileName,
           fileSize: stats.size,
           fileHash,
-          importId
+          importId: batchImportId
         });
         
       } catch (fileError) {
