@@ -210,8 +210,10 @@ const Companies = () => {
       }
       const response = await api.get(`/api/companies?${params.toString()}`);
       const companiesData = response.data.data || response.data.companies || response.data || [];
-      const total = response.data.total || companiesData.length;
-      const pages = response.data.pages || Math.ceil(total / 20);
+      // Pagination is inside response.data.pagination, not response.data directly
+      const pagination = response.data.pagination || {};
+      const total = pagination.total || companiesData.length;
+      const pages = pagination.pages || Math.ceil(total / 20);
       
       setParentFilterCompanies(Array.isArray(companiesData) ? companiesData : []);
       setParentFilterTotal(total);
@@ -287,32 +289,26 @@ const Companies = () => {
       
       // Add type filter - if not all types selected, filter by selected types
       const activeTypes = Object.keys(typeFilters).filter(key => typeFilters[key]);
-      if (activeTypes.length < 3) {
-        // If not all types selected, we'll filter on frontend for now
-        // Backend doesn't support multiple type filter
+      if (activeTypes.length < 3 && activeTypes.length > 0) {
+        params.types = activeTypes.join(',');
       }
       
       if (statusFilter !== 'all') {
         params.isActive = statusFilter === 'active';
       }
       
+      // Send company IDs to backend for filtering (includes descendants)
+      if (selectedParentIds.length > 0) {
+        params.companyIds = selectedParentIds.join(',');
+      }
+      
       const response = await api.get('/api/companies', { params });
       
       // Handle paginated response
       if (response.data && response.data.data) {
-        let companiesData = response.data.data || [];
+        const companiesData = response.data.data || [];
         
-        // Apply type filter on frontend if needed
-        const activeTypes = Object.keys(typeFilters).filter(key => typeFilters[key]);
-        if (activeTypes.length < 3) {
-          companiesData = companiesData.filter((company) => activeTypes.includes(company.type));
-        }
-        
-        // Apply parent filter on frontend if selected
-        if (selectedParentIds.length > 0) {
-          companiesData = companiesData.filter((company) => selectedParentIds.includes(company.id));
-        }
-        
+        // Server handles all filtering now (types, companyIds, etc.)
         setCompanies(companiesData);
         setFilteredCompanies(companiesData);
         
@@ -325,19 +321,9 @@ const Companies = () => {
         }));
       } else {
         // Fallback for non-paginated response
-        let companiesData = Array.isArray(response.data) ? response.data : [];
+        const companiesData = Array.isArray(response.data) ? response.data : [];
         
-        // Apply type filter on frontend if needed
-        const activeTypes = Object.keys(typeFilters).filter(key => typeFilters[key]);
-        if (activeTypes.length < 3) {
-          companiesData = companiesData.filter((company) => activeTypes.includes(company.type));
-        }
-        
-        // Apply parent filter on frontend if selected
-        if (selectedParentIds.length > 0) {
-          companiesData = companiesData.filter((company) => selectedParentIds.includes(company.id));
-        }
-        
+        // Server handles all filtering now
         setCompanies(companiesData);
         setFilteredCompanies(companiesData);
         

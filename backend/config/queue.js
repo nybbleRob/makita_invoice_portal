@@ -212,6 +212,25 @@ if (connection) {
   scheduledTasksQueue = createDummyQueue();
 }
 
+// Nested set update queue (for background hierarchy reindexing)
+const defaultNestedSetOptions = {
+  attempts: 1,
+  removeOnComplete: true,
+  removeOnFail: 100
+};
+
+let nestedSetQueue = null;
+if (connection) {
+  nestedSetQueue = new Queue('nested-set', {
+    connection,
+    defaultJobOptions: defaultNestedSetOptions
+  });
+  console.log('✅ Nested set queue initialized');
+} else {
+  console.log('ℹ️  Nested set queue: Not initialized (Redis not configured)');
+  nestedSetQueue = createDummyQueue();
+}
+
 // Graceful shutdown - close all queues
 async function closeAllQueues() {
   console.log('🔄 Closing all queues...');
@@ -231,6 +250,9 @@ async function closeAllQueues() {
   }
   if (scheduledTasksQueue && scheduledTasksQueue.close) {
     closePromises.push(scheduledTasksQueue.close().catch(err => console.error('Error closing scheduledTasksQueue:', err.message)));
+  }
+  if (nestedSetQueue && nestedSetQueue.close) {
+    closePromises.push(nestedSetQueue.close().catch(err => console.error('Error closing nestedSetQueue:', err.message)));
   }
   if (connection && connection.quit) {
     closePromises.push(connection.quit().catch(err => console.error('Error closing Redis connection:', err.message)));
@@ -254,6 +276,7 @@ module.exports = {
   invoiceImportQueue,
   emailQueue,
   scheduledTasksQueue,
+  nestedSetQueue,
   connection,
   closeAllQueues,
   // Export default options for workers to use
@@ -262,6 +285,7 @@ module.exports = {
   defaultInvoiceImportOptions,
   defaultEmailOptions,
   defaultScheduledTaskOptions,
+  defaultNestedSetOptions,
   // Export email rate limiting config for worker
   EMAIL_RATE_MAX,
   EMAIL_RATE_DURATION_MS

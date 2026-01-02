@@ -7,7 +7,7 @@ const { Op } = Sequelize;
 const auth = require('../middleware/auth');
 const globalAdmin = require('../middleware/globalAdmin');
 const { checkDocumentAccess, buildCompanyFilter } = require('../middleware/documentAccess');
-const { updateNestedSetIndexes } = require('../utils/nestedSet');
+const { updateNestedSetIndexes, queueNestedSetUpdate } = require('../utils/nestedSet');
 const { redis } = require('../config/redis');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const router = express.Router();
@@ -282,7 +282,7 @@ router.get('/hierarchy', auth, checkDocumentAccess, async (req, res) => {
 // Get all companies
 router.get('/', auth, checkDocumentAccess, async (req, res) => {
   try {
-    const { type, search, isActive, page, limit } = req.query;
+    const { type, types, search, isActive, page, limit, companyIds } = req.query;
     
     // Support both paginated and non-paginated requests
     const usePagination = page !== undefined && limit !== undefined;
@@ -311,7 +311,29 @@ router.get('/', auth, checkDocumentAccess, async (req, res) => {
       where.id = { [Op.in]: req.accessibleCompanyIds };
     }
     
-    if (type && ['CORP', 'SUB', 'BRANCH'].includes(type)) {
+    // Filter by specific company IDs (from filter selection)
+    // This takes precedence and narrows down the results
+    if (companyIds) {
+      const idsArray = companyIds.split(',').map(id => id.trim()).filter(id => id);
+      if (idsArray.length > 0) {
+        // If there's already an id filter from accessibleCompanyIds, intersect them
+        if (where.id && where.id[Op.in]) {
+          const accessible = new Set(where.id[Op.in]);
+          const filtered = idsArray.filter(id => accessible.has(id));
+          where.id = { [Op.in]: filtered.length > 0 ? filtered : ['00000000-0000-0000-0000-000000000000'] };
+        } else {
+          where.id = { [Op.in]: idsArray };
+        }
+      }
+    }
+    
+    // Support multiple types filter (comma-separated)
+    if (types) {
+      const typesArray = types.split(',').map(t => t.trim().toUpperCase()).filter(t => ['CORP', 'SUB', 'BRANCH'].includes(t));
+      if (typesArray.length > 0) {
+        where.type = { [Op.in]: typesArray };
+      }
+    } else if (type && ['CORP', 'SUB', 'BRANCH'].includes(type)) {
       where.type = type;
     }
     
@@ -526,8 +548,8 @@ router.post('/', auth, async (req, res) => {
     
     const company = await Company.create(companyData);
     
-    // Update nested set indexes after creation
-    await updateNestedSetIndexes(Company);
+    // Queue nested set update for background processing (non-blocking)
+    queueNestedSetUpdate();
     
     // Reload with associations
     await company.reload({
@@ -741,9 +763,9 @@ router.put('/:id', auth, async (req, res) => {
     
     await company.save();
     
-    // Update nested set indexes if parent changed
+    // Queue nested set update if parent changed (non-blocking)
     if (wasMoved) {
-      await updateNestedSetIndexes(Company);
+      queueNestedSetUpdate();
     }
     
     // Determine activity type and log
@@ -887,8 +909,8 @@ router.delete('/:id', auth, async (req, res) => {
     
     await company.destroy();
     
-    // Update nested set indexes after deletion
-    await updateNestedSetIndexes(Company);
+    // Queue nested set update after deletion (non-blocking)
+    queueNestedSetUpdate();
     
     // Log company deletion
     await logActivity({
@@ -1767,8 +1789,8 @@ router.post('/import', auth, upload.single('file'), async (req, res) => {
       }
     }
 
-    // Update nested set indexes after import
-    await updateNestedSetIndexes(Company);
+    // Queue nested set update after import (non-blocking)
+    queueNestedSetUpdate();
 
     // Create import transaction record for UNDO capability
     let importTransaction = null;
@@ -1955,8 +1977,8 @@ router.post('/import/:transactionId/undo', auth, async (req, res) => {
       }
     }
 
-    // Update nested set indexes after undo
-    await updateNestedSetIndexes(Company);
+    // Queue nested set update after undo (non-blocking)
+    queueNestedSetUpdate();
 
     // Mark transaction as undone
     await importTransaction.update({ status: 'undone' });

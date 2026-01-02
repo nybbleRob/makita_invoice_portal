@@ -18,6 +18,12 @@ const HierarchicalCompanyFilter = ({
   // Convert all IDs to strings for consistent comparison
   const [tempSelectedIds, setTempSelectedIds] = useState(new Set(selectedCompanyIds.map(id => String(id))));
   const searchInputRef = useRef(null);
+  const [initialFetchDone, setInitialFetchDone] = useState(false);
+
+  // Sync tempSelectedIds with prop when modal opens/reopens
+  useEffect(() => {
+    setTempSelectedIds(new Set(selectedCompanyIds.map(id => String(id))));
+  }, [selectedCompanyIds]);
 
   // Fetch hierarchical company data
   const fetchHierarchy = useCallback(async (search = '') => {
@@ -25,9 +31,10 @@ const HierarchicalCompanyFilter = ({
       setLoading(true);
       const params = search ? { search } : {};
       const response = await api.get('/api/companies/hierarchy', { params });
-      setCompanies(response.data.companies || []);
+      const companiesData = response.data.companies || [];
+      setCompanies(companiesData);
       
-      // Auto-expand all when searching
+      // Auto-expand all when searching, or expand first level by default
       if (search) {
         const allIds = new Set();
         const collectIds = (nodes) => {
@@ -38,8 +45,13 @@ const HierarchicalCompanyFilter = ({
             }
           });
         };
-        collectIds(response.data.companies || []);
+        collectIds(companiesData);
         setExpandedIds(allIds);
+      } else if (!initialFetchDone) {
+        // Expand first level on initial load
+        const firstLevelIds = new Set(companiesData.map(c => String(c.id)));
+        setExpandedIds(firstLevelIds);
+        setInitialFetchDone(true);
       }
     } catch (error) {
       console.error('Error fetching company hierarchy:', error);
@@ -47,7 +59,7 @@ const HierarchicalCompanyFilter = ({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [initialFetchDone]);
 
   // Initial fetch
   useEffect(() => {
@@ -58,15 +70,17 @@ const HierarchicalCompanyFilter = ({
         searchInputRef.current.focus();
       }
     }, 100);
-  }, [fetchHierarchy]);
+  }, []);
 
-  // Debounced search
+  // Debounced search - only trigger for actual search changes
   useEffect(() => {
+    if (!initialFetchDone) return; // Skip during initial load
+    
     const timer = setTimeout(() => {
       fetchHierarchy(searchQuery);
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchQuery, fetchHierarchy]);
+  }, [searchQuery]);
 
   // Get all descendant IDs for a company (as strings)
   const getDescendantIds = useCallback((node) => {

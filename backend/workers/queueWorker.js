@@ -473,6 +473,36 @@ scheduledTasksWorker.on('stalled', (jobId) => {
 workers.push(scheduledTasksWorker);
 console.log('✅ Scheduled tasks worker initialized');
 
+// Nested set update worker (for background hierarchy reindexing)
+const nestedSetWorker = new Worker('nested-set', async (job) => {
+  console.log(`Nested set update job ${job.id} started`);
+  
+  const { Company } = require('../models');
+  const { updateNestedSetIndexes } = require('../utils/nestedSet');
+  
+  await updateNestedSetIndexes(Company);
+  
+  return { success: true };
+}, {
+  ...commonWorkerOptions,
+  concurrency: 1 // Only one nested set update at a time
+});
+
+nestedSetWorker.on('completed', (job) => {
+  console.log(`Nested set update job ${job.id} completed`);
+});
+
+nestedSetWorker.on('failed', (job, err) => {
+  console.error(`Nested set update job ${job.id} failed:`, err.message);
+});
+
+nestedSetWorker.on('error', (error) => {
+  console.error('Nested set worker error:', error.message);
+});
+
+workers.push(nestedSetWorker);
+console.log('Nested set worker initialized');
+
 // Start intervals for monitoring
 heartbeatInterval = setInterval(updateHeartbeat, 30000); // Every 30 seconds
 updateHeartbeat(); // Initial heartbeat
