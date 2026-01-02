@@ -46,24 +46,36 @@ async function queueEmail(options) {
     throw new Error('Email queue: to, subject, and html are required');
   }
   
-  // Create EmailLog record first for tracking and idempotency
-  const emailLog = await EmailLog.create({
-    to,
-    subject,
-    templateName: templateName || null,
-    status: 'QUEUED',
-    maxAttempts: defaultEmailOptions.attempts || 10,
-    userId: metadata.userId || null,
-    userEmail: metadata.userEmail || null,
-    companyId: metadata.companyId || null,
-    companyName: metadata.companyName || null
-  });
+  let emailLog;
+  try {
+    // Create EmailLog record first for tracking and idempotency
+    emailLog = await EmailLog.create({
+      to,
+      subject,
+      templateName: templateName || null,
+      status: 'QUEUED',
+      maxAttempts: defaultEmailOptions.attempts || 10,
+      userId: metadata.userId || null,
+      userEmail: metadata.userEmail || null,
+      companyId: metadata.companyId || null,
+      companyName: metadata.companyName || null
+    });
+  } catch (dbError) {
+    console.error(`[EmailQueue] Failed to create EmailLog for ${to}:`, dbError.message);
+    throw dbError;
+  }
   
   // Deterministic jobId prevents duplicate queue entries
-  const jobId = `email:${emailLog.id}`;
+  // Using underscore instead of colon to avoid issues with some systems
+  const jobId = `email_${emailLog.id}`;
   
-  // Update EmailLog with jobId
-  await EmailLog.update({ jobId }, { where: { id: emailLog.id } });
+  try {
+    // Update EmailLog with jobId
+    await EmailLog.update({ jobId }, { where: { id: emailLog.id } });
+  } catch (updateError) {
+    console.error(`[EmailQueue] Failed to update EmailLog jobId:`, updateError.message);
+    // Continue anyway - jobId update is not critical
+  }
   
   // Get settings if not provided
   let emailSettings = settings;
@@ -72,36 +84,44 @@ async function queueEmail(options) {
   }
   
   // Add email to queue (BullMQ format: name, data, options)
-  const job = await emailQueue.add('send-email', {
-    emailLogId: emailLog.id,
-    to,
-    subject,
-    html,
-    text,
-    attachments: attachments || [],
-    settings: emailSettings,
-    metadata: {
-      ...metadata,
-      emailLogId: emailLog.id
-    }
-  }, {
-    jobId, // Deterministic ID prevents duplicates
-    priority, // Higher priority emails are processed first
-    attempts: defaultEmailOptions.attempts || 10,
-    backoff: defaultEmailOptions.backoff || {
-      type: 'exponential',
-      delay: 60000 // 1 minute base, doubles each retry
-    },
-    removeOnComplete: defaultEmailOptions.removeOnComplete || {
-      age: 7 * 24 * 3600,
-      count: 5000
-    },
-    removeOnFail: defaultEmailOptions.removeOnFail || {
-      age: 30 * 24 * 3600
-    }
-  });
+  let job;
+  try {
+    job = await emailQueue.add('send-email', {
+      emailLogId: emailLog.id,
+      to,
+      subject,
+      html,
+      text,
+      attachments: attachments || [],
+      settings: emailSettings,
+      metadata: {
+        ...metadata,
+        emailLogId: emailLog.id
+      }
+    }, {
+      jobId, // Deterministic ID prevents duplicates
+      priority, // Higher priority emails are processed first
+      attempts: defaultEmailOptions.attempts || 10,
+      backoff: defaultEmailOptions.backoff || {
+        type: 'exponential',
+        delay: 60000 // 1 minute base, doubles each retry
+      },
+      removeOnComplete: defaultEmailOptions.removeOnComplete || {
+        age: 7 * 24 * 3600,
+        count: 5000
+      },
+      removeOnFail: defaultEmailOptions.removeOnFail || {
+        age: 30 * 24 * 3600
+      }
+    });
+  } catch (queueError) {
+    console.error(`[EmailQueue] Failed to add job to queue for ${to}:`, queueError.message);
+    // Update EmailLog to failed status
+    await EmailLog.update({ status: 'FAILED_PERMANENT', lastError: queueError.message }, { where: { id: emailLog.id } });
+    throw queueError;
+  }
   
-  console.log(`📧 Queued email to ${to} (job ${job.id}, emailLog ${emailLog.id})`);
+  console.log(`[EmailQueue] Queued email to ${to} (job ${job.id}, emailLog ${emailLog.id})`);
   
   return { job, emailLog };
 }
