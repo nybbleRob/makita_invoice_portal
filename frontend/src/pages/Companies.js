@@ -4,6 +4,7 @@ import api from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { useDebounce } from '../hooks/useDebounce';
+import HierarchicalCompanyFilter from '../components/HierarchicalCompanyFilter';
 
 const Companies = () => {
   const navigate = useNavigate();
@@ -1964,136 +1965,20 @@ const Companies = () => {
       })()}
 
 
-      {/* Parent/Company Filter Modal */}
+      {/* Parent/Company Filter Modal - Hierarchical */}
       {showParentFilterModal && (
-        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
-          <div className="modal-dialog modal-dialog-centered modal-lg">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Filter Companies</h5>
-                <button type="button" className="btn-close" onClick={closeParentFilterModal}></button>
-              </div>
-              <div className="modal-body">
-                {/* Search */}
-                <div className="mb-3">
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Search companies by name or account number..."
-                    value={parentFilterSearch}
-                    onChange={(e) => setParentFilterSearch(e.target.value)}
-                    autoFocus
-                  />
-                </div>
-
-                {/* Selected companies as pills */}
-                {tempSelectedParents.length > 0 && (
-                  <div className="mb-3 d-flex flex-wrap gap-1">
-                    {tempSelectedParents.map((company) => (
-                      <span 
-                        key={company.id} 
-                        className="badge bg-primary-lt d-inline-flex align-items-center gap-1"
-                      >
-                        {company.name}
-                        {company.referenceNo && <small className="text-muted">({company.referenceNo})</small>}
-                        <button
-                          type="button"
-                          className="btn-close ms-1"
-                          style={{ fontSize: '0.5rem' }}
-                          onClick={() => removeTempSelectedParent(company.id)}
-                          aria-label="Remove"
-                        ></button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {/* Company list */}
-                <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
-                  {parentFilterLoading ? (
-                    <div className="text-center py-4">
-                      <div className="spinner-border" role="status">
-                        <span className="visually-hidden">Loading...</span>
-                      </div>
-                    </div>
-                  ) : parentFilterCompanies.length === 0 ? (
-                    <div className="text-muted text-center py-4">No companies found</div>
-                  ) : (
-                    <div className="list-group list-group-flush">
-                      {parentFilterCompanies.map((company) => {
-                        const isSelected = tempSelectedParents.some(c => c.id === company.id);
-                        return (
-                          <label
-                            key={company.id}
-                            className={`list-group-item d-flex align-items-center gap-2 py-2 ${isSelected ? 'bg-primary-lt' : ''}`}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            <input
-                              type="checkbox"
-                              className="form-check-input m-0"
-                              checked={isSelected}
-                              onChange={() => handleParentFilterToggle(company)}
-                            />
-                            <span className="flex-grow-1 text-truncate">{company.name}</span>
-                            {company.referenceNo && (
-                              <small className="text-muted">{company.referenceNo}</small>
-                            )}
-                            {company.type && (
-                              <span className={`badge ${company.type === 'CORP' ? 'bg-primary-lt' : company.type === 'SUB' ? 'bg-info-lt' : 'bg-success-lt'}`}>
-                                {company.type}
-                              </span>
-                            )}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Pagination */}
-                {parentFilterPages > 1 && (
-                  <div className="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
-                    <small className="text-muted">
-                      Showing {((parentFilterPage - 1) * 20) + 1} to {Math.min(parentFilterPage * 20, parentFilterTotal)} of {parentFilterTotal} companies
-                    </small>
-                    <div className="btn-group">
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-secondary"
-                        disabled={parentFilterPage <= 1 || parentFilterLoading}
-                        onClick={() => fetchParentFilterCompanies(debouncedParentFilterSearch, parentFilterPage - 1)}
-                      >
-                        Previous
-                      </button>
-                      <span className="btn btn-sm btn-outline-secondary disabled">
-                        {parentFilterPage} / {parentFilterPages}
-                      </span>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-secondary"
-                        disabled={parentFilterPage >= parentFilterPages || parentFilterLoading}
-                        onClick={() => fetchParentFilterCompanies(debouncedParentFilterSearch, parentFilterPage + 1)}
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn" onClick={clearParentFilters}>
-                  Clear All
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={closeParentFilterModal}>
-                  Cancel
-                </button>
-                <button type="button" className="btn btn-primary" onClick={applyParentFilter}>
-                  Apply Filter {tempSelectedParents.length > 0 && `(${tempSelectedParents.length})`}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <HierarchicalCompanyFilter
+          selectedCompanyIds={selectedParentIds}
+          onSelectionChange={(ids) => {
+            setSelectedParentIds(ids);
+            setSelectedParentFilters(ids.map(id => ({ id })));
+          }}
+          onClose={() => setShowParentFilterModal(false)}
+          onApply={() => {
+            setShowParentFilterModal(false);
+            setPagination(prev => ({ ...prev, page: 1 }));
+          }}
+        />
       )}
     </div>
   );

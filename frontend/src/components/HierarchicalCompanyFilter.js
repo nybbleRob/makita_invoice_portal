@@ -34,7 +34,7 @@ const HierarchicalCompanyFilter = ({
       const companiesData = response.data.companies || [];
       setCompanies(companiesData);
       
-      // Auto-expand all when searching, or expand first level by default
+      // Auto-expand all when searching, otherwise start collapsed
       if (search) {
         const allIds = new Set();
         const collectIds = (nodes) => {
@@ -48,9 +48,8 @@ const HierarchicalCompanyFilter = ({
         collectIds(companiesData);
         setExpandedIds(allIds);
       } else if (!initialFetchDone) {
-        // Expand first level on initial load
-        const firstLevelIds = new Set(companiesData.map(c => String(c.id)));
-        setExpandedIds(firstLevelIds);
+        // Start with all collapsed by default
+        setExpandedIds(new Set());
         setInitialFetchDone(true);
       }
     } catch (error) {
@@ -238,7 +237,8 @@ const HierarchicalCompanyFilter = ({
     const isExpanded = expandedIds.has(String(node.id));
     const isSelected = getSelectionState(node) === 'checked';
     const childrenSelected = hasSelectedChildren(node);
-    const indent = level * 24;
+    const indent = level * 20; // Indentation per level
+    const isChild = level > 0;
     
     // Type badge colors
     const typeBadgeClass = {
@@ -253,7 +253,8 @@ const HierarchicalCompanyFilter = ({
           className={`d-flex align-items-center py-2 px-2 border-bottom ${isSelected ? 'bg-primary-lt' : childrenSelected ? 'bg-azure-lt' : ''}`}
           style={{ 
             paddingLeft: `${8 + indent}px`,
-            cursor: 'pointer'
+            cursor: 'pointer',
+            fontSize: isChild ? '0.875rem' : '1rem' // Smaller font for children
           }}
           onClick={() => toggleSelection(node)}
         >
@@ -296,8 +297,11 @@ const HierarchicalCompanyFilter = ({
             onClick={(e) => e.stopPropagation()}
           />
           
-          {/* Company name */}
-          <span className="flex-grow-1 text-truncate">
+          {/* Company name - bold for parents */}
+          <span 
+            className="flex-grow-1 text-truncate"
+            style={{ fontWeight: hasChildren ? '600' : 'normal' }}
+          >
             {node.name}
           </span>
           
@@ -307,7 +311,7 @@ const HierarchicalCompanyFilter = ({
           )}
           
           {/* Type badge */}
-          <span className={`badge ${typeBadgeClass}`} style={{ fontSize: '0.7rem' }}>
+          <span className={`badge ${typeBadgeClass}`} style={{ fontSize: '0.65rem' }}>
             {node.type}
           </span>
           
