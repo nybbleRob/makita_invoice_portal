@@ -42,6 +42,7 @@ const Settings = () => {
   const [savingImportSettings, setSavingImportSettings] = useState(false);
   const [failedCount, setFailedCount] = useState(0);
   const [retryingFailed, setRetryingFailed] = useState(false);
+  const [resettingStats, setResettingStats] = useState(false);
   
 
   useEffect(() => {
@@ -191,6 +192,25 @@ const Settings = () => {
       toast.error('Error retrying failed imports: ' + (error.response?.data?.message || error.message));
     } finally {
       setRetryingFailed(false);
+    }
+  };
+
+  // Reset import statistics
+  const handleResetStatistics = async () => {
+    if (!window.confirm('Are you sure you want to reset all import statistics? This cannot be undone.')) {
+      return;
+    }
+    
+    setResettingStats(true);
+    try {
+      await api.post('/api/import-settings/reset-statistics');
+      toast.success('Import statistics have been reset');
+      fetchImportSettings();
+    } catch (error) {
+      console.error('Error resetting statistics:', error);
+      toast.error('Error resetting statistics: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setResettingStats(false);
     }
   };
 
@@ -1158,8 +1178,16 @@ const Settings = () => {
 
                           {/* Import Statistics */}
                           <div className="card mb-4">
-                            <div className="card-header">
+                            <div className="card-header d-flex justify-content-between align-items-center">
                               <h3 className="card-title mb-0">Import Statistics</h3>
+                              <button
+                                type="button"
+                                className="btn btn-outline-secondary btn-sm"
+                                onClick={handleResetStatistics}
+                                disabled={resettingStats}
+                              >
+                                {resettingStats ? 'Resetting...' : 'Reset Statistics'}
+                              </button>
                             </div>
                             <div className="card-body">
                               <div className="row g-4">

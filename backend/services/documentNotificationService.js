@@ -24,6 +24,8 @@ async function getNotificationRecipients(companyId, notificationType) {
   const recipients = [];
   const seenEmails = new Set();
   
+  console.log(`[NotificationService] Getting ${notificationType} recipients for company ${companyId}`);
+  
   // Get company with primaryContact
   const company = await Company.findByPk(companyId, {
     include: [{
@@ -41,6 +43,8 @@ async function getNotificationRecipients(companyId, notificationType) {
     console.warn(`[NotificationService] Company ${companyId} not found`);
     return [];
   }
+  
+  console.log(`[NotificationService]    Company: ${company.name}, sendInvoiceEmail=${company.sendInvoiceEmail}`);
   
   // Check company-level notification settings
   const companySettings = {
@@ -90,7 +94,11 @@ async function getNotificationRecipients(companyId, notificationType) {
     }
   });
   
+  console.log(`[NotificationService]    Found ${assignedUsers.length} assigned users with ${notificationType} notifications enabled`);
+  
   for (const user of assignedUsers) {
+    console.log(`[NotificationService]      - Assigned user: ${user.email} (sendInvoiceEmail=${user.sendInvoiceEmail})`);
+    
     if (!seenEmails.has(user.email.toLowerCase())) {
       seenEmails.add(user.email.toLowerCase());
       recipients.push({
@@ -117,6 +125,8 @@ async function getNotificationRecipients(companyId, notificationType) {
       ]
     }
   });
+  
+  console.log(`[NotificationService]    Found ${allCompanyUsers.length} users with allCompanies=true and ${notificationType} notifications`);
   
   for (const user of allCompanyUsers) {
     if (!seenEmails.has(user.email.toLowerCase())) {
@@ -163,7 +173,7 @@ async function queueDocumentNotifications(options) {
   } = options;
   
   console.log(`[NotificationService] Processing notifications for company ${companyName} (${companyId})`);
-  console.log(`   Invoices: ${invoices.length}, Credit Notes: ${creditNotes.length}, Statements: ${statements.length}`);
+  console.log(`[NotificationService]    Invoices: ${invoices.length}, Credit Notes: ${creditNotes.length}, Statements: ${statements.length}`);
   
   const settings = await Settings.getSettings();
   const portalName = settings?.siteTitle || 'Invoice Portal';
@@ -198,7 +208,15 @@ async function queueDocumentNotifications(options) {
     }
   }
   
-  console.log(`[NotificationService] Found ${allRecipients.size} recipients`);
+  console.log(`[NotificationService] Found ${allRecipients.size} recipients for ${companyName}`);
+  if (allRecipients.size > 0) {
+    for (const [email, recipient] of allRecipients) {
+      console.log(`[NotificationService]    - ${email} (${recipient.role}) sendAsSummary=${recipient.sendAsSummary}, sendAttachment=${recipient.sendAttachment}`);
+    }
+  } else {
+    console.log(`[NotificationService]    No users found with notifications enabled for this company`);
+    console.log(`[NotificationService]    Check: Users must have sendInvoiceEmail=true AND be assigned to this company`);
+  }
   
   const queuedEmails = [];
   

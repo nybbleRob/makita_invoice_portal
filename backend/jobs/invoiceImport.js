@@ -18,6 +18,7 @@ const {
   getUnprocessedFilePath,
   PROCESSED_BASE,
   UNPROCESSED_FAILED,
+  FTP_UPLOAD_PATH,
   ensureDir
 } = require('../config/storage');
 const { logActivity, ActivityType } = require('../services/activityLogger');
@@ -1506,21 +1507,21 @@ async function processInvoiceImport(job) {
     
     await job.updateProgress(100);
     
-    // Clean up temp file (only if it's actually a temp file from SFTP/FTP import)
-    // Don't delete if filePath is the same as actualFilePath (already moved)
-    // Only delete temp files that start with 'sftp-' or are in the temp directory
+    // Clean up source file after successful copy
+    // Delete if: temp file, OR in FTP upload folder (since we've copied to processed/unprocessed)
     const isTempFile = filePath.includes(path.join('temp', path.sep)) || 
                        path.basename(filePath).startsWith('sftp-') ||
                        path.basename(filePath).startsWith('ftp-');
+    const isInUploadFolder = FTP_UPLOAD_PATH && filePath.startsWith(FTP_UPLOAD_PATH);
     
-    if (fs.existsSync(filePath) && filePath !== actualFilePath && isTempFile) {
+    if (fs.existsSync(filePath) && filePath !== actualFilePath && (isTempFile || isInUploadFolder)) {
       try {
         // Add a small delay before cleanup to ensure file is fully processed
         await new Promise(resolve => setTimeout(resolve, 100));
         fs.unlinkSync(filePath);
-        console.log(`🧹 [Import ${importId}] Cleaned up temp file: ${filePath}`);
+        console.log(`[Import ${importId}] Cleaned up source file: ${filePath} (${isInUploadFolder ? 'uploads folder' : 'temp file'})`);
       } catch (cleanupError) {
-        console.warn(`⚠️  [Import ${importId}] Failed to cleanup temp file: ${cleanupError.message}`);
+        console.warn(`[Import ${importId}] Failed to cleanup source file: ${cleanupError.message}`);
       }
     }
     

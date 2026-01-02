@@ -130,79 +130,78 @@ async function recordJobCompletion(importId, result) {
  * @param {Object} batch - Batch data
  */
 async function sendBatchNotifications(importId, batch) {
-  if (batch.companyDocuments.size === 0) {
-    console.log(`ℹ️  [Batch ${importId}] No documents to notify about`);
-    return;
-  }
-  
   const settings = await Settings.getSettings();
-  
-  // Check if email is enabled (Mailtrap = test mode, always enabled)
-  if (!isEmailEnabled(settings)) {
-    console.log(`ℹ️  [Batch ${importId}] Email not enabled, skipping notifications`);
-    return;
-  }
-  
   const processingTime = Date.now() - batch.startTime;
   let totalNotificationsSent = 0;
   
-  // Send notifications for each company
-  for (const [companyId, docs] of batch.companyDocuments) {
-    try {
-      const company = await Company.findByPk(companyId);
-      if (!company) {
-        console.warn(`⚠️  [Batch ${importId}] Company ${companyId} not found, skipping`);
-        continue;
+  // Check if email is enabled (Mailtrap = test mode, always enabled)
+  if (!isEmailEnabled(settings)) {
+    console.log(`[Batch ${importId}] Email not enabled, skipping all notifications`);
+    return;
+  }
+  
+  // Send user notifications if there are company documents
+  if (batch.companyDocuments.size === 0) {
+    console.log(`[Batch ${importId}] No company documents to notify users about`);
+  } else {
+    // Send notifications for each company
+    for (const [companyId, docs] of batch.companyDocuments) {
+      try {
+        const company = await Company.findByPk(companyId);
+        if (!company) {
+          console.warn(`[Batch ${importId}] Company ${companyId} not found, skipping`);
+          continue;
+        }
+        
+        // Skip EDI companies (they don't receive email notifications)
+        if (company.edi) {
+          console.log(`[Batch ${importId}] Company ${company.name} has EDI enabled, skipping email notifications`);
+          continue;
+        }
+        
+        // Fetch full document objects for notification
+        const invoices = docs.invoices.length > 0 
+          ? await Invoice.findAll({ where: { id: { [Op.in]: docs.invoices.map(d => d.id) } } })
+          : [];
+        
+        const creditNotes = docs.creditNotes.length > 0
+          ? await CreditNote.findAll({ where: { id: { [Op.in]: docs.creditNotes.map(d => d.id) } } })
+          : [];
+        
+        // Queue notifications
+        const result = await queueDocumentNotifications({
+          companyId,
+          companyName: company.name,
+          importId,
+          invoices: invoices.map(inv => ({
+            id: inv.id,
+            invoiceNumber: inv.invoiceNumber,
+            amount: inv.amount,
+            date: inv.issueDate?.toISOString(),
+            filePath: inv.fileUrl
+          })),
+          creditNotes: creditNotes.map(cn => ({
+            id: cn.id,
+            creditNoteNumber: cn.creditNoteNumber,
+            amount: cn.amount,
+            date: cn.issueDate?.toISOString(),
+            filePath: cn.fileUrl
+          })),
+          statements: [], // Add statement support if needed
+          triggeredByUserId: batch.userId,
+          triggeredByEmail: batch.userEmail
+        });
+        
+        totalNotificationsSent += result.emailsQueued || 0;
+        console.log(`[Batch ${importId}] Queued ${result.emailsQueued} notifications for ${company.name}`);
+        
+      } catch (error) {
+        console.error(`[Batch ${importId}] Error notifying company ${companyId}:`, error.message);
       }
-      
-      // Skip EDI companies (they don't receive email notifications)
-      if (company.edi) {
-        console.log(`ℹ️  [Batch ${importId}] Company ${company.name} has EDI enabled, skipping email notifications`);
-        continue;
-      }
-      
-      // Fetch full document objects for notification
-      const invoices = docs.invoices.length > 0 
-        ? await Invoice.findAll({ where: { id: { [Op.in]: docs.invoices.map(d => d.id) } } })
-        : [];
-      
-      const creditNotes = docs.creditNotes.length > 0
-        ? await CreditNote.findAll({ where: { id: { [Op.in]: docs.creditNotes.map(d => d.id) } } })
-        : [];
-      
-      // Queue notifications
-      const result = await queueDocumentNotifications({
-        companyId,
-        companyName: company.name,
-        importId,
-        invoices: invoices.map(inv => ({
-          id: inv.id,
-          invoiceNumber: inv.invoiceNumber,
-          amount: inv.amount,
-          date: inv.issueDate?.toISOString(),
-          filePath: inv.fileUrl
-        })),
-        creditNotes: creditNotes.map(cn => ({
-          id: cn.id,
-          creditNoteNumber: cn.creditNoteNumber,
-          amount: cn.amount,
-          date: cn.issueDate?.toISOString(),
-          filePath: cn.fileUrl
-        })),
-        statements: [], // Add statement support if needed
-        triggeredByUserId: batch.userId,
-        triggeredByEmail: batch.userEmail
-      });
-      
-      totalNotificationsSent += result.emailsQueued || 0;
-      console.log(`📧 [Batch ${importId}] Queued ${result.emailsQueued} notifications for ${company.name}`);
-      
-    } catch (error) {
-      console.error(`❌ [Batch ${importId}] Error notifying company ${companyId}:`, error.message);
     }
   }
   
-  // Log batch completion activity
+  // Log batch completion activity (always, regardless of notifications)
   try {
     await logActivity({
       type: ActivityType.IMPORT_BATCH_COMPLETE,

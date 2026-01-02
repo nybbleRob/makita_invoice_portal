@@ -9,7 +9,7 @@ const path = require('path');
 const auth = require('../middleware/auth');
 const globalAdmin = require('../middleware/globalAdmin');
 const { Settings } = require('../models');
-const { getLogs, clearLogs, getStats, getLastRun, log } = require('../services/importLogger');
+const { getLogs, clearLogs, getStats, getLastRun, resetStats, log } = require('../services/importLogger');
 const { scheduledTasksQueue } = require('../config/queue');
 const { scanLocalFolder } = require('../jobs/localFolderScanner');
 const { UNPROCESSED_FAILED, FTP_UPLOAD_PATH, ensureDir } = require('../config/storage');
@@ -421,13 +421,30 @@ async function rescheduleImportJob(frequencyMinutes, enabled) {
                           frequencyMinutes === 60 ? 'hourly' :
                           frequencyMinutes < 1440 ? `every ${frequencyMinutes / 60} hours` : 'daily';
 
-    console.log(`✅ Local folder scan scheduled: ${frequencyLabel} (${cronPattern})`);
+    console.log(`Local folder scan scheduled: ${frequencyLabel} (${cronPattern})`);
     log.success(`Import scheduler updated: ${frequencyLabel}`);
   } catch (error) {
     console.error('Error rescheduling import job:', error);
     log.error(`Failed to reschedule import job: ${error.message}`);
   }
 }
+
+/**
+ * Reset import statistics
+ */
+router.post('/reset-statistics', auth, globalAdmin, async (req, res) => {
+  try {
+    await resetStats();
+    
+    res.json({
+      success: true,
+      message: 'Import statistics have been reset'
+    });
+  } catch (error) {
+    console.error('Error resetting import statistics:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
 
 module.exports = router;
 

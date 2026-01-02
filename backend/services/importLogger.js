@@ -277,6 +277,37 @@ async function getLastRun() {
   }
 }
 
+/**
+ * Reset all import statistics
+ * @returns {Promise<void>}
+ */
+async function resetStats() {
+  if (!redis) return;
+
+  try {
+    // Reset stats to initial values
+    await redis.set(IMPORT_STATS_KEY, JSON.stringify({
+      totalScans: 0,
+      totalFilesProcessed: 0,
+      totalSuccessful: 0,
+      totalFailed: 0,
+      lastRunAt: null,
+      lastRunDuration: null,
+      lastRunStats: null,
+      resetAt: new Date().toISOString()
+    }));
+    
+    // Clear last run info
+    await redis.del(IMPORT_LAST_RUN_KEY);
+    
+    await addLog(LogLevel.INFO, 'Import statistics have been reset');
+    console.log('[ImportLogger] Statistics reset');
+  } catch (error) {
+    console.error('Failed to reset import stats:', error.message);
+    throw error;
+  }
+}
+
 // Convenience methods for different log levels
 const log = {
   info: (message, metadata) => addLog(LogLevel.INFO, message, metadata),
@@ -296,6 +327,7 @@ module.exports = {
   startRun,
   endRun,
   getLastRun,
+  resetStats,
   log
 };
 
