@@ -8,10 +8,10 @@
  * 3. When all jobs in a batch are complete, sendBatchNotifications() is triggered
  */
 
-const { Company, Invoice, CreditNote, File, Settings } = require('../models');
+const { Company, Invoice, CreditNote, File, Settings, User } = require('../models');
 const { queueDocumentNotifications } = require('./documentNotificationService');
 const { logActivity, ActivityType } = require('./activityLogger');
-const { isEmailEnabled } = require('../utils/emailService');
+const { isEmailEnabled, sendEmail } = require('../utils/emailService');
 const { Op } = require('sequelize');
 
 // In-memory batch tracking (will be lost on server restart)
@@ -225,10 +225,135 @@ async function sendBatchNotifications(importId, batch) {
       userAgent: 'batch-notification-service'
     });
   } catch (logError) {
-    console.error(`⚠️  [Batch ${importId}] Failed to log activity:`, logError.message);
+    console.error(`[Batch ${importId}] Failed to log activity:`, logError.message);
   }
   
-  console.log(`✅ [Batch ${importId}] Batch complete! ${batch.successfulJobs} documents processed, ${totalNotificationsSent} notifications queued (${processingTime}ms)`);
+  // Send admin summary email
+  try {
+    await sendAdminSummaryEmail(importId, batch, processingTime, totalNotificationsSent);
+  } catch (adminEmailError) {
+    console.error(`[Batch ${importId}] Failed to send admin summary email:`, adminEmailError.message);
+  }
+  
+  console.log(`[Batch ${importId}] Batch complete! ${batch.successfulJobs} documents processed, ${totalNotificationsSent} notifications queued (${processingTime}ms)`);
+}
+
+/**
+ * Send summary email to global administrators
+ * @param {string} importId - Import batch ID
+ * @param {Object} batch - Batch data
+ * @param {number} processingTime - Processing time in ms
+ * @param {number} notificationsSent - Number of user notifications sent
+ */
+async function sendAdminSummaryEmail(importId, batch, processingTime, notificationsSent) {
+  const settings = await Settings.getSettings();
+  
+  if (!isEmailEnabled(settings)) {
+    console.log(`[Batch ${importId}] Email not enabled, skipping admin summary`);
+    return;
+  }
+  
+  // Find all global admin users
+  const globalAdmins = await User.findAll({
+    where: {
+      role: 'global_admin',
+      isActive: true
+    }
+  });
+  
+  if (globalAdmins.length === 0) {
+    console.log(`[Batch ${importId}] No global admins found, skipping summary email`);
+    return;
+  }
+  
+  // Count unallocated documents (those without company assignment)
+  const allocatedCount = batch.documents.length;
+  const unallocatedCount = batch.successfulJobs - allocatedCount;
+  
+  // Format processing time
+  const formatTime = (ms) => {
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+    return `${(ms / 60000).toFixed(1)}m`;
+  };
+  
+  // Build email content
+  const subject = `Import Summary: ${batch.successfulJobs} of ${batch.totalJobs} documents processed`;
+  
+  const htmlContent = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #206bc4; margin-bottom: 20px;">Import Batch Summary</h2>
+      
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+        <tr style="background: #f4f6fa;">
+          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Total Files</td>
+          <td style="padding: 12px; border: 1px solid #e0e0e0;">${batch.totalJobs}</td>
+        </tr>
+        <tr>
+          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600; color: #2fb344;">Successful</td>
+          <td style="padding: 12px; border: 1px solid #e0e0e0; color: #2fb344;">${batch.successfulJobs}</td>
+        </tr>
+        <tr style="background: #f4f6fa;">
+          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600; color: #d63939;">Failed</td>
+          <td style="padding: 12px; border: 1px solid #e0e0e0; color: #d63939;">${batch.failedJobs}</td>
+        </tr>
+        <tr>
+          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600; color: #206bc4;">Allocated (assigned to company)</td>
+          <td style="padding: 12px; border: 1px solid #e0e0e0; color: #206bc4;">${allocatedCount}</td>
+        </tr>
+        <tr style="background: #f4f6fa;">
+          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600; color: #f59f00;">Unallocated (no company)</td>
+          <td style="padding: 12px; border: 1px solid #e0e0e0; color: #f59f00;">${unallocatedCount}</td>
+        </tr>
+        <tr>
+          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">User Notifications Sent</td>
+          <td style="padding: 12px; border: 1px solid #e0e0e0;">${notificationsSent}</td>
+        </tr>
+        <tr style="background: #f4f6fa;">
+          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Processing Time</td>
+          <td style="padding: 12px; border: 1px solid #e0e0e0;">${formatTime(processingTime)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Source</td>
+          <td style="padding: 12px; border: 1px solid #e0e0e0;">${batch.source === 'ftp_scan' ? 'FTP/SFTP Scan' : batch.source === 'manual_upload' ? 'Manual Upload' : batch.source}</td>
+        </tr>
+      </table>
+      
+      ${unallocatedCount > 0 ? `
+      <div style="background: #fff3cd; border: 1px solid #f59f00; border-radius: 4px; padding: 12px; margin-bottom: 20px;">
+        <strong style="color: #856404;">Action Required:</strong> 
+        <span style="color: #856404;">${unallocatedCount} document(s) could not be matched to a company and are in the Unallocated queue.</span>
+      </div>
+      ` : ''}
+      
+      ${batch.failedJobs > 0 ? `
+      <div style="background: #f8d7da; border: 1px solid #d63939; border-radius: 4px; padding: 12px; margin-bottom: 20px;">
+        <strong style="color: #721c24;">Warning:</strong> 
+        <span style="color: #721c24;">${batch.failedJobs} document(s) failed to process. Check the activity logs for details.</span>
+      </div>
+      ` : ''}
+      
+      <p style="color: #667085; font-size: 12px; margin-top: 20px;">
+        Import ID: ${importId}<br>
+        Triggered by: ${batch.userEmail || 'System (scheduled scan)'}
+      </p>
+    </div>
+  `;
+  
+  // Send to each global admin
+  for (const admin of globalAdmins) {
+    try {
+      await sendEmail({
+        to: admin.email,
+        subject,
+        html: htmlContent,
+        text: `Import Summary\n\nTotal: ${batch.totalJobs}\nSuccessful: ${batch.successfulJobs}\nFailed: ${batch.failedJobs}\nAllocated: ${allocatedCount}\nUnallocated: ${unallocatedCount}\nProcessing Time: ${formatTime(processingTime)}`
+      });
+      console.log(`[Batch ${importId}] Admin summary sent to ${admin.email}`);
+    } catch (error) {
+      console.error(`[Batch ${importId}] Failed to send admin summary to ${admin.email}:`, error.message);
+    }
+  }
 }
 
 /**

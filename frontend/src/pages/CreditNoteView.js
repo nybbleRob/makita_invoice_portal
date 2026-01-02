@@ -632,6 +632,32 @@ const CreditNoteView = () => {
                         </div>
                       </div>
                     </div>
+                    {/* Invoice To field */}
+                    {creditNote?.metadata?.parsedData?.invoiceTo && (
+                      <div className="list-group-item px-0 py-2">
+                        <div className="d-flex flex-row align-items-start justify-content-between">
+                          <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>
+                            Invoice To
+                          </div>
+                          <div className="text-end" style={{ flex: 1, whiteSpace: 'pre-line' }}>
+                            {creditNote.metadata.parsedData.invoiceTo}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {/* Delivery Address field */}
+                    {creditNote?.metadata?.parsedData?.deliveryAddress && (
+                      <div className="list-group-item px-0 py-2">
+                        <div className="d-flex flex-row align-items-start justify-content-between">
+                          <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>
+                            Delivery Address
+                          </div>
+                          <div className="text-end" style={{ flex: 1, whiteSpace: 'pre-line' }}>
+                            {creditNote.metadata.parsedData.deliveryAddress}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <div className="list-group-item px-0 py-2">
                       <div className="d-flex flex-row align-items-center justify-content-between">
                         <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>
