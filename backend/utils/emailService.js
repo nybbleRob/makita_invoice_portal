@@ -92,6 +92,27 @@ function getEmailProviderConfig(settings) {
     };
   }
   
+  if (provider === 'mailtrap') {
+    // Use env vars for credentials, database for other config
+    const dbConfig = settings?.emailProvider?.mailtrap || {};
+    return {
+      enabled: settings?.emailProvider?.enabled || (process.env.MAILTRAP_USER ? true : false),
+      provider: 'mailtrap',
+      mailtrap: {
+        host: process.env.MAILTRAP_HOST || dbConfig.host || 'sandbox.smtp.mailtrap.io',
+        port: parseInt(process.env.MAILTRAP_PORT || dbConfig.port || '2525'),
+        secure: dbConfig.secure || false,
+        auth: {
+          user: process.env.MAILTRAP_USER || dbConfig.auth?.user || '',
+          password: process.env.MAILTRAP_PASSWORD || dbConfig.auth?.password || ''
+        },
+        fromEmail: process.env.MAILTRAP_FROM_EMAIL || dbConfig.fromEmail || '',
+        fromName: process.env.MAILTRAP_FROM_NAME || dbConfig.fromName || 'Makita Invoice Portal',
+        rejectUnauthorized: false
+      }
+    };
+  }
+  
   // Fallback to database if no env vars and database has config
   if (settings?.emailProvider?.enabled) {
     return settings.emailProvider;
@@ -139,6 +160,10 @@ async function sendEmail(options, settings) {
         break;
       case 'smtp2go':
         result = await sendViaSMTP2Go(options, providerConfig.smtp2go);
+        break;
+      case 'mailtrap':
+        // Mailtrap uses standard SMTP, reuse sendViaSMTP
+        result = await sendViaSMTP(options, providerConfig.mailtrap);
         break;
       default:
         throw new Error(`Unsupported email provider: ${provider}`);

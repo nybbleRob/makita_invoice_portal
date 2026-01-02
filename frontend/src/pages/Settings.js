@@ -1926,6 +1926,7 @@ const Settings = () => {
                           <option value="office365">Office 365 (Microsoft Graph)</option>
                           <option value="resend">Resend</option>
                           <option value="smtp2go">SMTP2Go</option>
+                          <option value="mailtrap">Mailtrap (Testing)</option>
                         </select>
                       </div>
 
@@ -2201,6 +2202,94 @@ const Settings = () => {
                                 placeholder="Makita Invoice Portal"
                                 disabled={!settings.emailProvider?.enabled}
                               />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Mailtrap Configuration */}
+                      {settings.emailProvider?.provider === 'mailtrap' && (
+                        <div className="card mt-3">
+                          <div className="card-body">
+                            <h4 className="card-title">Mailtrap Configuration</h4>
+                            <div className="alert alert-info">
+                              <strong>Setup Instructions:</strong> Get your SMTP credentials from your <a href="https://mailtrap.io/inboxes" target="_blank" rel="noopener noreferrer">Mailtrap Inbox</a> → SMTP Settings. Emails are captured in Mailtrap's web UI for testing.
+                            </div>
+                            <div className="row g-3">
+                              <div className="col-md-6">
+                                <label className="form-label">SMTP Host</label>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  value={settings.emailProvider?.mailtrap?.host || 'sandbox.smtp.mailtrap.io'}
+                                  onChange={(e) => handleEmailProviderNestedChange('mailtrap', 'host', e.target.value)}
+                                  placeholder="sandbox.smtp.mailtrap.io"
+                                  disabled={!settings.emailProvider?.enabled}
+                                />
+                                <small className="form-hint">Default: sandbox.smtp.mailtrap.io</small>
+                              </div>
+                              <div className="col-md-6">
+                                <label className="form-label">Port</label>
+                                <input
+                                  type="number"
+                                  className="form-control"
+                                  value={settings.emailProvider?.mailtrap?.port || 2525}
+                                  onChange={(e) => handleEmailProviderNestedChange('mailtrap', 'port', parseInt(e.target.value))}
+                                  disabled={!settings.emailProvider?.enabled}
+                                />
+                                <small className="form-hint">Default: 2525 (or 587 with STARTTLS)</small>
+                              </div>
+                            </div>
+                            <div className="row g-3 mt-2">
+                              <div className="col-md-6">
+                                <label className="form-label">Username</label>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  value={settings.emailProvider?.mailtrap?.auth?.user || ''}
+                                  onChange={(e) => handleEmailProviderNestedChange('mailtrap', 'auth', { ...settings.emailProvider?.mailtrap?.auth, user: e.target.value })}
+                                  placeholder="From Mailtrap SMTP Settings"
+                                  autoComplete="new-password"
+                                  disabled={!settings.emailProvider?.enabled}
+                                />
+                              </div>
+                              <div className="col-md-6">
+                                <label className="form-label">Password</label>
+                                <input
+                                  type="password"
+                                  className="form-control"
+                                  value={settings.emailProvider?.mailtrap?.auth?.password || ''}
+                                  onChange={(e) => handleEmailProviderNestedChange('mailtrap', 'auth', { ...settings.emailProvider?.mailtrap?.auth, password: e.target.value })}
+                                  placeholder="From Mailtrap SMTP Settings"
+                                  autoComplete="new-password"
+                                  disabled={!settings.emailProvider?.enabled}
+                                />
+                              </div>
+                            </div>
+                            <div className="row g-3 mt-2">
+                              <div className="col-md-6">
+                                <label className="form-label">From Email</label>
+                                <input
+                                  type="email"
+                                  className="form-control"
+                                  value={settings.emailProvider?.mailtrap?.fromEmail || ''}
+                                  onChange={(e) => handleEmailProviderNestedChange('mailtrap', 'fromEmail', e.target.value)}
+                                  placeholder="noreply@example.com"
+                                  disabled={!settings.emailProvider?.enabled}
+                                />
+                                <small className="form-hint">Any email address works in sandbox mode</small>
+                              </div>
+                              <div className="col-md-6">
+                                <label className="form-label">From Name</label>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  value={settings.emailProvider?.mailtrap?.fromName || 'Makita Invoice Portal'}
+                                  onChange={(e) => handleEmailProviderNestedChange('mailtrap', 'fromName', e.target.value)}
+                                  placeholder="Makita Invoice Portal"
+                                  disabled={!settings.emailProvider?.enabled}
+                                />
+                              </div>
                             </div>
                           </div>
                         </div>

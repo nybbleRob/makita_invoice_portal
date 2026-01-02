@@ -79,7 +79,7 @@ module.exports = (sequelize) => {
       type: DataTypes.JSONB,
       defaultValue: {
         enabled: false,
-        provider: 'smtp', // 'smtp', 'office365', 'resend', 'smtp2go'
+        provider: 'smtp', // 'smtp', 'office365', 'resend', 'smtp2go', 'mailtrap'
         testEmail: '', // Email address to use for test emails
         smtp: {
           host: '',
@@ -109,6 +109,18 @@ module.exports = (sequelize) => {
           apiKey: '',
           fromEmail: '', // Must be verified sender
           fromName: 'Makita Invoice Portal'
+        },
+        mailtrap: {
+          host: 'sandbox.smtp.mailtrap.io',
+          port: 2525,
+          secure: false,
+          auth: {
+            user: '',
+            password: ''
+          },
+          fromEmail: '',
+          fromName: 'Makita Invoice Portal',
+          rejectUnauthorized: false
         }
       }
     },
