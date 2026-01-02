@@ -666,16 +666,15 @@ router.post('/test-email', auth, globalAdmin, async (req, res) => {
 // Purge all documents (invoices, credit notes, statements) - Only Global Admins and Administrators
 // 
 // IMPORTANT: This ONLY deletes files in:
-//   - STORAGE_BASE/documents/invoices/
-//   - STORAGE_BASE/documents/credit_notes/
-//   - STORAGE_BASE/documents/statements/
+//   - Legacy: STORAGE_BASE/documents/invoices/, credit_notes/, statements/
+//   - New: /mnt/data/processed/invoices/, creditnotes/, statements/
+//   - Failed/Duplicates: /mnt/data/unprocessed/failed/, duplicates/
 //
 // PROTECTED (will NOT be deleted):
 //   - Branding files (logos, favicons) in STORAGE_BASE root
 //   - Templates in STORAGE_BASE/templates/
 //   - Avatars in STORAGE_BASE/avatars/
-//   - Test files in STORAGE_BASE/test/
-//   - Temp files in STORAGE_BASE/temp/
+//   - FTP upload folder (/mnt/data/invoice-portal/uploads/)
 //
 router.post('/purge-files', auth, async (req, res) => {
   try {
@@ -696,7 +695,7 @@ router.post('/purge-files', auth, async (req, res) => {
     
     const { Invoice, CreditNote, Statement, File } = require('../models');
     const { logActivity, ActivityType } = require('../services/activityLogger');
-    const { STORAGE_BASE } = require('../config/storage');
+    const { STORAGE_BASE, PROCESSED_BASE, UNPROCESSED_BASE } = require('../config/storage');
     const { Op } = require('sequelize');
     
     const deletionReason = reason.trim();
@@ -711,7 +710,7 @@ router.post('/purge-files', auth, async (req, res) => {
     let filesDeleted = 0;
     let filesFailed = 0;
     
-    // Helper function to delete file - ONLY deletes files in documents folders
+    // Helper function to delete file - ONLY deletes files in allowed folders
     const deleteFile = (fileUrl) => {
       if (!fileUrl) return false;
       
@@ -728,25 +727,43 @@ router.post('/purge-files', auth, async (req, res) => {
           }
         }
         
-        // SECURITY: Only delete files that are in the documents folder structure
+        // SECURITY: Only delete files that are in allowed folder structures
         // This prevents accidental deletion of branding files, templates, etc.
         const normalizedPath = path.normalize(filePath);
-        const documentsDir = path.join(STORAGE_BASE, 'documents');
-        const normalizedDocumentsDir = path.normalize(documentsDir);
         
-        // Check if file is within documents directory
-        if (!normalizedPath.startsWith(normalizedDocumentsDir + path.sep) && 
-            normalizedPath !== normalizedDocumentsDir) {
-          console.warn(`⚠️  Skipping file outside documents folder: ${filePath}`);
+        // Define all allowed directories for document purge
+        const legacyDocumentsDir = path.normalize(path.join(STORAGE_BASE, 'documents'));
+        const processedDir = path.normalize(PROCESSED_BASE);
+        const unprocessedDir = path.normalize(UNPROCESSED_BASE);
+        
+        // Check if file is within any allowed directory
+        const isInLegacyDocs = normalizedPath.startsWith(legacyDocumentsDir + path.sep);
+        const isInProcessed = normalizedPath.startsWith(processedDir + path.sep);
+        const isInUnprocessed = normalizedPath.startsWith(unprocessedDir + path.sep);
+        
+        if (!isInLegacyDocs && !isInProcessed && !isInUnprocessed) {
+          console.warn(`⚠️  Skipping file outside allowed folders: ${filePath}`);
           return false;
         }
         
-        // Additional check: ensure it's in invoices, credit_notes, or statements subfolder
-        const relativePath = path.relative(normalizedDocumentsDir, normalizedPath);
-        const firstSegment = relativePath.split(path.sep)[0];
-        if (!['invoices', 'credit_notes', 'statements'].includes(firstSegment)) {
-          console.warn(`⚠️  Skipping file not in document type folder: ${filePath}`);
-          return false;
+        // Additional check for legacy docs: ensure it's in invoices, credit_notes, or statements subfolder
+        if (isInLegacyDocs) {
+          const relativePath = path.relative(legacyDocumentsDir, normalizedPath);
+          const firstSegment = relativePath.split(path.sep)[0];
+          if (!['invoices', 'credit_notes', 'statements'].includes(firstSegment)) {
+            console.warn(`⚠️  Skipping file not in document type folder: ${filePath}`);
+            return false;
+          }
+        }
+        
+        // Additional check for processed: ensure it's in invoices, creditnotes, or statements subfolder
+        if (isInProcessed) {
+          const relativePath = path.relative(processedDir, normalizedPath);
+          const firstSegment = relativePath.split(path.sep)[0];
+          if (!['invoices', 'creditnotes', 'statements'].includes(firstSegment)) {
+            console.warn(`⚠️  Skipping file not in document type folder: ${filePath}`);
+            return false;
+          }
         }
         
         if (fs.existsSync(filePath)) {
