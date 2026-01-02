@@ -78,12 +78,30 @@ async function getNotificationRecipients(companyId, notificationType) {
     }
   }
   
-  // Get all users assigned to this company
+  // Get all ancestor company IDs (parents up the hierarchy)
+  // Users assigned to a parent company should also receive notifications for child company documents
+  const ancestorIds = [companyId];
+  if (company.parentId) {
+    // Walk up the hierarchy to find all ancestors
+    let currentParentId = company.parentId;
+    const maxDepth = 10; // Prevent infinite loops
+    let depth = 0;
+    while (currentParentId && depth < maxDepth) {
+      ancestorIds.push(currentParentId);
+      const parentCompany = await Company.findByPk(currentParentId, { attributes: ['id', 'parentId'] });
+      currentParentId = parentCompany?.parentId;
+      depth++;
+    }
+  }
+  
+  console.log(`[NotificationService]    Checking users assigned to company and ${ancestorIds.length - 1} ancestor(s)`);
+  
+  // Get all users assigned to this company OR any of its parent companies
   const assignedUsers = await User.findAll({
     include: [{
       model: Company,
       as: 'companies',
-      where: { id: companyId },
+      where: { id: { [Op.in]: ancestorIds } },
       through: { attributes: [] }
     }],
     where: {
