@@ -88,8 +88,11 @@ function classifySmtpError(error) {
 async function processEmailJob(job) {
   const { emailLogId, to, subject, html, text, attachments, settings, metadata } = job.data;
   
+  // Debug: log provider from job settings to trace email routing issues
+  console.log(`[EmailJob ${job.id}] Settings provider: ${settings?.emailProvider?.provider || 'NOT SET IN JOB DATA'}`);
+  
   // Log start (no body content)
-  console.log(`📧 [${job.id}] Processing email to=${to} subject="${subject}"`);
+  console.log(`[EmailJob ${job.id}] Processing email to=${to} subject="${subject}"`);
   
   // If we have an emailLogId, check for idempotency
   let emailLog = null;

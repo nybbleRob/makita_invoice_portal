@@ -20,6 +20,15 @@ function getEmailProviderConfig(settings) {
   // Use database provider if set, otherwise fall back to env or default to 'smtp'
   const provider = dbProvider || envProvider || 'smtp';
   
+  // Debug logging to trace provider selection
+  console.log('[EmailService] Provider selection:', {
+    dbProvider: dbProvider || 'NOT SET',
+    envProvider: envProvider || 'NOT SET',
+    finalProvider: provider,
+    hasEmailProvider: !!settings?.emailProvider,
+    emailProviderKeys: settings?.emailProvider ? Object.keys(settings.emailProvider) : []
+  });
+  
   // If database has a provider configured, use it (respect database settings)
   // Only use env provider if database doesn't specify one
   if (provider === 'smtp') {
