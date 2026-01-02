@@ -48,6 +48,8 @@ const Companies = () => {
   const [loadingModalRelationships, setLoadingModalRelationships] = useState({});
   const [showRelationshipsModal, setShowRelationshipsModal] = useState(false);
   const [selectedCompanyForRelationships, setSelectedCompanyForRelationships] = useState(null);
+  const [relationshipsPage, setRelationshipsPage] = useState(1);
+  const RELATIONSHIPS_PER_PAGE = 20;
   
   // Confirmation modal states
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -909,6 +911,7 @@ const Companies = () => {
   const handleViewRelationshipsModal = async (company) => {
     setSelectedCompanyForRelationships(company);
     setShowRelationshipsModal(true);
+    setRelationshipsPage(1); // Reset pagination when opening modal
     // Lazy load relationships when modal opens
     if (!modalRelationships[company.id]) {
       await loadModalRelationships(company.id);
@@ -1074,6 +1077,22 @@ const Companies = () => {
                               {needsParent && (
                                 <div className="mb-3">
                                   <label className={`form-label ${!isEditing ? 'required' : ''}`}>Parent Company</label>
+                                  
+                                  {/* Show current parent when editing */}
+                                  {isEditing && editingCompany?.parent && (
+                                    <div className="alert alert-info py-2 mb-2 d-flex align-items-center justify-content-between">
+                                      <div>
+                                        <strong>Current Parent:</strong> {editingCompany.parent.name}
+                                        {editingCompany.parent.referenceNo && (
+                                          <span className="text-muted ms-2">({editingCompany.parent.referenceNo})</span>
+                                        )}
+                                      </div>
+                                      <span className={`badge ${getTypeBadgeClass(editingCompany.parent.type)}`}>
+                                        {getTypeLabel(editingCompany.parent.type)}
+                                      </span>
+                                    </div>
+                                  )}
+                                  
                                   <div className="input-group mb-2">
                                     <span className="input-group-text">
                                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"/><path d="M21 21l-6-6"/></svg>
@@ -1617,10 +1636,21 @@ const Companies = () => {
                         style={{ width: '70px' }}
                         min="1"
                         max={pagination.pages}
-                        value={pagination.page}
-                        onChange={(e) => {
+                        defaultValue={pagination.page}
+                        key={pagination.page} // Reset input when page changes externally
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const page = parseInt(e.target.value);
+                            if (page >= 1 && page <= pagination.pages) {
+                              setPagination(prev => ({ ...prev, page }));
+                            }
+                            e.target.blur();
+                          }
+                        }}
+                        onBlur={(e) => {
                           const page = parseInt(e.target.value);
-                          if (page >= 1 && page <= pagination.pages) {
+                          if (page >= 1 && page <= pagination.pages && page !== pagination.page) {
                             setPagination(prev => ({ ...prev, page }));
                           }
                         }}
@@ -1795,6 +1825,13 @@ const Companies = () => {
           .map(Number)
           .sort((a, b) => a - b);
         
+        // Flatten all relationships for pagination
+        const allRelationships = sortedLevels.flatMap(level => groupedByLevel[level]);
+        const totalRelationships = allRelationships.length;
+        const totalPages = Math.ceil(totalRelationships / RELATIONSHIPS_PER_PAGE);
+        const startIndex = (relationshipsPage - 1) * RELATIONSHIPS_PER_PAGE;
+        const paginatedRelationships = allRelationships.slice(startIndex, startIndex + RELATIONSHIPS_PER_PAGE);
+        
         return (
           <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
             <div className="modal-dialog modal-dialog-centered modal-xl">
@@ -1817,26 +1854,25 @@ const Companies = () => {
                         <span className="visually-hidden">Loading...</span>
                       </div>
                     </div>
-                  ) : sortedLevels.length === 0 ? (
+                  ) : allRelationships.length === 0 ? (
                     <div className="text-center text-muted py-4">
                       <p>No relationships found.</p>
                     </div>
                   ) : (
-                    <div className="table-responsive">
-                      <table className="table table-vcenter">
-                        <thead>
-                          <tr>
-                            <th>Company Name</th>
-                            <th>Company Number</th>
-                            <th>Type</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sortedLevels.map((level) => {
-                            const levelCompanies = groupedByLevel[level];
-                            return levelCompanies.map((rel) => (
+                    <>
+                      <div className="table-responsive">
+                        <table className="table table-vcenter">
+                          <thead>
+                            <tr>
+                              <th>Company Name</th>
+                              <th>Company Number</th>
+                              <th>Type</th>
+                              <th>Status</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginatedRelationships.map((rel) => (
                               <tr key={rel.id}>
                                 <td className="fw-medium">{rel.name}</td>
                                 <td>{rel.referenceNo || '-'}</td>
@@ -1874,11 +1910,39 @@ const Companies = () => {
                                   </div>
                                 </td>
                               </tr>
-                            ));
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      
+                      {/* Pagination for relationships */}
+                      {totalPages > 1 && (
+                        <div className="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
+                          <div className="text-muted">
+                            Showing {startIndex + 1} to {Math.min(startIndex + RELATIONSHIPS_PER_PAGE, totalRelationships)} of {totalRelationships} relationships
+                          </div>
+                          <div className="d-flex gap-2">
+                            <button
+                              className="btn btn-sm btn-outline-primary"
+                              onClick={() => setRelationshipsPage(prev => prev - 1)}
+                              disabled={relationshipsPage === 1}
+                            >
+                              Previous
+                            </button>
+                            <span className="d-flex align-items-center text-muted">
+                              Page {relationshipsPage} of {totalPages}
+                            </span>
+                            <button
+                              className="btn btn-sm btn-outline-primary"
+                              onClick={() => setRelationshipsPage(prev => prev + 1)}
+                              disabled={relationshipsPage >= totalPages}
+                            >
+                              Next
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
                 <div className="modal-footer">
@@ -1990,14 +2054,14 @@ const Companies = () => {
                 {parentFilterPages > 1 && (
                   <div className="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
                     <small className="text-muted">
-                      Showing {parentFilterCompanies.length} of {parentFilterTotal} companies
+                      Showing {((parentFilterPage - 1) * 20) + 1} to {Math.min(parentFilterPage * 20, parentFilterTotal)} of {parentFilterTotal} companies
                     </small>
                     <div className="btn-group">
                       <button
                         type="button"
                         className="btn btn-sm btn-outline-secondary"
                         disabled={parentFilterPage <= 1 || parentFilterLoading}
-                        onClick={() => fetchParentFilterCompanies(parentFilterSearch, parentFilterPage - 1)}
+                        onClick={() => fetchParentFilterCompanies(debouncedParentFilterSearch, parentFilterPage - 1)}
                       >
                         Previous
                       </button>
@@ -2008,7 +2072,7 @@ const Companies = () => {
                         type="button"
                         className="btn btn-sm btn-outline-secondary"
                         disabled={parentFilterPage >= parentFilterPages || parentFilterLoading}
-                        onClick={() => fetchParentFilterCompanies(parentFilterSearch, parentFilterPage + 1)}
+                        onClick={() => fetchParentFilterCompanies(debouncedParentFilterSearch, parentFilterPage + 1)}
                       >
                         Next
                       </button>
