@@ -7,6 +7,7 @@ const { Invoice, Company, Sequelize, Settings, DocumentQuery, sequelize } = requ
 const { Op } = Sequelize;
 const auth = require('../middleware/auth');
 const { checkDocumentAccess, buildCompanyFilter } = require('../middleware/documentAccess');
+const { getDescendantCompanyIds } = require('../utils/companyHierarchy');
 const { invoiceImportQueue } = require('../config/queue');
 const { ensureStorageDirs, getStorageDir } = require('../config/storage');
 const { logActivity, ActivityType } = require('../services/activityLogger');
@@ -79,14 +80,26 @@ router.get('/', async (req, res) => {
     }
     
     // Company filter - support both single and multiple IDs
+    // IMPORTANT: Expand parent company IDs to include all descendants (branches)
     if (companyIds) {
       // Handle comma-separated string or array
       const ids = Array.isArray(companyIds) ? companyIds : companyIds.split(',').map(id => id.trim()).filter(id => id);
       if (ids.length > 0) {
-        whereConditions.companyId = { [Op.in]: ids };
+        // Expand each company ID to include its descendants (for parent companies)
+        const expandedIds = new Set();
+        for (const id of ids) {
+          expandedIds.add(id);
+          const descendants = await getDescendantCompanyIds(id, false);
+          descendants.forEach(d => expandedIds.add(d));
+        }
+        whereConditions.companyId = { [Op.in]: Array.from(expandedIds) };
       }
     } else if (companyId) {
-      whereConditions.companyId = companyId;
+      // Single company ID - also expand to include descendants
+      const expandedIds = new Set([companyId]);
+      const descendants = await getDescendantCompanyIds(companyId, false);
+      descendants.forEach(d => expandedIds.add(d));
+      whereConditions.companyId = { [Op.in]: Array.from(expandedIds) };
     }
     
     if (startDate || endDate) {

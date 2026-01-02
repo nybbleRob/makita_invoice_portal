@@ -4,6 +4,7 @@ const { calculateDocumentRetentionDates } = require('../utils/documentRetention'
 const { Op } = Sequelize;
 const auth = require('../middleware/auth');
 const { checkDocumentAccess, buildCompanyFilter } = require('../middleware/documentAccess');
+const { getDescendantCompanyIds } = require('../utils/companyHierarchy');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const router = express.Router();
 
@@ -14,16 +15,34 @@ router.use(checkDocumentAccess);
 // Get all statements (filtered by user's accessible companies)
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 50, search = '', companyId, status, startDate, endDate } = req.query;
+    const { page = 1, limit = 50, search = '', companyId, companyIds, status, startDate, endDate } = req.query;
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const offset = (pageNum - 1) * limitNum;
     
     const whereConditions = buildCompanyFilter(req.accessibleCompanyIds);
     
-    // Additional filters
-    if (companyId) {
-      whereConditions.companyId = companyId;
+    // Company filter - support both single and multiple IDs
+    // IMPORTANT: Expand parent company IDs to include all descendants (branches)
+    if (companyIds) {
+      // Handle comma-separated string or array
+      const ids = Array.isArray(companyIds) ? companyIds : companyIds.split(',').map(id => id.trim()).filter(id => id);
+      if (ids.length > 0) {
+        // Expand each company ID to include its descendants (for parent companies)
+        const expandedIds = new Set();
+        for (const id of ids) {
+          expandedIds.add(id);
+          const descendants = await getDescendantCompanyIds(id, false);
+          descendants.forEach(d => expandedIds.add(d));
+        }
+        whereConditions.companyId = { [Op.in]: Array.from(expandedIds) };
+      }
+    } else if (companyId) {
+      // Single company ID - also expand to include descendants
+      const expandedIds = new Set([companyId]);
+      const descendants = await getDescendantCompanyIds(companyId, false);
+      descendants.forEach(d => expandedIds.add(d));
+      whereConditions.companyId = { [Op.in]: Array.from(expandedIds) };
     }
     
     if (status) {
