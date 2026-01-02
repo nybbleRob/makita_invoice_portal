@@ -3,6 +3,7 @@ import api from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { useDebounce } from '../hooks/useDebounce';
+import HierarchicalCompanyFilter from '../components/HierarchicalCompanyFilter';
 
 const ActivityLogs = () => {
   const { user } = useAuth();
@@ -36,7 +37,8 @@ const ActivityLogs = () => {
   
   const [searchQuery, setSearchQuery] = useState('');
   const [userFilter, setUserFilter] = useState('');
-  const [companyFilter, setCompanyFilter] = useState('');
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
+  const [showCompanyFilterModal, setShowCompanyFilterModal] = useState(false);
   const [roleFilter, setRoleFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [dateRangePreset, setDateRangePreset] = useState('7'); // Default to 7 days
@@ -104,7 +106,7 @@ const ActivityLogs = () => {
       
       if (debouncedSearch) params.append('search', debouncedSearch);
       if (userFilter) params.append('userId', userFilter);
-      if (companyFilter) params.append('companyId', companyFilter);
+      if (selectedCompanyIds.length > 0) params.append('companyIds', selectedCompanyIds.join(','));
       if (roleFilter) params.append('role', roleFilter);
       if (typeFilter) params.append('type', typeFilter);
       if (startDate) params.append('startDate', startDate);
@@ -119,7 +121,7 @@ const ActivityLogs = () => {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, userFilter, companyFilter, roleFilter, typeFilter, startDate, endDate, pagination.limit]);
+  }, [debouncedSearch, userFilter, selectedCompanyIds, roleFilter, typeFilter, startDate, endDate, pagination.limit]);
   
   // Fetch filter options
   const fetchFilterOptions = async () => {
@@ -489,16 +491,15 @@ const ActivityLogs = () => {
                 
                 <div className="col-md-2">
                   <label className="form-label">Company</label>
-                  <select
-                    className="form-select"
-                    value={companyFilter}
-                    onChange={(e) => setCompanyFilter(e.target.value)}
+                  <button
+                    type="button"
+                    className={`btn w-100 ${selectedCompanyIds.length > 0 ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setShowCompanyFilterModal(true)}
                   >
-                    <option value="">All Companies</option>
-                    {companies.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                    {selectedCompanyIds.length === 0 
+                      ? 'All Companies' 
+                      : `${selectedCompanyIds.length} Selected`}
+                  </button>
                 </div>
                 
                 <div className="col-md-2">
@@ -1101,6 +1102,19 @@ const ActivityLogs = () => {
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Company Filter Modal */}
+      {showCompanyFilterModal && (
+        <HierarchicalCompanyFilter
+          selectedCompanyIds={selectedCompanyIds}
+          onSelectionChange={(ids) => {
+            setSelectedCompanyIds(ids);
+            setPagination(prev => ({ ...prev, page: 1 }));
+          }}
+          onClose={() => setShowCompanyFilterModal(false)}
+          onApply={() => setShowCompanyFilterModal(false)}
+        />
       )}
     </div>
   );
