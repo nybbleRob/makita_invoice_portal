@@ -405,6 +405,7 @@ const HierarchicalCompanyFilter = ({
               Apply Filter ({tempSelectedIds.size} selected)
             </button>
           </div>
+          </div>
         </div>
       </div>
     </>
