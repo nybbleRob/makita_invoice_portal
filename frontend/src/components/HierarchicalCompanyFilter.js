@@ -88,35 +88,47 @@ const HierarchicalCompanyFilter = ({
     return [String(node.id), ...getDescendantIds(node)];
   }, [getDescendantIds]);
 
-  // Check selection state for a node
+  // Check selection state for a node (simple check - no cascade logic for display)
   const getSelectionState = useCallback((node) => {
     const nodeIdStr = String(node.id);
-    const isSelected = tempSelectedIds.has(nodeIdStr);
-    
-    if (!node.children || node.children.length === 0) {
-      return isSelected ? 'checked' : 'unchecked';
-    }
-    
+    return tempSelectedIds.has(nodeIdStr) ? 'checked' : 'unchecked';
+  }, [tempSelectedIds]);
+
+  // Check if any children are selected (for showing indicator)
+  const hasSelectedChildren = useCallback((node) => {
+    if (!node.children || node.children.length === 0) return false;
     const descendantIds = getDescendantIds(node);
-    const selectedDescendants = descendantIds.filter(id => tempSelectedIds.has(id));
-    
-    if (isSelected && selectedDescendants.length === descendantIds.length) {
-      return 'checked';
-    } else if (selectedDescendants.length > 0 || isSelected) {
-      return 'indeterminate';
-    }
-    return 'unchecked';
+    return descendantIds.some(id => tempSelectedIds.has(id));
   }, [tempSelectedIds, getDescendantIds]);
 
-  // Toggle a company selection (cascade to children)
+  // Toggle a single company selection (no cascade)
   const toggleSelection = useCallback((node) => {
-    const subtreeIds = getSubtreeIds(node);
-    const currentState = getSelectionState(node);
+    const nodeIdStr = String(node.id);
     
     setTempSelectedIds(prev => {
       const next = new Set(prev);
       
-      if (currentState === 'checked') {
+      if (next.has(nodeIdStr)) {
+        next.delete(nodeIdStr);
+      } else {
+        next.add(nodeIdStr);
+      }
+      
+      return next;
+    });
+  }, []);
+
+  // Toggle selection for node AND all its children (cascade)
+  const toggleWithChildren = useCallback((node, e) => {
+    e.stopPropagation();
+    const subtreeIds = getSubtreeIds(node);
+    const nodeIdStr = String(node.id);
+    const isCurrentlySelected = tempSelectedIds.has(nodeIdStr);
+    
+    setTempSelectedIds(prev => {
+      const next = new Set(prev);
+      
+      if (isCurrentlySelected) {
         // Uncheck all in subtree
         subtreeIds.forEach(id => next.delete(id));
       } else {
@@ -126,7 +138,7 @@ const HierarchicalCompanyFilter = ({
       
       return next;
     });
-  }, [getSubtreeIds, getSelectionState]);
+  }, [getSubtreeIds, tempSelectedIds]);
 
   // Toggle expand/collapse
   const toggleExpand = useCallback((nodeId, e) => {
@@ -210,7 +222,8 @@ const HierarchicalCompanyFilter = ({
   const renderNode = (node, level = 0) => {
     const hasChildren = node.children && node.children.length > 0;
     const isExpanded = expandedIds.has(String(node.id));
-    const selectionState = getSelectionState(node);
+    const isSelected = getSelectionState(node) === 'checked';
+    const childrenSelected = hasSelectedChildren(node);
     const indent = level * 24;
     
     // Type badge colors
@@ -223,7 +236,7 @@ const HierarchicalCompanyFilter = ({
     return (
       <div key={node.id}>
         <div 
-          className={`d-flex align-items-center py-2 px-2 border-bottom ${selectionState !== 'unchecked' ? 'bg-primary-lt' : ''}`}
+          className={`d-flex align-items-center py-2 px-2 border-bottom ${isSelected ? 'bg-primary-lt' : childrenSelected ? 'bg-azure-lt' : ''}`}
           style={{ 
             paddingLeft: `${8 + indent}px`,
             cursor: 'pointer'
@@ -264,12 +277,7 @@ const HierarchicalCompanyFilter = ({
           <input
             type="checkbox"
             className="form-check-input me-2"
-            checked={selectionState === 'checked'}
-            ref={el => {
-              if (el) {
-                el.indeterminate = selectionState === 'indeterminate';
-              }
-            }}
+            checked={isSelected}
             onChange={() => toggleSelection(node)}
             onClick={(e) => e.stopPropagation()}
           />
@@ -289,9 +297,27 @@ const HierarchicalCompanyFilter = ({
             {node.type}
           </span>
           
+          {/* Select all children button */}
+          {hasChildren && (
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost-primary p-0 ms-2"
+              onClick={(e) => toggleWithChildren(node, e)}
+              title="Select/deselect with all children"
+              style={{ width: '24px', height: '24px' }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            </button>
+          )}
+          
           {/* Children count */}
           {hasChildren && (
-            <small className="text-muted ms-2">({node.children.length})</small>
+            <small className="text-muted ms-1">({node.children.length})</small>
           )}
         </div>
         

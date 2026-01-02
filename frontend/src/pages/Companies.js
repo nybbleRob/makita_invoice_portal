@@ -669,6 +669,7 @@ const Companies = () => {
     const formData = {
       name: company.name || '',
       referenceNo: company.referenceNo || '',
+      type: company.type || 'CORP', // Include type for editing
       edi: company.edi || false,
       globalSystemEmail: company.globalSystemEmail || '',
       primaryContactId: company.primaryContactId || null,
@@ -719,7 +720,7 @@ const Companies = () => {
       setCreating(true);
       const payload = {
         name: corporateFormData.name.trim(),
-        type: 'CORP',
+        type: editingCompany ? (corporateFormData.type || 'CORP') : 'CORP',
         referenceNo: corporateFormData.referenceNo ? parseInt(corporateFormData.referenceNo) : null,
         edi: corporateFormData.edi,
         globalSystemEmail: corporateFormData.globalSystemEmail || null,
@@ -732,6 +733,11 @@ const Companies = () => {
         isActive: editingCompany ? corporateFormData.isActive : true,
         address: corporateFormData.address
       };
+
+      // If type was changed to SUB or BRANCH, include parentId
+      if (editingCompany && corporateFormData.type !== 'CORP' && corporateFormData.parentId) {
+        payload.parentId = corporateFormData.parentId;
+      }
 
       if (editingCompany) {
         await api.put(`/api/companies/${editingCompany.id}`, payload);
@@ -764,9 +770,10 @@ const Companies = () => {
 
     try {
       setCreating(true);
+      const currentType = editingCompany ? (branchFormData.type || 'BRANCH') : 'BRANCH';
       const payload = {
         name: branchFormData.name.trim(),
-        type: 'BRANCH',
+        type: currentType,
         referenceNo: branchFormData.referenceNo ? parseInt(branchFormData.referenceNo) : null,
         edi: branchFormData.edi,
         globalSystemEmail: branchFormData.globalSystemEmail || null,
@@ -781,12 +788,14 @@ const Companies = () => {
       };
 
       if (editingCompany) {
-        // Only update parentId if it's being changed
-        if (branchFormData.parentId !== editingCompany.parentId) {
+        // Include parentId if type requires it, or clear it if changing to CORP
+        if (currentType !== 'CORP' && branchFormData.parentId !== editingCompany.parentId) {
           payload.parentId = branchFormData.parentId;
+        } else if (currentType === 'CORP') {
+          payload.parentId = null;
         }
         await api.put(`/api/companies/${editingCompany.id}`, payload);
-        toast.success('Branch updated successfully!');
+        toast.success('Company updated successfully!');
       } else {
         payload.parentId = branchFormData.parentId;
         await api.post('/api/companies', payload);
@@ -816,9 +825,10 @@ const Companies = () => {
 
     try {
       setCreating(true);
+      const currentType = editingCompany ? (subsidiaryFormData.type || 'SUB') : 'SUB';
       const payload = {
         name: subsidiaryFormData.name.trim(),
-        type: 'SUB',
+        type: currentType,
         referenceNo: subsidiaryFormData.referenceNo ? parseInt(subsidiaryFormData.referenceNo) : null,
         edi: subsidiaryFormData.edi,
         globalSystemEmail: subsidiaryFormData.globalSystemEmail || null,
@@ -833,12 +843,14 @@ const Companies = () => {
       };
 
       if (editingCompany) {
-        // Only update parentId if it's being changed
-        if (subsidiaryFormData.parentId !== editingCompany.parentId) {
+        // Include parentId if type requires it, or clear it if changing to CORP
+        if (currentType !== 'CORP' && subsidiaryFormData.parentId !== editingCompany.parentId) {
           payload.parentId = subsidiaryFormData.parentId;
+        } else if (currentType === 'CORP') {
+          payload.parentId = null;
         }
         await api.put(`/api/companies/${editingCompany.id}`, payload);
-        toast.success('Subsidiary updated successfully!');
+        toast.success('Company updated successfully!');
       } else {
         payload.parentId = subsidiaryFormData.parentId;
         await api.post('/api/companies', payload);
@@ -918,10 +930,12 @@ const Companies = () => {
   };
 
   const renderModal = (type, show, onClose, formData, setFormData, onSubmit, resetForm) => {
-    const isBranch = type === 'BRANCH';
-    const isSubsidiary = type === 'SUB';
-    const needsParent = isBranch || isSubsidiary;
+    // When editing, use the type from formData (which can be changed), otherwise use the modal's type
     const isEditing = !!editingCompany;
+    const currentType = isEditing && formData.type ? formData.type : type;
+    const isBranch = currentType === 'BRANCH';
+    const isSubsidiary = currentType === 'SUB';
+    const needsParent = isBranch || isSubsidiary;
     const title = isEditing 
       ? (isBranch ? 'Edit Branch' : isSubsidiary ? 'Edit Subsidiary' : 'Edit Corporate Company')
       : (isBranch ? 'Add Branch' : isSubsidiary ? 'Add Subsidiary' : 'Add Corporate Company');
@@ -1017,22 +1031,55 @@ const Companies = () => {
                                 </label>
                               </div>
                               {isEditing && (
-                                <div className="mb-3">
-                                  <label className="row">
-                                    <span className="col">Active Status</span>
-                                    <span className="col-auto">
-                                      <label className="form-check form-check-single form-switch">
-                                        <input
-                                          type="checkbox"
-                                          className="form-check-input"
-                                          checked={formData.isActive}
-                                          onChange={(e) => setFormData(prev => ({ ...prev, isActive: e.target.checked }))}
-                                        />
-                                      </label>
-                                    </span>
-                                  </label>
-                                  <small className="form-hint">Toggle to activate or deactivate this company</small>
-                                </div>
+                                <>
+                                  <div className="mb-3">
+                                    <label className="row">
+                                      <span className="col">Active Status</span>
+                                      <span className="col-auto">
+                                        <label className="form-check form-check-single form-switch">
+                                          <input
+                                            type="checkbox"
+                                            className="form-check-input"
+                                            checked={formData.isActive}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, isActive: e.target.checked }))}
+                                          />
+                                        </label>
+                                      </span>
+                                    </label>
+                                    <small className="form-hint">Toggle to activate or deactivate this company</small>
+                                  </div>
+                                  {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && (
+                                    <div className="mb-3">
+                                      <label className="form-label">Company Type</label>
+                                      <select
+                                        className="form-select"
+                                        value={formData.type || currentType}
+                                        onChange={(e) => {
+                                          const newType = e.target.value;
+                                          setFormData(prev => ({ 
+                                            ...prev, 
+                                            type: newType,
+                                            // Clear parentId if changing to CORP
+                                            parentId: newType === 'CORP' ? null : prev.parentId
+                                          }));
+                                          // Fetch parent companies if changing to SUB/BRANCH
+                                          if (newType !== 'CORP') {
+                                            fetchParentCompanies(1);
+                                          }
+                                        }}
+                                      >
+                                        <option value="CORP">Corporate (CORP)</option>
+                                        <option value="SUB">Subsidiary (SUB)</option>
+                                        <option value="BRANCH">Branch (BRANCH)</option>
+                                      </select>
+                                      <small className="form-hint">
+                                        {currentType === 'CORP' && 'Top-level company with no parent'}
+                                        {currentType === 'SUB' && 'Subsidiary of a corporate company'}
+                                        {currentType === 'BRANCH' && 'Branch of a corporate or subsidiary company'}
+                                      </small>
+                                    </div>
+                                  )}
+                                </>
                               )}
                             </div>
                             
