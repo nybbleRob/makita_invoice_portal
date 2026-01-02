@@ -6,6 +6,7 @@ const { Company, Sequelize, ImportTransaction, User, UserCompany, sequelize } = 
 const { Op } = Sequelize;
 const auth = require('../middleware/auth');
 const globalAdmin = require('../middleware/globalAdmin');
+const { checkDocumentAccess, buildCompanyFilter } = require('../middleware/documentAccess');
 const { updateNestedSetIndexes } = require('../utils/nestedSet');
 const { redis } = require('../config/redis');
 const { logActivity, ActivityType } = require('../services/activityLogger');
@@ -191,7 +192,7 @@ router.get('/parents', auth, async (req, res) => {
 });
 
 // Get all companies
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, checkDocumentAccess, async (req, res) => {
   try {
     const { type, search, isActive, page, limit } = req.query;
     
@@ -202,6 +203,25 @@ router.get('/', auth, async (req, res) => {
     const offset = usePagination ? (pageNum - 1) * limitNum : 0;
     
     const where = {};
+    
+    // Apply company access filter for non-admin users
+    // If accessibleCompanyIds is null, user can see all companies
+    // If accessibleCompanyIds is an array, filter by those company IDs
+    if (req.accessibleCompanyIds !== null) {
+      if (req.accessibleCompanyIds.length === 0) {
+        // User has no companies assigned - return empty result
+        return res.json({
+          data: [],
+          pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total: 0,
+            pages: 0
+          }
+        });
+      }
+      where.id = { [Op.in]: req.accessibleCompanyIds };
+    }
     
     if (type && ['CORP', 'SUB', 'BRANCH'].includes(type)) {
       where.type = type;
