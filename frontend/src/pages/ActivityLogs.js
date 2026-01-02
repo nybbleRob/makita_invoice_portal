@@ -367,7 +367,7 @@ const ActivityLogs = () => {
   const resetFilters = () => {
     setSearchQuery('');
     setUserFilter('');
-    setCompanyFilter('');
+    setSelectedCompanyIds([]);
     setRoleFilter('');
     setTypeFilter('');
     setDateRangePreset('7');
