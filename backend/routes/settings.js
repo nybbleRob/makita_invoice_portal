@@ -1099,12 +1099,60 @@ router.post('/purge-files', auth, async (req, res) => {
       userAgent: req.get('user-agent')
     });
     
+    // NUKE actual folder contents (catch any orphan files not in database)
+    let folderFilesDeleted = 0;
+    const nukeFolderContents = (folderPath, recursive = true) => {
+      if (!fs.existsSync(folderPath)) return 0;
+      let count = 0;
+      const items = fs.readdirSync(folderPath);
+      for (const item of items) {
+        const itemPath = path.join(folderPath, item);
+        const stat = fs.statSync(itemPath);
+        if (stat.isDirectory() && recursive) {
+          count += nukeFolderContents(itemPath, true);
+          // Remove empty directories
+          try {
+            if (fs.readdirSync(itemPath).length === 0) {
+              fs.rmdirSync(itemPath);
+            }
+          } catch (e) { /* ignore */ }
+        } else if (stat.isFile()) {
+          try {
+            fs.unlinkSync(itemPath);
+            count++;
+          } catch (e) {
+            console.error(`   ⚠️  Failed to delete orphan file: ${itemPath}`);
+          }
+        }
+      }
+      return count;
+    };
+    
+    // Clear /mnt/data/processed folders
+    console.log('🗑️  Nuking processed folders...');
+    folderFilesDeleted += nukeFolderContents(path.join(PROCESSED_BASE, 'invoices'));
+    folderFilesDeleted += nukeFolderContents(path.join(PROCESSED_BASE, 'creditnotes'));
+    folderFilesDeleted += nukeFolderContents(path.join(PROCESSED_BASE, 'statements'));
+    
+    // Clear /mnt/data/unprocessed folders
+    console.log('🗑️  Nuking unprocessed folders...');
+    folderFilesDeleted += nukeFolderContents(path.join(UNPROCESSED_BASE, 'failed'));
+    folderFilesDeleted += nukeFolderContents(path.join(UNPROCESSED_BASE, 'duplicates'));
+    
+    // Clear legacy documents folder if exists
+    const legacyDocsPath = path.join(STORAGE_BASE, 'documents');
+    if (fs.existsSync(legacyDocsPath)) {
+      console.log('🗑️  Nuking legacy documents folder...');
+      folderFilesDeleted += nukeFolderContents(legacyDocsPath);
+    }
+    
     console.log(`\n📊 File Purge Summary:`);
     console.log(`   ✅ Invoices deleted: ${invoicesDeleted}`);
     console.log(`   ✅ Credit notes deleted: ${creditNotesDeleted}`);
     console.log(`   ✅ Statements deleted: ${statementsDeleted}`);
     console.log(`   ✅ Unallocated File records deleted: ${unallocatedFilesDeleted}`);
-    console.log(`   ✅ Physical files deleted: ${filesDeleted}`);
+    console.log(`   ✅ Physical files deleted (from DB): ${filesDeleted}`);
+    console.log(`   ✅ Orphan files nuked from folders: ${folderFilesDeleted}`);
     console.log(`   ⚠️  Files failed: ${filesFailed}`);
     console.log(`   👤 Purged by: ${req.user.email} (${deletedBy})`);
     console.log(`   📝 Reason: ${deletionReason}\n`);
@@ -1116,6 +1164,7 @@ router.post('/purge-files', auth, async (req, res) => {
       statementsDeleted,
       unallocatedFilesDeleted,
       filesDeleted,
+      folderFilesDeleted,
       filesFailed,
       purgedAt: deletedAt.toISOString()
     });

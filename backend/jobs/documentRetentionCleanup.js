@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
 const { logActivity, ActivityType } = require('../services/activityLogger');
+const { STORAGE_BASE, PROCESSED_BASE, UNPROCESSED_BASE } = require('../config/storage');
 
 /**
  * Clean up expired documents based on retention policy
@@ -214,7 +215,15 @@ async function hardDeleteDocument(document, documentType, settings) {
         // Handle both absolute paths and relative paths
         let filePath = fileUrl;
         if (!path.isAbsolute(fileUrl)) {
-          filePath = path.join(process.cwd(), 'uploads', fileUrl.replace(/^\//, ''));
+          // Try multiple locations for the file
+          const possiblePaths = [
+            path.join(PROCESSED_BASE, fileUrl.replace(/^\//, '')),
+            path.join(STORAGE_BASE, fileUrl.replace(/^\//, '')),
+            path.join(STORAGE_BASE, 'documents', fileUrl.replace(/^\//, '')),
+            path.join(process.cwd(), 'uploads', fileUrl.replace(/^\//, ''))
+          ];
+          
+          filePath = possiblePaths.find(p => fs.existsSync(p)) || possiblePaths[0];
         }
         
         if (fs.existsSync(filePath)) {
