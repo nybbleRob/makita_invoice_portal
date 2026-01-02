@@ -1180,8 +1180,8 @@ async function processInvoiceImport(job) {
           const invoiceNumberValue = getParsedValue(parsedData, 'invoiceNumber') || parsedData.invoiceNumber;
           const creditNoteNumberValue = getParsedValue(parsedData, 'creditNoteNumber') || parsedData.creditNoteNumber;
           
-          // Get settings for retention calculation (reuse if already fetched)
-          const settingsForRetention = settings || await Settings.getSettings();
+          // Get settings for retention calculation
+          const settingsForRetention = await Settings.getSettings();
           
           // Prepare document data for retention calculation
           const creditNoteDataForRetention = {
