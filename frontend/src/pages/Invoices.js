@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { useDebounce } from '../hooks/useDebounce';
 import DocumentRetentionTimer from '../components/DocumentRetentionTimer';
+import HierarchicalCompanyFilter from '../components/HierarchicalCompanyFilter';
 
 const Invoices = () => {
   const navigate = useNavigate();
@@ -1515,132 +1516,15 @@ const Invoices = () => {
 
       {/* Company Filter Modal */}
       {showCompanyFilterModal && (
-        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
-          <div className="modal-dialog modal-dialog-centered modal-lg">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Filter by Company</h5>
-                <button type="button" className="btn-close" onClick={closeCompanyFilterModal}></button>
-              </div>
-              <div className="modal-body">
-                {/* Search */}
-                <div className="mb-3">
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Search companies by name or account number..."
-                    value={filterCompanySearch}
-                    onChange={(e) => setFilterCompanySearch(e.target.value)}
-                    autoFocus
-                  />
-                </div>
-
-                {/* Selected companies as pills */}
-                {tempSelectedCompanies.length > 0 && (
-                  <div className="mb-3 d-flex flex-wrap gap-1">
-                    {tempSelectedCompanies.map((company) => (
-                      <span 
-                        key={company.id} 
-                        className="badge bg-primary-lt d-inline-flex align-items-center gap-1"
-                      >
-                        {company.name}
-                        {company.referenceNo && <small className="text-muted">({company.referenceNo})</small>}
-                        <button
-                          type="button"
-                          className="btn-close ms-1"
-                          style={{ fontSize: '0.5rem' }}
-                          onClick={() => removeTempSelectedCompany(company.id)}
-                          aria-label="Remove"
-                        ></button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {/* Company list */}
-                <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
-                  {filterCompanyLoading ? (
-                    <div className="text-center py-4">
-                      <div className="spinner-border" role="status">
-                        <span className="visually-hidden">Loading...</span>
-                      </div>
-                    </div>
-                  ) : filterCompanies.length === 0 ? (
-                    <div className="text-muted text-center py-4">No companies found</div>
-                  ) : (
-                    <div className="list-group list-group-flush">
-                      {filterCompanies.map((company) => {
-                        const isSelected = tempSelectedCompanies.some(c => c.id === company.id);
-                        return (
-                          <label
-                            key={company.id}
-                            className={`list-group-item d-flex align-items-center gap-2 py-2 ${isSelected ? 'bg-primary-lt' : ''}`}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            <input
-                              type="checkbox"
-                              className="form-check-input m-0"
-                              checked={isSelected}
-                              onChange={() => handleCompanyFilterToggle(company)}
-                            />
-                            <span className="flex-grow-1 text-truncate">{company.name}</span>
-                            {company.referenceNo && (
-                              <small className="text-muted">{company.referenceNo}</small>
-                            )}
-                            {company.type && (
-                              <span className="badge bg-secondary-lt">{company.type}</span>
-                            )}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Pagination */}
-                {filterCompanyPages > 1 && (
-                  <div className="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
-                    <small className="text-muted">
-                      Showing {filterCompanies.length} of {filterCompanyTotal} companies
-                    </small>
-                    <div className="btn-group">
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-secondary"
-                        disabled={filterCompanyPage <= 1 || filterCompanyLoading}
-                        onClick={() => fetchFilterCompanies(filterCompanySearch, filterCompanyPage - 1)}
-                      >
-                        Previous
-                      </button>
-                      <span className="btn btn-sm btn-outline-secondary disabled">
-                        {filterCompanyPage} / {filterCompanyPages}
-                      </span>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-secondary"
-                        disabled={filterCompanyPage >= filterCompanyPages || filterCompanyLoading}
-                        onClick={() => fetchFilterCompanies(filterCompanySearch, filterCompanyPage + 1)}
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn" onClick={clearCompanyFilters}>
-                  Clear All
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={closeCompanyFilterModal}>
-                  Cancel
-                </button>
-                <button type="button" className="btn btn-primary" onClick={applyCompanyFilter}>
-                  Apply Filter {tempSelectedCompanies.length > 0 && `(${tempSelectedCompanies.length})`}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <HierarchicalCompanyFilter
+          selectedCompanyIds={selectedCompanyIds}
+          onSelectionChange={(ids) => {
+            setSelectedCompanyIds(ids);
+            setPagination(prev => ({ ...prev, page: 1 }));
+          }}
+          onClose={() => setShowCompanyFilterModal(false)}
+          onApply={() => setShowCompanyFilterModal(false)}
+        />
       )}
     </div>
   );

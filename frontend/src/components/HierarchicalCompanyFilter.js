@@ -1,0 +1,414 @@
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import api from '../services/api';
+
+/**
+ * Hierarchical Company Filter Component
+ * Displays companies in a tree structure with expand/collapse and cascade selection
+ */
+const HierarchicalCompanyFilter = ({ 
+  selectedCompanyIds = [], 
+  onSelectionChange,
+  onClose,
+  onApply
+}) => {
+  const [companies, setCompanies] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedIds, setExpandedIds] = useState(new Set());
+  const [tempSelectedIds, setTempSelectedIds] = useState(new Set(selectedCompanyIds));
+  const searchInputRef = useRef(null);
+
+  // Fetch hierarchical company data
+  const fetchHierarchy = useCallback(async (search = '') => {
+    try {
+      setLoading(true);
+      const params = search ? { search } : {};
+      const response = await api.get('/api/companies/hierarchy', { params });
+      setCompanies(response.data.companies || []);
+      
+      // Auto-expand all when searching
+      if (search) {
+        const allIds = new Set();
+        const collectIds = (nodes) => {
+          nodes.forEach(node => {
+            if (node.children && node.children.length > 0) {
+              allIds.add(node.id);
+              collectIds(node.children);
+            }
+          });
+        };
+        collectIds(response.data.companies || []);
+        setExpandedIds(allIds);
+      }
+    } catch (error) {
+      console.error('Error fetching company hierarchy:', error);
+      setCompanies([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchHierarchy();
+    // Focus search input on mount
+    setTimeout(() => {
+      if (searchInputRef.current) {
+        searchInputRef.current.focus();
+      }
+    }, 100);
+  }, [fetchHierarchy]);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchHierarchy(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, fetchHierarchy]);
+
+  // Get all descendant IDs for a company
+  const getDescendantIds = useCallback((node) => {
+    const ids = [];
+    const collect = (n) => {
+      if (n.children) {
+        n.children.forEach(child => {
+          ids.push(child.id);
+          collect(child);
+        });
+      }
+    };
+    collect(node);
+    return ids;
+  }, []);
+
+  // Get all IDs in a subtree (including the node itself)
+  const getSubtreeIds = useCallback((node) => {
+    return [node.id, ...getDescendantIds(node)];
+  }, [getDescendantIds]);
+
+  // Check selection state for a node
+  const getSelectionState = useCallback((node) => {
+    const isSelected = tempSelectedIds.has(node.id);
+    
+    if (!node.children || node.children.length === 0) {
+      return isSelected ? 'checked' : 'unchecked';
+    }
+    
+    const descendantIds = getDescendantIds(node);
+    const selectedDescendants = descendantIds.filter(id => tempSelectedIds.has(id));
+    
+    if (isSelected && selectedDescendants.length === descendantIds.length) {
+      return 'checked';
+    } else if (selectedDescendants.length > 0 || isSelected) {
+      return 'indeterminate';
+    }
+    return 'unchecked';
+  }, [tempSelectedIds, getDescendantIds]);
+
+  // Toggle a company selection (cascade to children)
+  const toggleSelection = useCallback((node) => {
+    const subtreeIds = getSubtreeIds(node);
+    const currentState = getSelectionState(node);
+    
+    setTempSelectedIds(prev => {
+      const next = new Set(prev);
+      
+      if (currentState === 'checked') {
+        // Uncheck all in subtree
+        subtreeIds.forEach(id => next.delete(id));
+      } else {
+        // Check all in subtree
+        subtreeIds.forEach(id => next.add(id));
+      }
+      
+      return next;
+    });
+  }, [getSubtreeIds, getSelectionState]);
+
+  // Toggle expand/collapse
+  const toggleExpand = useCallback((nodeId, e) => {
+    e.stopPropagation();
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Expand all nodes
+  const expandAll = useCallback(() => {
+    const allIds = new Set();
+    const collectIds = (nodes) => {
+      nodes.forEach(node => {
+        if (node.children && node.children.length > 0) {
+          allIds.add(node.id);
+          collectIds(node.children);
+        }
+      });
+    };
+    collectIds(companies);
+    setExpandedIds(allIds);
+  }, [companies]);
+
+  // Collapse all nodes
+  const collapseAll = useCallback(() => {
+    setExpandedIds(new Set());
+  }, []);
+
+  // Select all visible companies
+  const selectAll = useCallback(() => {
+    const allIds = new Set();
+    const collectIds = (nodes) => {
+      nodes.forEach(node => {
+        allIds.add(node.id);
+        if (node.children) {
+          collectIds(node.children);
+        }
+      });
+    };
+    collectIds(companies);
+    setTempSelectedIds(allIds);
+  }, [companies]);
+
+  // Clear all selections
+  const clearAll = useCallback(() => {
+    setTempSelectedIds(new Set());
+  }, []);
+
+  // Apply selection
+  const handleApply = useCallback(() => {
+    onSelectionChange(Array.from(tempSelectedIds));
+    if (onApply) onApply();
+  }, [tempSelectedIds, onSelectionChange, onApply]);
+
+  // Get selected company names for display
+  const selectedCompanyNames = useMemo(() => {
+    const names = [];
+    const findNames = (nodes) => {
+      nodes.forEach(node => {
+        if (tempSelectedIds.has(node.id)) {
+          names.push({ id: node.id, name: node.name, referenceNo: node.referenceNo });
+        }
+        if (node.children) {
+          findNames(node.children);
+        }
+      });
+    };
+    findNames(companies);
+    return names;
+  }, [companies, tempSelectedIds]);
+
+  // Render a single tree node
+  const renderNode = (node, level = 0) => {
+    const hasChildren = node.children && node.children.length > 0;
+    const isExpanded = expandedIds.has(node.id);
+    const selectionState = getSelectionState(node);
+    const indent = level * 24;
+    
+    // Type badge colors
+    const typeBadgeClass = {
+      'CORP': 'bg-blue-lt',
+      'SUB': 'bg-purple-lt',
+      'BRANCH': 'bg-cyan-lt'
+    }[node.type] || 'bg-secondary-lt';
+
+    return (
+      <div key={node.id}>
+        <div 
+          className={`d-flex align-items-center py-2 px-2 border-bottom ${selectionState !== 'unchecked' ? 'bg-primary-lt' : ''}`}
+          style={{ 
+            paddingLeft: `${8 + indent}px`,
+            cursor: 'pointer'
+          }}
+          onClick={() => toggleSelection(node)}
+        >
+          {/* Expand/Collapse button */}
+          <div style={{ width: '24px', flexShrink: 0 }}>
+            {hasChildren && (
+              <button
+                type="button"
+                className="btn btn-sm p-0 border-0"
+                onClick={(e) => toggleExpand(node.id, e)}
+                style={{ width: '20px', height: '20px', lineHeight: '20px' }}
+              >
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  width="16" 
+                  height="16" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                  style={{ 
+                    transition: 'transform 0.2s',
+                    transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)'
+                  }}
+                >
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
+            )}
+          </div>
+          
+          {/* Checkbox */}
+          <input
+            type="checkbox"
+            className="form-check-input me-2"
+            checked={selectionState === 'checked'}
+            ref={el => {
+              if (el) {
+                el.indeterminate = selectionState === 'indeterminate';
+              }
+            }}
+            onChange={() => toggleSelection(node)}
+            onClick={(e) => e.stopPropagation()}
+          />
+          
+          {/* Company name */}
+          <span className="flex-grow-1 text-truncate">
+            {node.name}
+          </span>
+          
+          {/* Reference number */}
+          {node.referenceNo && (
+            <small className="text-muted me-2">{node.referenceNo}</small>
+          )}
+          
+          {/* Type badge */}
+          <span className={`badge ${typeBadgeClass}`} style={{ fontSize: '0.7rem' }}>
+            {node.type}
+          </span>
+          
+          {/* Children count */}
+          {hasChildren && (
+            <small className="text-muted ms-2">({node.children.length})</small>
+          )}
+        </div>
+        
+        {/* Render children if expanded */}
+        {hasChildren && isExpanded && (
+          <div>
+            {node.children.map(child => renderNode(child, level + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
+      <div className="modal-dialog modal-dialog-centered modal-lg">
+        <div className="modal-content">
+          <div className="modal-header">
+            <h5 className="modal-title">Filter by Company</h5>
+            <button type="button" className="btn-close" onClick={onClose}></button>
+          </div>
+          
+          <div className="modal-body">
+            {/* Search */}
+            <div className="mb-3">
+              <input
+                ref={searchInputRef}
+                type="text"
+                className="form-control"
+                placeholder="Search companies by name or account number..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            
+            {/* Action buttons */}
+            <div className="mb-3 d-flex gap-2 flex-wrap">
+              <button type="button" className="btn btn-sm btn-outline-primary" onClick={selectAll}>
+                Select All
+              </button>
+              <button type="button" className="btn btn-sm btn-outline-secondary" onClick={clearAll}>
+                Clear All
+              </button>
+              <div className="vr"></div>
+              <button type="button" className="btn btn-sm btn-outline-secondary" onClick={expandAll}>
+                Expand All
+              </button>
+              <button type="button" className="btn btn-sm btn-outline-secondary" onClick={collapseAll}>
+                Collapse All
+              </button>
+            </div>
+            
+            {/* Selected companies pills */}
+            {selectedCompanyNames.length > 0 && selectedCompanyNames.length <= 10 && (
+              <div className="mb-3 d-flex flex-wrap gap-1">
+                {selectedCompanyNames.map((company) => (
+                  <span 
+                    key={company.id} 
+                    className="badge bg-primary-lt d-inline-flex align-items-center gap-1"
+                  >
+                    {company.name}
+                    {company.referenceNo && <small className="text-muted">({company.referenceNo})</small>}
+                    <button
+                      type="button"
+                      className="btn-close ms-1"
+                      style={{ fontSize: '0.5rem' }}
+                      onClick={() => {
+                        setTempSelectedIds(prev => {
+                          const next = new Set(prev);
+                          next.delete(company.id);
+                          return next;
+                        });
+                      }}
+                      aria-label="Remove"
+                    ></button>
+                  </span>
+                ))}
+              </div>
+            )}
+            
+            {selectedCompanyNames.length > 10 && (
+              <div className="mb-3">
+                <span className="badge bg-primary-lt">
+                  {selectedCompanyNames.length} companies selected
+                </span>
+              </div>
+            )}
+            
+            {/* Tree view */}
+            <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid var(--tblr-border-color)', borderRadius: '4px' }}>
+              {loading ? (
+                <div className="text-center py-4">
+                  <div className="spinner-border" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                </div>
+              ) : companies.length === 0 ? (
+                <div className="text-muted text-center py-4">
+                  {searchQuery ? 'No companies match your search' : 'No companies available'}
+                </div>
+              ) : (
+                companies.map(company => renderNode(company, 0))
+              )}
+            </div>
+          </div>
+          
+          <div className="modal-footer">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="button" className="btn btn-primary" onClick={handleApply}>
+              Apply Filter ({tempSelectedIds.size} selected)
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="modal-backdrop fade show"></div>
+    </div>
+  );
+};
+
+export default HierarchicalCompanyFilter;
+

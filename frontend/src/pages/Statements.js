@@ -4,6 +4,7 @@ import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import DocumentRetentionTimer from '../components/DocumentRetentionTimer';
+import HierarchicalCompanyFilter from '../components/HierarchicalCompanyFilter';
 import { useDebounce } from '../hooks/useDebounce';
 
 const Statements = () => {
@@ -13,25 +14,34 @@ const Statements = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [companyFilter, setCompanyFilter] = useState('all');
-  const [companies, setCompanies] = useState([]);
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
+  const [showCompanyFilterModal, setShowCompanyFilterModal] = useState(false);
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 });
   const debouncedSearch = useDebounce(searchQuery, 300);
 
   useEffect(() => {
     fetchStatements();
-    fetchCompanies();
-  }, [pagination.page, debouncedSearch, statusFilter, companyFilter]);
+  }, [pagination.page, debouncedSearch, statusFilter, selectedCompanyIds]);
 
   const fetchStatements = async () => {
     try {
       setLoading(true);
+      
+      // Build companyIds param
+      let companyIdsParam = null;
+      if (selectedCompanyIds.length > 0) {
+        const joined = selectedCompanyIds.join(',');
+        if (joined.length <= 1500) {
+          companyIdsParam = joined;
+        }
+      }
+      
       const params = {
         page: pagination.page,
         limit: pagination.limit,
         search: debouncedSearch,
         ...(statusFilter !== 'all' && { status: statusFilter }),
-        ...(companyFilter !== 'all' && { companyId: companyFilter })
+        ...(companyIdsParam && { companyIds: companyIdsParam })
       };
       
       const response = await api.get('/api/statements', { params });
@@ -65,15 +75,6 @@ const Statements = () => {
       toast.error('Error fetching statements: ' + (error.response?.data?.message || error.message));
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchCompanies = async () => {
-    try {
-      const response = await api.get('/api/companies', { params: { limit: 1000 } });
-      setCompanies(response.data);
-    } catch (error) {
-      console.error('Error fetching companies:', error);
     }
   };
 
@@ -165,19 +166,18 @@ const Statements = () => {
                   </select>
                 </div>
                 <div className="col-auto">
-                  <select
-                    className="form-select"
-                    value={companyFilter}
-                    onChange={(e) => {
-                      setCompanyFilter(e.target.value);
-                      setPagination(prev => ({ ...prev, page: 1 }));
-                    }}
+                  <button
+                    type="button"
+                    className={`btn ${selectedCompanyIds.length > 0 ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setShowCompanyFilterModal(true)}
                   >
-                    <option value="all">All Companies</option>
-                    {companies.map(company => (
-                      <option key={company.id} value={company.id}>{company.name}</option>
-                    ))}
-                  </select>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-building me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                      <path d="M3 21l18 0" />
+                      <path d="M5 21v-16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v16" />
+                    </svg>
+                    {selectedCompanyIds.length > 0 ? `${selectedCompanyIds.length} Companies` : 'All Companies'}
+                  </button>
                 </div>
               </div>
             </div>
@@ -288,6 +288,19 @@ const Statements = () => {
           </div>
         </div>
       </div>
+      
+      {/* Company Filter Modal */}
+      {showCompanyFilterModal && (
+        <HierarchicalCompanyFilter
+          selectedCompanyIds={selectedCompanyIds}
+          onSelectionChange={(ids) => {
+            setSelectedCompanyIds(ids);
+            setPagination(prev => ({ ...prev, page: 1 }));
+          }}
+          onClose={() => setShowCompanyFilterModal(false)}
+          onApply={() => setShowCompanyFilterModal(false)}
+        />
+      )}
     </div>
   );
 };

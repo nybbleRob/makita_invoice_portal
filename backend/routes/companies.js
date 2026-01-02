@@ -191,6 +191,94 @@ router.get('/parents', auth, async (req, res) => {
   }
 });
 
+// Get companies in hierarchical structure for tree view filters
+// Only returns companies the user has access to, structured as a tree
+router.get('/hierarchy', auth, checkDocumentAccess, async (req, res) => {
+  try {
+    const { search } = req.query;
+    
+    // Build where clause based on user permissions
+    const where = {};
+    if (req.accessibleCompanyIds !== null) {
+      if (req.accessibleCompanyIds.length === 0) {
+        return res.json({ companies: [] });
+      }
+      where.id = { [Op.in]: req.accessibleCompanyIds };
+    }
+    
+    // Add search filter if provided
+    if (search) {
+      const searchConditions = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { code: { [Op.iLike]: `%${search}%` } }
+      ];
+      const searchNum = parseInt(search);
+      if (!isNaN(searchNum)) {
+        searchConditions.push({ referenceNo: searchNum });
+      }
+      searchConditions.push(
+        Sequelize.where(
+          Sequelize.cast(Sequelize.col('Company.referenceNo'), 'TEXT'),
+          { [Op.iLike]: `%${search}%` }
+        )
+      );
+      where[Op.or] = searchConditions;
+    }
+    
+    // Fetch all accessible companies
+    const companies = await Company.findAll({
+      where,
+      attributes: ['id', 'name', 'referenceNo', 'code', 'type', 'parentId', 'isActive'],
+      order: [['name', 'ASC']]
+    });
+    
+    // Build hierarchical structure
+    const companyMap = new Map();
+    const rootCompanies = [];
+    
+    // First pass: create map of all companies
+    companies.forEach(company => {
+      companyMap.set(company.id, {
+        id: company.id,
+        name: company.name,
+        referenceNo: company.referenceNo,
+        code: company.code,
+        type: company.type,
+        parentId: company.parentId,
+        isActive: company.isActive,
+        children: []
+      });
+    });
+    
+    // Second pass: build tree structure
+    companies.forEach(company => {
+      const node = companyMap.get(company.id);
+      if (company.parentId && companyMap.has(company.parentId)) {
+        // Add to parent's children
+        companyMap.get(company.parentId).children.push(node);
+      } else {
+        // No parent or parent not in accessible list - treat as root
+        rootCompanies.push(node);
+      }
+    });
+    
+    // Sort children recursively
+    const sortChildren = (node) => {
+      if (node.children && node.children.length > 0) {
+        node.children.sort((a, b) => a.name.localeCompare(b.name));
+        node.children.forEach(sortChildren);
+      }
+    };
+    rootCompanies.forEach(sortChildren);
+    rootCompanies.sort((a, b) => a.name.localeCompare(b.name));
+    
+    res.json({ companies: rootCompanies });
+  } catch (error) {
+    console.error('Error fetching company hierarchy:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Get all companies
 router.get('/', auth, checkDocumentAccess, async (req, res) => {
   try {
