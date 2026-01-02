@@ -676,6 +676,144 @@ router.post('/test-email', auth, globalAdmin, async (req, res) => {
 //   - Avatars in STORAGE_BASE/avatars/
 //   - FTP upload folder (/mnt/data/invoice-portal/uploads/)
 //
+
+// Test Document Retention - Manually trigger retention cleanup
+// This runs the same job that the scheduler runs, useful for testing
+router.post('/test-retention', auth, globalAdmin, async (req, res) => {
+  try {
+    const { cleanupExpiredDocuments } = require('../jobs/documentRetentionCleanup');
+    const { Invoice, CreditNote, Statement, Settings } = require('../models');
+    const { Op } = require('sequelize');
+    
+    // Get retention settings
+    const settings = await Settings.getSettings();
+    const retentionPeriod = settings.documentRetentionPeriod;
+    
+    if (!retentionPeriod) {
+      return res.json({
+        success: true,
+        message: 'Document retention is disabled (no retention period set)',
+        retentionEnabled: false,
+        expiredCount: 0
+      });
+    }
+    
+    // Count documents that would be deleted
+    const now = new Date();
+    const expiredInvoices = await Invoice.count({
+      where: { retentionExpiryDate: { [Op.lte]: now } },
+      paranoid: false
+    });
+    const expiredCreditNotes = await CreditNote.count({
+      where: { retentionExpiryDate: { [Op.lte]: now } },
+      paranoid: false
+    });
+    const expiredStatements = await Statement.count({
+      where: { retentionExpiryDate: { [Op.lte]: now } },
+      paranoid: false
+    });
+    
+    const totalExpired = expiredInvoices + expiredCreditNotes + expiredStatements;
+    
+    console.log(`🧹 [Test Retention] Found ${totalExpired} expired documents (${expiredInvoices} invoices, ${expiredCreditNotes} credit notes, ${expiredStatements} statements)`);
+    
+    // Run the cleanup
+    const result = await cleanupExpiredDocuments();
+    
+    res.json({
+      success: true,
+      message: `Retention cleanup completed. ${result.deleted} documents deleted.`,
+      retentionEnabled: true,
+      retentionPeriodDays: retentionPeriod,
+      expiredBefore: {
+        invoices: expiredInvoices,
+        creditNotes: expiredCreditNotes,
+        statements: expiredStatements,
+        total: totalExpired
+      },
+      result
+    });
+  } catch (error) {
+    console.error('Error testing retention:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get retention status - shows documents due for deletion
+router.get('/retention-status', auth, globalAdmin, async (req, res) => {
+  try {
+    const { Invoice, CreditNote, Statement, Settings } = require('../models');
+    const { Op } = require('sequelize');
+    
+    const settings = await Settings.getSettings();
+    const retentionPeriod = settings.documentRetentionPeriod;
+    
+    if (!retentionPeriod) {
+      return res.json({
+        retentionEnabled: false,
+        message: 'Document retention is disabled'
+      });
+    }
+    
+    const now = new Date();
+    
+    // Count expired documents
+    const expiredInvoices = await Invoice.count({
+      where: { retentionExpiryDate: { [Op.lte]: now } },
+      paranoid: false
+    });
+    const expiredCreditNotes = await CreditNote.count({
+      where: { retentionExpiryDate: { [Op.lte]: now } },
+      paranoid: false
+    });
+    const expiredStatements = await Statement.count({
+      where: { retentionExpiryDate: { [Op.lte]: now } },
+      paranoid: false
+    });
+    
+    // Count documents expiring soon (next 7 days)
+    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const expiringInvoices = await Invoice.count({
+      where: { 
+        retentionExpiryDate: { [Op.gt]: now, [Op.lte]: nextWeek }
+      },
+      paranoid: false
+    });
+    const expiringCreditNotes = await CreditNote.count({
+      where: { 
+        retentionExpiryDate: { [Op.gt]: now, [Op.lte]: nextWeek }
+      },
+      paranoid: false
+    });
+    const expiringStatements = await Statement.count({
+      where: { 
+        retentionExpiryDate: { [Op.gt]: now, [Op.lte]: nextWeek }
+      },
+      paranoid: false
+    });
+    
+    res.json({
+      retentionEnabled: true,
+      retentionPeriodDays: retentionPeriod,
+      expired: {
+        invoices: expiredInvoices,
+        creditNotes: expiredCreditNotes,
+        statements: expiredStatements,
+        total: expiredInvoices + expiredCreditNotes + expiredStatements
+      },
+      expiringIn7Days: {
+        invoices: expiringInvoices,
+        creditNotes: expiringCreditNotes,
+        statements: expiringStatements,
+        total: expiringInvoices + expiringCreditNotes + expiringStatements
+      }
+    });
+  } catch (error) {
+    console.error('Error getting retention status:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 router.post('/purge-files', auth, async (req, res) => {
   try {
     // Only global_admin and administrator can purge files

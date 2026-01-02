@@ -24,6 +24,8 @@ const Settings = () => {
   // Admin Tools state
   const [showPurgeDocumentsModal, setShowPurgeDocumentsModal] = useState(false);
   const [showPurgeCustomersModal, setShowPurgeCustomersModal] = useState(false);
+  const [testingRetention, setTestingRetention] = useState(false);
+  const [retentionStatus, setRetentionStatus] = useState(null);
   const [purgeReason, setPurgeReason] = useState('');
   const [purgingDocuments, setPurgingDocuments] = useState(false);
   const [purgingCustomers, setPurgingCustomers] = useState(false);
@@ -123,6 +125,13 @@ const Settings = () => {
       }, 30000); // 30 seconds
       
       return () => clearInterval(logsInterval);
+    }
+  }, [activeSection]);
+
+  // Fetch retention status when Admin Tools section is active
+  useEffect(() => {
+    if (activeSection === 'admin-tools') {
+      fetchRetentionStatus();
     }
   }, [activeSection]);
 
@@ -379,6 +388,43 @@ const Settings = () => {
       toast.error('Error purging customers: ' + (error.response?.data?.message || error.message));
     } finally {
       setPurgingCustomers(false);
+    }
+  };
+
+  // Fetch retention status
+  const fetchRetentionStatus = async () => {
+    try {
+      const response = await api.get('/api/settings/retention-status');
+      setRetentionStatus(response.data);
+    } catch (error) {
+      console.error('Error fetching retention status:', error);
+    }
+  };
+
+  // Test retention cleanup
+  const handleTestRetention = async () => {
+    if (!window.confirm('This will run the retention cleanup job and DELETE any expired documents. Continue?')) {
+      return;
+    }
+
+    setTestingRetention(true);
+    try {
+      const response = await api.post('/api/settings/test-retention');
+      
+      if (response.data.result?.deleted > 0) {
+        toast.success(`Retention cleanup completed. ${response.data.result.deleted} documents deleted.`);
+      } else if (!response.data.retentionEnabled) {
+        toast.info('Document retention is disabled. Set a retention period in settings first.');
+      } else {
+        toast.info('No expired documents found to delete.');
+      }
+      
+      fetchRetentionStatus();
+    } catch (error) {
+      console.error('Error testing retention:', error);
+      toast.error('Error testing retention: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setTestingRetention(false);
     }
   };
 
@@ -1678,6 +1724,80 @@ const Settings = () => {
                       <div className="alert alert-danger">
                         <i className="fas fa-exclamation-triangle me-2"></i>
                         <strong>Warning:</strong> These tools will permanently delete data from the system. Use with extreme caution. All actions are logged and cannot be undone.
+                      </div>
+                      
+                      {/* Test Document Retention */}
+                      <div className="card mb-3">
+                        <div className="card-header d-flex justify-content-between align-items-center">
+                          <h3 className="card-title mb-0">Test Document Retention</h3>
+                          <button 
+                            className="btn btn-sm btn-outline-secondary"
+                            onClick={fetchRetentionStatus}
+                            title="Refresh status"
+                          >
+                            <i className="fas fa-sync-alt"></i>
+                          </button>
+                        </div>
+                        <div className="card-body">
+                          <p className="text-muted mb-3">
+                            Manually trigger the document retention cleanup job. This will delete documents that have passed their retention expiry date.
+                          </p>
+                          
+                          {retentionStatus && (
+                            <div className="mb-3">
+                              {retentionStatus.retentionEnabled ? (
+                                <div className="row g-3 mb-3">
+                                  <div className="col-md-4">
+                                    <div className="card card-sm bg-danger-subtle">
+                                      <div className="card-body text-center">
+                                        <div className="h3 mb-0 text-danger">{retentionStatus.expired?.total || 0}</div>
+                                        <div className="text-muted small">Expired (ready to delete)</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="col-md-4">
+                                    <div className="card card-sm bg-warning-subtle">
+                                      <div className="card-body text-center">
+                                        <div className="h3 mb-0 text-warning">{retentionStatus.expiringIn7Days?.total || 0}</div>
+                                        <div className="text-muted small">Expiring in 7 days</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="col-md-4">
+                                    <div className="card card-sm bg-info-subtle">
+                                      <div className="card-body text-center">
+                                        <div className="h3 mb-0 text-info">{retentionStatus.retentionPeriodDays}</div>
+                                        <div className="text-muted small">Retention Period (days)</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="alert alert-info mb-3">
+                                  <strong>Retention Disabled:</strong> Set a document retention period in the main settings to enable automatic document cleanup.
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          <button
+                            className="btn btn-warning"
+                            onClick={handleTestRetention}
+                            disabled={testingRetention}
+                          >
+                            {testingRetention ? (
+                              <>
+                                <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                                Running Cleanup...
+                              </>
+                            ) : (
+                              <>
+                                <i className="fas fa-clock me-2"></i>
+                                Run Retention Cleanup Now
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                       
                       {/* Purge All Documents */}
