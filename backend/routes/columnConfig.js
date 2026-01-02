@@ -1,5 +1,6 @@
 const express = require('express');
 const { ColumnConfiguration } = require('../models');
+const auth = require('../middleware/auth');
 const globalAdmin = require('../middleware/globalAdmin');
 const { getAllAvailableFields } = require('../utils/fieldDiscovery');
 const router = express.Router();
@@ -8,7 +9,7 @@ const router = express.Router();
  * Get current column configuration for a page type
  * GET /api/column-config/:pageType
  */
-router.get('/:pageType', async (req, res) => {
+router.get('/:pageType', auth, async (req, res) => {
   try {
     const { pageType } = req.params;
 
@@ -97,7 +98,7 @@ router.put('/:pageType', globalAdmin, async (req, res) => {
  * Get all available fields for a page type
  * GET /api/column-config/:pageType/available-fields
  */
-router.get('/:pageType/available-fields', async (req, res) => {
+router.get('/:pageType/available-fields', auth, async (req, res) => {
   try {
     const { pageType } = req.params;
 
