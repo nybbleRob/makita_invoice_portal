@@ -348,7 +348,26 @@ const Settings = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const response = await api.put('/api/settings', settings);
+      // Apply defaults for mailtrap if provider is mailtrap
+      let settingsToSave = { ...settings };
+      if (settings.emailProvider?.provider === 'mailtrap') {
+        settingsToSave = {
+          ...settings,
+          emailProvider: {
+            ...settings.emailProvider,
+            mailtrap: {
+              host: 'sandbox.smtp.mailtrap.io',
+              port: 2525,
+              secure: false,
+              fromName: 'Makita Invoice Portal',
+              ...settings.emailProvider?.mailtrap, // User values override defaults
+              // Ensure auth is preserved
+              auth: settings.emailProvider?.mailtrap?.auth || {}
+            }
+          }
+        };
+      }
+      const response = await api.put('/api/settings', settingsToSave);
       setSettings(response.data);
       refreshSettings();
       toast.success('Settings saved successfully!');
