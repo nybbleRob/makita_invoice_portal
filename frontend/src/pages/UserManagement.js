@@ -427,8 +427,6 @@ const UserManagement = () => {
       sendEmailAsSummary: false,
       companyIds: []
     });
-    setCompanySearchQuery('');
-    setCompanySearchResults([]);
     setUserAssignedCompanyObjects([]);
   };
 
