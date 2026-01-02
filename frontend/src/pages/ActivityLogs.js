@@ -1031,7 +1031,7 @@ const ActivityLogs = () => {
               </div>
               <div className="modal-body">
                 <div className="alert alert-danger">
-                  <h4 className="alert-title">⚠️ DANGEROUS ACTION</h4>
+                  <h4 className="alert-title">DANGEROUS ACTION</h4>
                   <p className="mb-0">
                     This will <strong>permanently delete ALL {pagination.total} activity logs</strong>, 
                     including protected "logs cleared" entries. 

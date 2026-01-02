@@ -324,7 +324,7 @@ const TemplateBuilder = ({ template, onSave, onCancel }) => {
     const clampedX = Math.max(0, Math.min(x, canvasRect.width));
     const clampedY = Math.max(0, Math.min(y, canvasRect.height));
     
-    console.log('🎯 Mouse down:', { x, y, clampedX, clampedY, canvasRect });
+    console.log('Mouse down:', { x, y, clampedX, clampedY, canvasRect });
     
     setStartPos({ x: clampedX, y: clampedY });
     setDrawingBox({ x: clampedX, y: clampedY, width: 0, height: 0 });
@@ -469,7 +469,7 @@ const TemplateBuilder = ({ template, onSave, onCancel }) => {
         formData.append('bottom', normalizedCoords.bottom);
         formData.append('page', currentPage);
         
-        console.log('\n📤 Sending request to backend:');
+        console.log('\nSending request to backend:');
         console.log('  URL: /api/templates/extract-region-text');
         console.log('  Normalized coordinates (0-1):', normalizedCoords);
         console.log('  Has PDF file:', !!pdfFile);
@@ -479,7 +479,7 @@ const TemplateBuilder = ({ template, onSave, onCancel }) => {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         
-        console.log('✅ Backend response received');
+        console.log('Backend response received');
         
         const extractedText = response.data.text || '';
         const itemCount = response.data.itemCount || 0;
@@ -493,7 +493,7 @@ const TemplateBuilder = ({ template, onSave, onCancel }) => {
         
         if (!extractedText.trim()) {
           toast.warning(`No text found in this region (checked ${itemCount} items). Try a different area or check console for details.`);
-          console.warn('⚠️  No text extracted. Check backend terminal for coordinate details.');
+          console.warn('No text extracted. Check backend terminal for coordinate details.');
         } else {
           toast.success(`Found ${itemCount} text item(s): "${extractedText.substring(0, 50)}${extractedText.length > 50 ? '...' : ''}"`);
         }
@@ -936,7 +936,7 @@ const TemplateBuilder = ({ template, onSave, onCancel }) => {
                       )}
                     </div>
                     <div className="text-warning small">
-                      <strong>⚠️ Multi-page:</strong> Select regions on the correct page
+                      <strong>Multi-page:</strong> Select regions on the correct page
                     </div>
                   </>
                 )}

@@ -541,7 +541,7 @@ const CreditNotes = () => {
         
         // Check if cancelled
         if (importSession.cancelled || importSession.status === 'cancelled') {
-          console.log('🛑 Import was cancelled');
+          console.log('Import was cancelled');
           setImportStatus(null);
           setShowImportModal(false);
           if (importPollingInterval) {

@@ -2637,7 +2637,7 @@ const Settings = () => {
               </div>
               <div className="modal-body">
                 <div className="alert alert-danger">
-                  <h4 className="alert-title">⚠️ Warning: This action cannot be undone!</h4>
+                  <h4 className="alert-title">Warning: This action cannot be undone!</h4>
                   <p className="mb-0">
                     This will permanently delete <strong>ALL</strong> companies from the system. 
                     This includes all related data and cannot be reversed.
