@@ -38,6 +38,8 @@ const Settings = () => {
   const [loadingImportLogs, setLoadingImportLogs] = useState(false);
   const [triggeringImport, setTriggeringImport] = useState(false);
   const [savingImportSettings, setSavingImportSettings] = useState(false);
+  const [failedCount, setFailedCount] = useState(0);
+  const [retryingFailed, setRetryingFailed] = useState(false);
   
 
   useEffect(() => {
@@ -113,9 +115,11 @@ const Settings = () => {
     if (activeSection === 'import-settings') {
       fetchImportSettings();
       fetchImportLogs();
+      fetchFailedCount();
       
       const logsInterval = setInterval(() => {
         fetchImportLogs();
+        fetchFailedCount();
       }, 30000); // 30 seconds
       
       return () => clearInterval(logsInterval);
@@ -130,11 +134,54 @@ const Settings = () => {
       toast.success(response.data.message || 'Import scan completed');
       fetchImportSettings();
       fetchImportLogs();
+      fetchFailedCount();
     } catch (error) {
       console.error('Error triggering import:', error);
       toast.error('Error triggering import: ' + (error.response?.data?.message || error.message));
     } finally {
       setTriggeringImport(false);
+    }
+  };
+
+  // Fetch count of failed files available for retry
+  const fetchFailedCount = async () => {
+    try {
+      const response = await api.get('/api/import-settings/failed-count');
+      setFailedCount(response.data.count || 0);
+    } catch (error) {
+      console.error('Error fetching failed count:', error);
+    }
+  };
+
+  // Retry failed imports
+  const handleRetryFailed = async () => {
+    if (failedCount === 0) {
+      toast.info('No failed files to retry');
+      return;
+    }
+    
+    if (!window.confirm(`Move ${failedCount} failed file(s) back to uploads and reprocess?`)) {
+      return;
+    }
+    
+    setRetryingFailed(true);
+    try {
+      const response = await api.post('/api/import-settings/retry-failed', { triggerScan: true });
+      
+      if (response.data.scanResults) {
+        toast.success(`Moved ${response.data.moved} files. Scan queued ${response.data.scanResults.queued} for processing.`);
+      } else {
+        toast.success(response.data.message || `Moved ${response.data.moved} files for retry`);
+      }
+      
+      fetchImportSettings();
+      fetchImportLogs();
+      fetchFailedCount();
+    } catch (error) {
+      console.error('Error retrying failed imports:', error);
+      toast.error('Error retrying failed imports: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setRetryingFailed(false);
     }
   };
 
@@ -1024,20 +1071,40 @@ const Settings = () => {
                                   </div>
                                 </div>
                                 <div className="col-md-6">
-                                  <button
-                                    className="btn btn-primary"
-                                    onClick={handleTriggerImport}
-                                    disabled={triggeringImport}
-                                  >
-                                    {triggeringImport ? (
-                                      <>
-                                        <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                                        Running...
-                                      </>
-                                    ) : (
-                                      'Run Import Now'
-                                    )}
-                                  </button>
+                                  <div className="d-flex gap-2">
+                                    <button
+                                      className="btn btn-primary"
+                                      onClick={handleTriggerImport}
+                                      disabled={triggeringImport || retryingFailed}
+                                    >
+                                      {triggeringImport ? (
+                                        <>
+                                          <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                                          Running...
+                                        </>
+                                      ) : (
+                                        'Run Import Now'
+                                      )}
+                                    </button>
+                                    <button
+                                      className="btn btn-warning"
+                                      onClick={handleRetryFailed}
+                                      disabled={retryingFailed || triggeringImport || failedCount === 0}
+                                      title={failedCount > 0 ? `${failedCount} failed file(s) available for retry` : 'No failed files to retry'}
+                                    >
+                                      {retryingFailed ? (
+                                        <>
+                                          <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                                          Retrying...
+                                        </>
+                                      ) : (
+                                        <>
+                                          Retry Failed
+                                          {failedCount > 0 && <span className="badge bg-dark ms-2">{failedCount}</span>}
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             </div>

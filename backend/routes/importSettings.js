@@ -4,12 +4,15 @@
  */
 
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const auth = require('../middleware/auth');
 const globalAdmin = require('../middleware/globalAdmin');
 const { Settings } = require('../models');
 const { getLogs, clearLogs, getStats, getLastRun, log } = require('../services/importLogger');
 const { scheduledTasksQueue } = require('../config/queue');
 const { scanLocalFolder } = require('../jobs/localFolderScanner');
+const { UNPROCESSED_FAILED, FTP_UPLOAD_PATH, ensureDir } = require('../config/storage');
 
 const router = express.Router();
 
@@ -185,6 +188,175 @@ router.get('/stats', auth, globalAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error getting import stats:', error);
     res.status(500).json({ message: error.message });
+  }
+});
+
+/**
+ * Get count of failed files available for retry
+ */
+router.get('/failed-count', auth, globalAdmin, async (req, res) => {
+  try {
+    let totalFiles = 0;
+    const folders = [];
+
+    // Check if failed folder exists
+    if (!fs.existsSync(UNPROCESSED_FAILED)) {
+      return res.json({ count: 0, folders: [] });
+    }
+
+    // Read all date folders
+    const dateFolders = fs.readdirSync(UNPROCESSED_FAILED);
+    
+    for (const folder of dateFolders) {
+      const folderPath = path.join(UNPROCESSED_FAILED, folder);
+      const stat = fs.statSync(folderPath);
+      
+      if (stat.isDirectory()) {
+        const files = fs.readdirSync(folderPath);
+        const pdfFiles = files.filter(f => f.toLowerCase().endsWith('.pdf'));
+        
+        if (pdfFiles.length > 0) {
+          folders.push({
+            name: folder,
+            count: pdfFiles.length
+          });
+          totalFiles += pdfFiles.length;
+        }
+      }
+    }
+
+    res.json({
+      count: totalFiles,
+      folders: folders.sort((a, b) => b.name.localeCompare(a.name)) // Most recent first
+    });
+  } catch (error) {
+    console.error('Error getting failed file count:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+/**
+ * Retry failed imports - moves files from failed folder back to uploads
+ */
+router.post('/retry-failed', auth, globalAdmin, async (req, res) => {
+  try {
+    const { triggerScan = true } = req.body;
+    
+    log.info('Retry failed imports triggered by user');
+
+    // Check if failed folder exists
+    if (!fs.existsSync(UNPROCESSED_FAILED)) {
+      return res.json({
+        success: true,
+        message: 'No failed files to retry',
+        moved: 0,
+        errors: 0
+      });
+    }
+
+    // Ensure upload folder exists
+    ensureDir(FTP_UPLOAD_PATH);
+
+    let movedCount = 0;
+    let errorCount = 0;
+    let deletedErrorLogs = 0;
+    const errors = [];
+
+    // Read all date folders
+    const dateFolders = fs.readdirSync(UNPROCESSED_FAILED);
+    
+    for (const folder of dateFolders) {
+      const folderPath = path.join(UNPROCESSED_FAILED, folder);
+      const stat = fs.statSync(folderPath);
+      
+      if (stat.isDirectory()) {
+        const files = fs.readdirSync(folderPath);
+        
+        for (const file of files) {
+          const filePath = path.join(folderPath, file);
+          
+          // Skip if it's an error log file
+          if (file.endsWith('.error.txt')) {
+            try {
+              fs.unlinkSync(filePath);
+              deletedErrorLogs++;
+            } catch (err) {
+              // Ignore error log deletion failures
+            }
+            continue;
+          }
+          
+          // Only process supported file types
+          const ext = path.extname(file).toLowerCase();
+          if (!['.pdf', '.xlsx', '.xls'].includes(ext)) {
+            continue;
+          }
+          
+          try {
+            const destPath = path.join(FTP_UPLOAD_PATH, file);
+            
+            // Handle duplicate filenames by adding timestamp
+            let finalPath = destPath;
+            if (fs.existsSync(destPath)) {
+              const base = path.basename(file, ext);
+              finalPath = path.join(FTP_UPLOAD_PATH, `${base}-retry-${Date.now()}${ext}`);
+            }
+            
+            // Move file back to uploads
+            fs.renameSync(filePath, finalPath);
+            movedCount++;
+            
+          } catch (moveError) {
+            errorCount++;
+            errors.push({
+              file,
+              error: moveError.message
+            });
+          }
+        }
+        
+        // Try to remove empty folder
+        try {
+          const remainingFiles = fs.readdirSync(folderPath);
+          if (remainingFiles.length === 0) {
+            fs.rmdirSync(folderPath);
+          }
+        } catch (err) {
+          // Ignore folder deletion failures
+        }
+      }
+    }
+
+    log.info(`Retry complete: ${movedCount} files moved, ${deletedErrorLogs} error logs deleted, ${errorCount} errors`);
+
+    // Optionally trigger an import scan
+    let scanResults = null;
+    if (triggerScan && movedCount > 0) {
+      log.info('Triggering import scan after retry');
+      scanResults = await scanLocalFolder();
+    }
+
+    res.json({
+      success: true,
+      message: `Moved ${movedCount} files back to uploads for retry`,
+      moved: movedCount,
+      deletedErrorLogs,
+      errors: errorCount,
+      errorDetails: errors.length > 0 ? errors.slice(0, 10) : undefined, // Limit error details
+      scanResults: scanResults ? {
+        scanned: scanResults.scanned,
+        queued: scanResults.queued,
+        duplicates: scanResults.duplicates,
+        errors: scanResults.errors.length
+      } : undefined
+    });
+  } catch (error) {
+    console.error('Error retrying failed imports:', error);
+    log.error(`Retry failed imports error: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 });
 
