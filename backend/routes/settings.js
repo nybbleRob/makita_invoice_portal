@@ -124,7 +124,6 @@ router.get('/', async (req, res) => {
           'customer_po',
           'amount',
           'date',
-          'page_no'
         ],
         excel: [
           'document_type',

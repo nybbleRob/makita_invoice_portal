@@ -28,7 +28,7 @@ const runMigration = async () => {
     await sequelize.query(`
       ALTER TABLE settings 
       ADD COLUMN "mandatoryFields" JSONB DEFAULT '{
-        "pdf": ["document_type", "account_number", "invoice_number", "vat_amount", "customer_po", "amount", "date", "page_no"],
+        "pdf": ["document_type", "account_number", "invoice_number", "vat_amount", "customer_po", "amount", "date"],
         "excel": ["document_type", "account_no", "invoice_number", "vat_amount", "invoice_total"]
       }'::jsonb;
     `);
@@ -39,7 +39,7 @@ const runMigration = async () => {
     await sequelize.query(`
       UPDATE settings 
       SET "mandatoryFields" = '{
-        "pdf": ["document_type", "account_number", "invoice_number", "vat_amount", "customer_po", "amount", "date", "page_no"],
+        "pdf": ["document_type", "account_number", "invoice_number", "vat_amount", "customer_po", "amount", "date"],
         "excel": ["document_type", "account_no", "invoice_number", "vat_amount", "invoice_total"]
       }'::jsonb
       WHERE "mandatoryFields" IS NULL;

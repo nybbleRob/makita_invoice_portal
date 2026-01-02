@@ -7,15 +7,7 @@
 // Standard field names (camelCase for JavaScript)
 const STANDARD_FIELDS = {
   // CRUCIAL FIELDS - Must parse correctly or document fails
-  pageNo: {
-    standardName: 'pageNo',
-    displayName: 'Page Number',
-    description: 'Page number in document - parse first to detect multi-page',
-    isCrucial: false,
-    isMandatory: false,
-    parsingOrder: 1, // Parse FIRST to detect multi-page documents
-    aliases: ['page_no', 'pageno', 'page', 'page_number']
-  },
+  // Note: pageNo was removed - multi-page detection is automatic via pdf.numPages
   documentType: {
     standardName: 'documentType',
     displayName: 'Document Type',

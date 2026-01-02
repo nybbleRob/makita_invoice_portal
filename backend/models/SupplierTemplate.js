@@ -332,14 +332,13 @@ module.exports = (sequelize, DataTypes) => {
         
         // Get list of crucial field standard names
         const crucialFieldNames = getCrucialFields().map(f => f.standardName);
-        crucialFieldNames.push('pageNo'); // Also include pageNo as crucial for detection
         
         // Sort fields by parsing order for intelligent extraction:
-        // 1. pageNo first (to detect multi-page)
-        // 2. Crucial fields (documentType, accountNumber, invoiceDate)
-        // 3. Important fields (invoiceNumber, creditNumber, customerPO)
-        // 4. Amount fields (totalAmount, vatAmount, goodsAmount) - from last page if multi-page
-        // 5. Other optional fields
+        // 1. Crucial fields (documentType, accountNumber, invoiceDate)
+        // 2. Important fields (invoiceNumber, creditNumber, customerPO)
+        // 3. Amount fields (totalAmount, vatAmount, goodsAmount) - from last page if multi-page
+        // 4. Other optional fields
+        // Note: Multi-page detection is automatic via pdf.numPages
         const sortedFields = Object.entries(template.coordinates).sort(([fieldNameA, coordsA], [fieldNameB, coordsB]) => {
           const standardNameA = mapFieldName(fieldNameA) || fieldNameA;
           const standardNameB = mapFieldName(fieldNameB) || fieldNameB;
@@ -347,11 +346,7 @@ module.exports = (sequelize, DataTypes) => {
           const fieldA = STANDARD_FIELDS[standardNameA];
           const fieldB = STANDARD_FIELDS[standardNameB];
           
-          // 1. pageNo always first
-          if (standardNameA === 'pageNo') return -1;
-          if (standardNameB === 'pageNo') return 1;
-          
-          // 2. Get parsing order (default to 999 if not defined)
+          // Get parsing order (default to 999 if not defined)
           const orderA = fieldA?.parsingOrder ?? 999;
           const orderB = fieldB?.parsingOrder ?? 999;
           
@@ -815,7 +810,7 @@ function extractBaseFieldName(fieldName) {
     const commonFields = [
       'document_type', 'invoice_number', 'account_number', 'customer_name',
       'customer_po', 'vat_amount', 'goods_amount', 'date_tax_point',
-      'page_no', 'invoice_total', 'date', 'amount', 'total'
+      'invoice_total', 'date', 'amount', 'total'
     ];
     
     // Also handle variants with periods and common abbreviations
@@ -825,8 +820,6 @@ function extractBaseFieldName(fieldName) {
       'invoice_no': 'invoice_number',
       'invoice_no:': 'invoice_number',
       'invoice_no.': 'invoice_number',
-      'page_no': 'page_no',
-      'page_no.': 'page_no',
       'vat_total': 'vat_amount',
       'vat_total.': 'vat_amount',
       'invoice_total': 'amount',

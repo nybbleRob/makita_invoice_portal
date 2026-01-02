@@ -223,7 +223,6 @@ module.exports = (sequelize) => {
           'customer_po',
           'amount', // invoice_total
           'date', // date_tax_point
-          'page_no'
         ],
         // Default mandatory fields for Excel templates
         excel: [
@@ -306,7 +305,6 @@ module.exports = (sequelize) => {
           'customer_po',
           'amount',
           'date',
-          'page_no'
         ],
         excel: [
           'document_type',
