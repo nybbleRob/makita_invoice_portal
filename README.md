@@ -13,27 +13,38 @@ A modern, full-stack invoice management portal built with React and Node.js. Thi
 - **XLSX** - Excel file parsing and export
 
 ### Backend
-- **Node.js** - JavaScript runtime
-- **Express.js** - Web application framework
-- **Sequelize** - PostgreSQL ORM
+- **Node.js 20 LTS** - JavaScript runtime
+- **Express.js 4** - Web application framework
+- **Sequelize 6** - PostgreSQL ORM with migrations
 - **BullMQ** - Redis-based job queue for background processing
-- **Nodemailer** - Email sending
+- **Nodemailer** - Email sending with multiple provider support
 - **JWT** - JSON Web Token authentication
 - **Helmet** - Security middleware
-- **Winston** - Logging
+- **Winston** - Structured logging with rotation
 
 ### Database & Cache
-- **PostgreSQL** - Primary relational database
-- **Redis** - Job queues, caching, and session management
+- **PostgreSQL 14+** - Primary relational database
+- **Redis 6+** - Job queues, caching, session management, and activity logs
+
+### Email Providers
+Supports multiple email providers with easy switching via Settings UI:
+- **SMTP** - Standard SMTP server
+- **Mailtrap** - Email testing/sandbox (captures all emails for testing)
+- **Office 365** - Microsoft Graph API integration
+- **Resend** - Modern email API
+- **SMTP2Go** - Transactional email service
 
 ### Document Processing
-- **Google Document AI** - Intelligent document parsing
-- **PDF-Parse** - PDF text extraction
-- **Sharp** - Image processing
+- **Google Document AI** - Intelligent document parsing with template matching
+- **PDF-Parse** - PDF text extraction fallback
+- **Sharp** - Image processing and optimization
+- **XLSX** - Excel file parsing for bulk imports
 
 ### Infrastructure
-- **PM2** - Process manager for Node.js
-- **FTP/SFTP** - Automated file import from remote servers
+- **PM2** - Process manager with clustering and auto-restart
+- **SFTP/FTP** - Automated file import from customer uploads
+- **Nginx** - Reverse proxy and static file serving
+- **Ubuntu 24.04 LTS** - Production server OS
 
 ## Features
 
@@ -81,7 +92,7 @@ A modern, full-stack invoice management portal built with React and Node.js. Thi
 
 ```
 ├── backend/
-│   ├── config/          # Database, Redis, queue configuration
+│   ├── config/          # Database, Redis, queue, storage configuration
 │   ├── jobs/            # BullMQ job processors
 │   ├── middleware/      # Express middleware (auth, rate limiting)
 │   ├── models/          # Sequelize models
@@ -101,6 +112,23 @@ A modern, full-stack invoice management portal built with React and Node.js. Thi
 │       └── utils/       # Frontend utilities
 ├── ecosystem.config.js  # PM2 configuration
 └── README.md
+```
+
+## File Storage Structure
+
+Production file storage on separate data drive (`/mnt/data`):
+
+```
+/mnt/data/
+├── invoice-portal/
+│   └── uploads/              # SFTP upload folder (customer drops files here)
+├── processed/
+│   ├── invoices/YYYY/MM/DD/  # Successfully processed invoices
+│   ├── creditnotes/YYYY/MM/DD/
+│   └── statements/YYYY/MM/DD/
+└── unprocessed/
+    ├── duplicates/YYYY-MM-DD/ # Duplicate files (hash match)
+    └── failed/YYYY-MM-DD/     # Failed imports (with .error.txt logs)
 ```
 
 ## Prerequisites
