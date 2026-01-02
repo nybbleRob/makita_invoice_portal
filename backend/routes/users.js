@@ -290,6 +290,18 @@ router.post('/', canManageUsers, async (req, res) => {
       return res.status(400).json({ message: 'Cannot send summary emails without enabling at least invoice or statement emails' });
     }
     
+    // Validate company IDs BEFORE creating user (to avoid orphaned users on validation failure)
+    let validatedCompanies = [];
+    if (companyIds && Array.isArray(companyIds) && companyIds.length > 0) {
+      validatedCompanies = await Company.findAll({
+        where: { id: { [Op.in]: companyIds } }
+      });
+      
+      if (validatedCompanies.length !== companyIds.length) {
+        return res.status(400).json({ message: 'One or more company IDs are invalid' });
+      }
+    }
+    
     // Create user
     const user = await User.create({
       name,
@@ -306,19 +318,9 @@ router.post('/', canManageUsers, async (req, res) => {
       sendEmailAsSummary: sendEmailAsSummary || false
     });
     
-    // Assign companies if provided (for ALL user roles)
-    if (companyIds && Array.isArray(companyIds) && companyIds.length > 0) {
-      // Validate company IDs exist
-      const companies = await Company.findAll({
-        where: { id: { [Op.in]: companyIds } }
-      });
-      
-      if (companies.length !== companyIds.length) {
-        return res.status(400).json({ message: 'One or more company IDs are invalid' });
-      }
-      
-      // Create associations
-      await user.setCompanies(companies);
+    // Assign companies if provided (for ALL user roles) - already validated above
+    if (validatedCompanies.length > 0) {
+      await user.setCompanies(validatedCompanies);
     }
     
     // Reload user with companies

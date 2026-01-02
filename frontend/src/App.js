@@ -57,6 +57,31 @@ const ProtectedRoute = ({ children }) => {
   return isAuthenticated ? children : <Navigate to="/login" />;
 };
 
+// Admin Route Component - restricts access to specific roles
+const AdminRoute = ({ children, allowedRoles = ['global_admin', 'administrator'] }) => {
+  const { user, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="page page-center">
+        <div className="container container-tight py-4">
+          <div className="text-center">
+            <div className="spinner-border" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  if (!user || !allowedRoles.includes(user.role)) {
+    return <Navigate to="/" />;
+  }
+  
+  return children;
+};
+
 function AppRoutes() {
   return (
         <Routes>
@@ -78,27 +103,30 @@ function AppRoutes() {
         <Route index element={<Dashboard />} />
         <Route path="reports" element={<Reports />} />
         <Route path="settings" element={<Settings />} />
-        <Route path="users" element={<UserManagement />} />
-        <Route path="users/:id/view" element={<UserView />} />
-        <Route path="users/pending-accounts" element={<PendingAccounts />} />
-        <Route path="users/pending-accounts/:id" element={<PendingAccounts />} />
+        {/* Admin-only routes */}
+        <Route path="users" element={<AdminRoute><UserManagement /></AdminRoute>} />
+        <Route path="users/:id/view" element={<AdminRoute><UserView /></AdminRoute>} />
+        <Route path="users/pending-accounts" element={<AdminRoute><PendingAccounts /></AdminRoute>} />
+        <Route path="users/pending-accounts/:id" element={<AdminRoute><PendingAccounts /></AdminRoute>} />
         <Route path="profile" element={<Profile />} />
-        <Route path="templates" element={<Templates />} />
-        <Route path="companies" element={<Companies />} />
-        <Route path="companies/:id/view" element={<CompanyView />} />
-        <Route path="companies/add-branch" element={<AddBranch />} />
-        <Route path="companies/add-subsidiary" element={<AddSubsidiary />} />
-        <Route path="branches" element={<Branches />} />
+        <Route path="templates" element={<AdminRoute allowedRoles={['global_admin']}><Templates /></AdminRoute>} />
+        <Route path="companies" element={<AdminRoute><Companies /></AdminRoute>} />
+        <Route path="companies/:id/view" element={<AdminRoute><CompanyView /></AdminRoute>} />
+        <Route path="companies/add-branch" element={<AdminRoute><AddBranch /></AdminRoute>} />
+        <Route path="companies/add-subsidiary" element={<AdminRoute><AddSubsidiary /></AdminRoute>} />
+        <Route path="branches" element={<AdminRoute><Branches /></AdminRoute>} />
+        {/* User-accessible routes */}
         <Route path="invoices" element={<Invoices />} />
         <Route path="invoices/:id/view" element={<InvoiceView />} />
-        <Route path="invoices/:id/edit" element={<InvoiceEdit />} />
+        <Route path="invoices/:id/edit" element={<AdminRoute><InvoiceEdit /></AdminRoute>} />
         <Route path="credit-notes" element={<CreditNotes />} />
         <Route path="credit-notes/:id/view" element={<CreditNoteView />} />
         <Route path="statements" element={<Statements />} />
-        <Route path="unallocated" element={<Unallocated />} />
-        <Route path="unallocated/:id/view" element={<UnallocatedView />} />
-        <Route path="activity-logs" element={<ActivityLogs />} />
-        <Route path="import-data" element={<ImportData />} />
+        {/* Admin-only routes */}
+        <Route path="unallocated" element={<AdminRoute><Unallocated /></AdminRoute>} />
+        <Route path="unallocated/:id/view" element={<AdminRoute><UnallocatedView /></AdminRoute>} />
+        <Route path="activity-logs" element={<AdminRoute><ActivityLogs /></AdminRoute>} />
+        <Route path="import-data" element={<AdminRoute><ImportData /></AdminRoute>} />
       </Route>
     </Routes>
   );
