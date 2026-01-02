@@ -88,7 +88,7 @@ const InvoiceEdit = () => {
         // Extract custom fields from parsedData
         const customFieldNames = Object.keys(inv.metadata.parsedData).filter(key => {
           // Exclude standard fields
-          const standardFields = ['invoiceNumber', 'issueDate', 'amount', 'taxAmount', 'documentType', 'accountNumber', 'companyName', 'poNumber', 'customerPO', 'vatAmount', 'goodsAmount', 'totalAmount'];
+          const standardFields = ['invoiceNumber', 'issueDate', 'amount', 'taxAmount', 'documentType', 'accountNumber', 'companyName', 'poNumber', 'customerPO', 'vatAmount', 'goodsAmount', 'totalAmount', 'invoiceTo', 'deliveryAddress'];
           return !standardFields.includes(key);
         });
         customFieldNames.forEach(key => {
@@ -493,6 +493,88 @@ const InvoiceEdit = () => {
                       <small className="form-hint">Only Global Administrators and Administrators can change document status</small>
                     </div>
                   )}
+
+                  {/* Invoice To and Delivery Address Section */}
+                  <div className="border-top pt-3 mt-3">
+                    <h5 className="mb-3">Address Information</h5>
+                    <div className="row">
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Invoice To</label>
+                        <textarea
+                          className="form-control"
+                          rows="4"
+                          value={formData.customFields?.invoiceTo || invoice?.metadata?.parsedData?.invoiceTo || ''}
+                          onChange={(e) => {
+                            setFormData(prev => ({
+                              ...prev,
+                              customFields: {
+                                ...prev.customFields,
+                                invoiceTo: e.target.value
+                              }
+                            }));
+                          }}
+                          placeholder="Invoice to address"
+                        />
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Delivery Address</label>
+                        <textarea
+                          className="form-control"
+                          rows="4"
+                          value={formData.customFields?.deliveryAddress || invoice?.metadata?.parsedData?.deliveryAddress || ''}
+                          onChange={(e) => {
+                            setFormData(prev => ({
+                              ...prev,
+                              customFields: {
+                                ...prev.customFields,
+                                deliveryAddress: e.target.value
+                              }
+                            }));
+                          }}
+                          placeholder="Delivery address"
+                        />
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">PO Number</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={formData.customFields?.customerPO || invoice?.metadata?.parsedData?.customerPO || ''}
+                          onChange={(e) => {
+                            setFormData(prev => ({
+                              ...prev,
+                              customFields: {
+                                ...prev.customFields,
+                                customerPO: e.target.value
+                              }
+                            }));
+                          }}
+                          placeholder="PO Number"
+                        />
+                      </div>
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Goods Amount (Net)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="form-control"
+                          value={formData.customFields?.goodsAmount || invoice?.metadata?.parsedData?.goodsAmount || ''}
+                          onChange={(e) => {
+                            setFormData(prev => ({
+                              ...prev,
+                              customFields: {
+                                ...prev.customFields,
+                                goodsAmount: e.target.value
+                              }
+                            }));
+                          }}
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Custom Fields Section */}
                   {availableFields.filter(f => f.isCustom).length > 0 && (

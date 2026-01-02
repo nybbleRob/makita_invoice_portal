@@ -622,6 +622,45 @@ const CreditNoteView = () => {
                         </div>
                       </div>
                     </div>
+                    {/* PO Number field */}
+                    {creditNote?.metadata?.parsedData?.customerPO && (
+                      <div className="list-group-item px-0 py-2">
+                        <div className="d-flex flex-row align-items-center justify-content-between">
+                          <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>
+                            PO Number
+                          </div>
+                          <div className="text-end" style={{ flex: 1 }}>
+                            {creditNote.metadata.parsedData.customerPO}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {/* Goods Amount field */}
+                    {creditNote?.metadata?.parsedData?.goodsAmount && (
+                      <div className="list-group-item px-0 py-2">
+                        <div className="d-flex flex-row align-items-center justify-content-between">
+                          <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>
+                            Goods Amount
+                          </div>
+                          <div className="text-end" style={{ flex: 1 }}>
+                            {formatCurrency(creditNote.metadata.parsedData.goodsAmount)}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {/* VAT Amount field */}
+                    {creditNote?.metadata?.parsedData?.vatAmount && (
+                      <div className="list-group-item px-0 py-2">
+                        <div className="d-flex flex-row align-items-center justify-content-between">
+                          <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>
+                            VAT Amount
+                          </div>
+                          <div className="text-end" style={{ flex: 1 }}>
+                            {formatCurrency(creditNote.metadata.parsedData.vatAmount)}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <div className="list-group-item px-0 py-2">
                       <div className="d-flex flex-row align-items-center justify-content-between">
                         <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>

@@ -622,6 +622,45 @@ const InvoiceView = () => {
                         </div>
                       </div>
                     </div>
+                    {/* PO Number field */}
+                    {invoice?.metadata?.parsedData?.customerPO && (
+                      <div className="list-group-item px-0 py-2">
+                        <div className="d-flex flex-row align-items-center justify-content-between">
+                          <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>
+                            PO Number
+                          </div>
+                          <div className="text-end" style={{ flex: 1 }}>
+                            {invoice.metadata.parsedData.customerPO}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {/* Goods Amount field */}
+                    {invoice?.metadata?.parsedData?.goodsAmount && (
+                      <div className="list-group-item px-0 py-2">
+                        <div className="d-flex flex-row align-items-center justify-content-between">
+                          <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>
+                            Goods Amount
+                          </div>
+                          <div className="text-end" style={{ flex: 1 }}>
+                            {formatCurrency(invoice.metadata.parsedData.goodsAmount)}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {/* VAT Amount field */}
+                    {invoice?.metadata?.parsedData?.vatAmount && (
+                      <div className="list-group-item px-0 py-2">
+                        <div className="d-flex flex-row align-items-center justify-content-between">
+                          <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>
+                            VAT Amount
+                          </div>
+                          <div className="text-end" style={{ flex: 1 }}>
+                            {formatCurrency(invoice.metadata.parsedData.vatAmount)}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <div className="list-group-item px-0 py-2">
                       <div className="d-flex flex-row align-items-center justify-content-between">
                         <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>
