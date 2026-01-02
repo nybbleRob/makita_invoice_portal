@@ -15,7 +15,8 @@ const HierarchicalCompanyFilter = ({
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedIds, setExpandedIds] = useState(new Set());
-  const [tempSelectedIds, setTempSelectedIds] = useState(new Set(selectedCompanyIds));
+  // Convert all IDs to strings for consistent comparison
+  const [tempSelectedIds, setTempSelectedIds] = useState(new Set(selectedCompanyIds.map(id => String(id))));
   const searchInputRef = useRef(null);
 
   // Fetch hierarchical company data
@@ -32,7 +33,7 @@ const HierarchicalCompanyFilter = ({
         const collectIds = (nodes) => {
           nodes.forEach(node => {
             if (node.children && node.children.length > 0) {
-              allIds.add(node.id);
+              allIds.add(String(node.id));
               collectIds(node.children);
             }
           });
@@ -67,13 +68,13 @@ const HierarchicalCompanyFilter = ({
     return () => clearTimeout(timer);
   }, [searchQuery, fetchHierarchy]);
 
-  // Get all descendant IDs for a company
+  // Get all descendant IDs for a company (as strings)
   const getDescendantIds = useCallback((node) => {
     const ids = [];
     const collect = (n) => {
       if (n.children) {
         n.children.forEach(child => {
-          ids.push(child.id);
+          ids.push(String(child.id));
           collect(child);
         });
       }
@@ -82,14 +83,15 @@ const HierarchicalCompanyFilter = ({
     return ids;
   }, []);
 
-  // Get all IDs in a subtree (including the node itself)
+  // Get all IDs in a subtree (including the node itself, as strings)
   const getSubtreeIds = useCallback((node) => {
-    return [node.id, ...getDescendantIds(node)];
+    return [String(node.id), ...getDescendantIds(node)];
   }, [getDescendantIds]);
 
   // Check selection state for a node
   const getSelectionState = useCallback((node) => {
-    const isSelected = tempSelectedIds.has(node.id);
+    const nodeIdStr = String(node.id);
+    const isSelected = tempSelectedIds.has(nodeIdStr);
     
     if (!node.children || node.children.length === 0) {
       return isSelected ? 'checked' : 'unchecked';
@@ -129,12 +131,13 @@ const HierarchicalCompanyFilter = ({
   // Toggle expand/collapse
   const toggleExpand = useCallback((nodeId, e) => {
     e.stopPropagation();
+    const idStr = String(nodeId);
     setExpandedIds(prev => {
       const next = new Set(prev);
-      if (next.has(nodeId)) {
-        next.delete(nodeId);
+      if (next.has(idStr)) {
+        next.delete(idStr);
       } else {
-        next.add(nodeId);
+        next.add(idStr);
       }
       return next;
     });
@@ -146,7 +149,7 @@ const HierarchicalCompanyFilter = ({
     const collectIds = (nodes) => {
       nodes.forEach(node => {
         if (node.children && node.children.length > 0) {
-          allIds.add(node.id);
+          allIds.add(String(node.id));
           collectIds(node.children);
         }
       });
@@ -165,7 +168,7 @@ const HierarchicalCompanyFilter = ({
     const allIds = new Set();
     const collectIds = (nodes) => {
       nodes.forEach(node => {
-        allIds.add(node.id);
+        allIds.add(String(node.id));
         if (node.children) {
           collectIds(node.children);
         }
@@ -191,7 +194,7 @@ const HierarchicalCompanyFilter = ({
     const names = [];
     const findNames = (nodes) => {
       nodes.forEach(node => {
-        if (tempSelectedIds.has(node.id)) {
+        if (tempSelectedIds.has(String(node.id))) {
           names.push({ id: node.id, name: node.name, referenceNo: node.referenceNo });
         }
         if (node.children) {
@@ -206,7 +209,7 @@ const HierarchicalCompanyFilter = ({
   // Render a single tree node
   const renderNode = (node, level = 0) => {
     const hasChildren = node.children && node.children.length > 0;
-    const isExpanded = expandedIds.has(node.id);
+    const isExpanded = expandedIds.has(String(node.id));
     const selectionState = getSelectionState(node);
     const indent = level * 24;
     
@@ -360,7 +363,7 @@ const HierarchicalCompanyFilter = ({
                       onClick={() => {
                         setTempSelectedIds(prev => {
                           const next = new Set(prev);
-                          next.delete(company.id);
+                          next.delete(String(company.id));
                           return next;
                         });
                       }}
