@@ -22,6 +22,7 @@ const {
 } = require('../config/storage');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const { calculateDocumentRetentionDates } = require('../utils/documentRetention');
+const { isEmailEnabled } = require('../utils/emailService');
 
 /**
  * Process a single file for invoice import
@@ -1443,7 +1444,7 @@ async function processInvoiceImport(job) {
           }
         });
         
-        if (staffUsers.length > 0 && (settings.emailProvider?.enabled || settings.smtp?.enabled)) {
+        if (staffUsers.length > 0 && isEmailEnabled(settings)) {
           const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
           const reviewUrl = `${frontendUrl}/unallocated`; // Link to unallocated/duplicates page
           

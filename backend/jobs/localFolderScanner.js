@@ -18,6 +18,7 @@ const { invoiceImportQueue, emailQueue } = require('../config/queue');
 const { Op } = require('sequelize');
 const crypto = require('crypto');
 const importLogger = require('../services/importLogger');
+const { isEmailEnabled } = require('../utils/emailService');
 
 // Import storage configuration
 const {
@@ -379,8 +380,8 @@ async function sendScanSummaryEmail(results) {
   const { Settings, User } = require('../models');
   const settings = await Settings.getSettings();
   
-  // Check if email is enabled
-  if (!settings?.emailProvider?.enabled) {
+  // Check if email is enabled (Mailtrap = test mode, always enabled)
+  if (!isEmailEnabled(settings)) {
     console.log('ℹ️  Email not enabled, skipping scan summary email');
     return;
   }

@@ -4,6 +4,7 @@
  */
 
 const { redis } = require('../config/redis');
+const { isEmailEnabled } = require('./emailService');
 
 const IMPORT_PREFIX = 'import:';
 const IMPORT_TTL = 24 * 60 * 60; // 24 hours in seconds
@@ -235,9 +236,8 @@ async function sendCompletionEmail(importId, importSession) {
       return;
     }
     
-    // Get email provider config
-    const emailProvider = settings.emailProvider;
-    if (!emailProvider || !emailProvider.enabled) {
+    // Check if email is enabled (Mailtrap = test mode, always enabled)
+    if (!isEmailEnabled(settings)) {
       console.log(`⚠️  [Import ${importId}] Email provider not configured, skipping completion email`);
       return;
     }

@@ -11,6 +11,7 @@
 const { Company, Invoice, CreditNote, File, Settings } = require('../models');
 const { queueDocumentNotifications } = require('./documentNotificationService');
 const { logActivity, ActivityType } = require('./activityLogger');
+const { isEmailEnabled } = require('../utils/emailService');
 const { Op } = require('sequelize');
 
 // In-memory batch tracking (will be lost on server restart)
@@ -136,8 +137,8 @@ async function sendBatchNotifications(importId, batch) {
   
   const settings = await Settings.getSettings();
   
-  // Check if email is enabled
-  if (!settings?.emailProvider?.enabled && !settings?.smtp?.enabled) {
+  // Check if email is enabled (Mailtrap = test mode, always enabled)
+  if (!isEmailEnabled(settings)) {
     console.log(`ℹ️  [Batch ${importId}] Email not enabled, skipping notifications`);
     return;
   }

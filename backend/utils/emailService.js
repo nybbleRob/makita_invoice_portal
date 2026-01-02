@@ -122,6 +122,24 @@ function getEmailProviderConfig(settings) {
 }
 
 /**
+ * Check if email is enabled
+ * Mailtrap provider = test mode, always enabled regardless of global setting
+ * @param {Object} settings - Settings object
+ * @returns {boolean} - Whether email is enabled
+ */
+function isEmailEnabled(settings) {
+  const provider = settings?.emailProvider?.provider;
+  
+  // Mailtrap = test mode, always enabled
+  if (provider === 'mailtrap') {
+    return true;
+  }
+  
+  // Otherwise use the global enabled flag
+  return settings?.emailProvider?.enabled === true || settings?.smtp?.enabled === true;
+}
+
+/**
  * Send email using the configured provider
  * @param {Object} options - Email options
  * @param {string} options.to - Recipient email address
@@ -138,7 +156,8 @@ async function sendEmail(options, settings) {
   // Get provider config from database or environment
   const providerConfig = getEmailProviderConfig(settings);
   
-  if (!providerConfig || !providerConfig.enabled) {
+  // Use isEmailEnabled helper - Mailtrap bypasses the global enable flag
+  if (!providerConfig || !isEmailEnabled(settings)) {
     const error = new Error('Email provider is not configured or enabled');
     throw error;
   }
@@ -514,6 +533,7 @@ module.exports = {
   sendViaSMTP,
   sendViaOffice365,
   sendViaResend,
-  sendViaSMTP2Go
+  sendViaSMTP2Go,
+  isEmailEnabled
 };
 
