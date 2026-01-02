@@ -2,6 +2,8 @@
  * Batch Notification Service
  * Tracks import batches and triggers email notifications when all files in a batch are processed
  * 
+ * IMPORTANT: Uses Redis for batch tracking so it works across backend and queue worker processes
+ * 
  * Flow:
  * 1. When a batch import starts (manual upload or FTP scan), registerBatch() is called
  * 2. As each job completes, recordJobCompletion() is called
@@ -13,13 +15,77 @@ const { queueDocumentNotifications } = require('./documentNotificationService');
 const { logActivity, ActivityType } = require('./activityLogger');
 const { isEmailEnabled, sendEmail } = require('../utils/emailService');
 const { Op } = require('sequelize');
+const { redis } = require('../config/redis');
 
-// In-memory batch tracking (will be lost on server restart)
-// For production, consider using Redis or database for persistence
-const batchTracker = new Map();
+// Redis key prefix for batch tracking
+const BATCH_KEY_PREFIX = 'batch:notification:';
+const BATCH_TTL = 60 * 60; // 1 hour in seconds
 
-// TTL for batch records (1 hour)
-const BATCH_TTL = 60 * 60 * 1000;
+/**
+ * Get batch data from Redis
+ * @param {string} importId - Import batch ID
+ * @returns {Object|null} Batch data or null if not found
+ */
+async function getBatch(importId) {
+  if (!redis) return null;
+  
+  try {
+    const data = await redis.get(`${BATCH_KEY_PREFIX}${importId}`);
+    if (!data) return null;
+    
+    const batch = JSON.parse(data);
+    // Convert companyDocuments back to Map-like structure for compatibility
+    if (batch.companyDocuments && typeof batch.companyDocuments === 'object') {
+      batch.companyDocumentsMap = new Map(Object.entries(batch.companyDocuments));
+    } else {
+      batch.companyDocumentsMap = new Map();
+    }
+    return batch;
+  } catch (error) {
+    console.error(`[Batch] Error getting batch ${importId}:`, error.message);
+    return null;
+  }
+}
+
+/**
+ * Save batch data to Redis
+ * @param {string} importId - Import batch ID
+ * @param {Object} batch - Batch data
+ */
+async function saveBatch(importId, batch) {
+  if (!redis) return;
+  
+  try {
+    // Convert Map to plain object for JSON serialization
+    const batchToSave = {
+      ...batch,
+      companyDocuments: batch.companyDocumentsMap 
+        ? Object.fromEntries(batch.companyDocumentsMap)
+        : (batch.companyDocuments instanceof Map 
+            ? Object.fromEntries(batch.companyDocuments)
+            : batch.companyDocuments || {})
+    };
+    delete batchToSave.companyDocumentsMap;
+    
+    await redis.setex(`${BATCH_KEY_PREFIX}${importId}`, BATCH_TTL, JSON.stringify(batchToSave));
+  } catch (error) {
+    console.error(`[Batch] Error saving batch ${importId}:`, error.message);
+  }
+}
+
+/**
+ * Delete batch from Redis
+ * @param {string} importId - Import batch ID
+ */
+async function deleteBatch(importId) {
+  if (!redis) return;
+  
+  try {
+    await redis.del(`${BATCH_KEY_PREFIX}${importId}`);
+  } catch (error) {
+    console.error(`[Batch] Error deleting batch ${importId}:`, error.message);
+  }
+}
 
 /**
  * Register a new batch import
@@ -27,32 +93,32 @@ const BATCH_TTL = 60 * 60 * 1000;
  * @param {number} totalJobs - Total number of jobs in this batch
  * @param {Object} options - Additional options
  */
-function registerBatch(importId, totalJobs, options = {}) {
+async function registerBatch(importId, totalJobs, options = {}) {
   if (!importId || totalJobs <= 0) return;
   
-  console.log(`📋 [Batch ${importId}] Registered batch with ${totalJobs} jobs`);
+  if (!redis) {
+    console.warn(`[Batch ${importId}] Redis not available, batch tracking disabled`);
+    return;
+  }
   
-  batchTracker.set(importId, {
+  console.log(`[Batch ${importId}] Registering batch with ${totalJobs} jobs`);
+  
+  const batch = {
     importId,
     totalJobs,
     completedJobs: 0,
     successfulJobs: 0,
     failedJobs: 0,
     documents: [],
-    companyDocuments: new Map(), // companyId -> { invoices: [], creditNotes: [], statements: [] }
+    companyDocuments: {}, // Plain object for JSON serialization
     startTime: Date.now(),
     userId: options.userId,
     userEmail: options.userEmail,
     source: options.source || 'unknown'
-  });
+  };
   
-  // Set TTL to auto-cleanup stale batches
-  setTimeout(() => {
-    if (batchTracker.has(importId)) {
-      console.log(`🧹 [Batch ${importId}] Expired and cleaned up (TTL exceeded)`);
-      batchTracker.delete(importId);
-    }
-  }, BATCH_TTL);
+  await saveBatch(importId, batch);
+  console.log(`[Batch ${importId}] Batch registered successfully (TTL: ${BATCH_TTL}s)`);
 }
 
 /**
@@ -61,18 +127,21 @@ function registerBatch(importId, totalJobs, options = {}) {
  * @param {Object} result - Job result
  */
 async function recordJobCompletion(importId, result) {
-  if (!importId || !batchTracker.has(importId)) {
-    // Job not part of tracked batch, skip
+  if (!importId) return;
+  
+  const batch = await getBatch(importId);
+  if (!batch) {
+    // This is normal if batch wasn't registered or expired
+    console.log(`[Batch ${importId}] Batch not found in Redis, skipping notification tracking`);
     return;
   }
   
-  const batch = batchTracker.get(importId);
   batch.completedJobs++;
   
   if (result.success) {
     batch.successfulJobs++;
     
-    // Track document if created
+    // Track document if created and assigned to a company
     if (result.documentId && result.companyId) {
       const docInfo = {
         id: result.documentId,
@@ -85,16 +154,17 @@ async function recordJobCompletion(importId, result) {
       
       batch.documents.push(docInfo);
       
-      // Group by company
-      if (!batch.companyDocuments.has(result.companyId)) {
-        batch.companyDocuments.set(result.companyId, {
+      // Group by company (using plain object)
+      const companyId = result.companyId;
+      if (!batch.companyDocuments[companyId]) {
+        batch.companyDocuments[companyId] = {
           invoices: [],
           creditNotes: [],
           statements: []
-        });
+        };
       }
       
-      const companyDocs = batch.companyDocuments.get(result.companyId);
+      const companyDocs = batch.companyDocuments[companyId];
       if (result.documentType === 'invoice') {
         companyDocs.invoices.push(docInfo);
       } else if (result.documentType === 'credit_note') {
@@ -107,20 +177,25 @@ async function recordJobCompletion(importId, result) {
     batch.failedJobs++;
   }
   
-  console.log(`📋 [Batch ${importId}] Progress: ${batch.completedJobs}/${batch.totalJobs} (${batch.successfulJobs} success, ${batch.failedJobs} failed)`);
+  console.log(`[Batch ${importId}] Progress: ${batch.completedJobs}/${batch.totalJobs} (${batch.successfulJobs} success, ${batch.failedJobs} failed)`);
   
   // Check if batch is complete
   if (batch.completedJobs >= batch.totalJobs) {
-    console.log(`✅ [Batch ${importId}] All jobs complete! Triggering notifications...`);
+    console.log(`[Batch ${importId}] All jobs complete! Triggering notifications...`);
     
     try {
+      // Convert companyDocuments to Map for sendBatchNotifications
+      batch.companyDocumentsMap = new Map(Object.entries(batch.companyDocuments));
       await sendBatchNotifications(importId, batch);
     } catch (error) {
-      console.error(`❌ [Batch ${importId}] Error sending notifications:`, error.message);
+      console.error(`[Batch ${importId}] Error sending notifications:`, error.message);
     } finally {
-      // Clean up batch
-      batchTracker.delete(importId);
+      // Clean up batch from Redis
+      await deleteBatch(importId);
     }
+  } else {
+    // Save updated batch
+    await saveBatch(importId, batch);
   }
 }
 
@@ -140,12 +215,15 @@ async function sendBatchNotifications(importId, batch) {
     return;
   }
   
+  // Get companyDocuments as Map
+  const companyDocuments = batch.companyDocumentsMap || new Map(Object.entries(batch.companyDocuments || {}));
+  
   // Send user notifications if there are company documents
-  if (batch.companyDocuments.size === 0) {
+  if (companyDocuments.size === 0) {
     console.log(`[Batch ${importId}] No company documents to notify users about`);
   } else {
     // Send notifications for each company
-    for (const [companyId, docs] of batch.companyDocuments) {
+    for (const [companyId, docs] of companyDocuments) {
       try {
         const company = await Company.findByPk(companyId);
         if (!company) {
@@ -160,11 +238,11 @@ async function sendBatchNotifications(importId, batch) {
         }
         
         // Fetch full document objects for notification
-        const invoices = docs.invoices.length > 0 
+        const invoices = docs.invoices && docs.invoices.length > 0 
           ? await Invoice.findAll({ where: { id: { [Op.in]: docs.invoices.map(d => d.id) } } })
           : [];
         
-        const creditNotes = docs.creditNotes.length > 0
+        const creditNotes = docs.creditNotes && docs.creditNotes.length > 0
           ? await CreditNote.findAll({ where: { id: { [Op.in]: docs.creditNotes.map(d => d.id) } } })
           : [];
         
@@ -215,7 +293,7 @@ async function sendBatchNotifications(importId, batch) {
         successfulJobs: batch.successfulJobs,
         failedJobs: batch.failedJobs,
         documentsCreated: batch.documents.length,
-        companiesNotified: batch.companyDocuments.size,
+        companiesNotified: companyDocuments.size,
         notificationsQueued: totalNotificationsSent,
         processingTimeMs: processingTime,
         source: batch.source
@@ -314,7 +392,7 @@ async function sendAdminSummaryEmail(importId, batch, processingTime, notificati
         </tr>
         <tr>
           <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Source</td>
-          <td style="padding: 12px; border: 1px solid #e0e0e0;">${batch.source === 'ftp_scan' ? 'FTP/SFTP Scan' : batch.source === 'manual_upload' ? 'Manual Upload' : batch.source}</td>
+          <td style="padding: 12px; border: 1px solid #e0e0e0;">${batch.source === 'ftp_scan' ? 'FTP/SFTP Scan' : batch.source === 'manual-upload' ? 'Manual Upload' : batch.source}</td>
         </tr>
       </table>
       
@@ -347,7 +425,7 @@ async function sendAdminSummaryEmail(importId, batch, processingTime, notificati
         subject,
         html: htmlContent,
         text: `Import Summary\n\nTotal: ${batch.totalJobs}\nSuccessful: ${batch.successfulJobs}\nFailed: ${batch.failedJobs}\nAllocated: ${allocatedCount}\nUnallocated: ${unallocatedCount}\nProcessing Time: ${formatTime(processingTime)}`
-      });
+      }, await Settings.getSettings());
       console.log(`[Batch ${importId}] Admin summary sent to ${admin.email}`);
     } catch (error) {
       console.error(`[Batch ${importId}] Failed to send admin summary to ${admin.email}:`, error.message);
@@ -360,10 +438,10 @@ async function sendAdminSummaryEmail(importId, batch, processingTime, notificati
  * @param {string} importId - Import batch ID
  * @returns {Object|null} Batch status or null if not found
  */
-function getBatchStatus(importId) {
-  if (!batchTracker.has(importId)) return null;
+async function getBatchStatus(importId) {
+  const batch = await getBatch(importId);
+  if (!batch) return null;
   
-  const batch = batchTracker.get(importId);
   return {
     importId: batch.importId,
     totalJobs: batch.totalJobs,
@@ -371,7 +449,7 @@ function getBatchStatus(importId) {
     successfulJobs: batch.successfulJobs,
     failedJobs: batch.failedJobs,
     documentsCreated: batch.documents.length,
-    companiesAffected: batch.companyDocuments.size,
+    companiesAffected: Object.keys(batch.companyDocuments || {}).length,
     elapsedMs: Date.now() - batch.startTime,
     source: batch.source
   };
@@ -381,20 +459,24 @@ function getBatchStatus(importId) {
  * Get all active batches
  * @returns {Array} Array of batch statuses
  */
-function getActiveBatches() {
-  const batches = [];
-  for (const [importId, batch] of batchTracker) {
-    batches.push({
-      importId,
-      totalJobs: batch.totalJobs,
-      completedJobs: batch.completedJobs,
-      successfulJobs: batch.successfulJobs,
-      failedJobs: batch.failedJobs,
-      elapsedMs: Date.now() - batch.startTime,
-      source: batch.source
-    });
+async function getActiveBatches() {
+  if (!redis) return [];
+  
+  try {
+    const keys = await redis.keys(`${BATCH_KEY_PREFIX}*`);
+    const batches = [];
+    
+    for (const key of keys) {
+      const importId = key.replace(BATCH_KEY_PREFIX, '');
+      const status = await getBatchStatus(importId);
+      if (status) batches.push(status);
+    }
+    
+    return batches;
+  } catch (error) {
+    console.error('[Batch] Error getting active batches:', error.message);
+    return [];
   }
-  return batches;
 }
 
 /**
@@ -402,13 +484,15 @@ function getActiveBatches() {
  * @param {string} importId - Import batch ID
  */
 async function forceTriggerNotifications(importId) {
-  if (!batchTracker.has(importId)) {
+  const batch = await getBatch(importId);
+  if (!batch) {
     throw new Error(`Batch ${importId} not found`);
   }
   
-  const batch = batchTracker.get(importId);
+  // Convert companyDocuments to Map for sendBatchNotifications
+  batch.companyDocumentsMap = new Map(Object.entries(batch.companyDocuments || {}));
   await sendBatchNotifications(importId, batch);
-  batchTracker.delete(importId);
+  await deleteBatch(importId);
 }
 
 module.exports = {
@@ -419,4 +503,3 @@ module.exports = {
   getActiveBatches,
   forceTriggerNotifications
 };
-

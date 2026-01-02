@@ -300,12 +300,12 @@ async function scanLocalFolder() {
     if (results.queued > 0) {
       try {
         const { registerBatch } = require('../services/batchNotificationService');
-        registerBatch(batchImportId, results.queued, {
+        await registerBatch(batchImportId, results.queued, {
           userId: systemUser?.id || null,
           userEmail: systemUser?.email || 'system',
           source: 'ftp-scan'
         });
-        console.log(`📋 Registered batch ${batchImportId} with ${results.queued} jobs for notification tracking`);
+        console.log(`[Batch ${batchImportId}] Registered batch with ${results.queued} jobs for notification tracking`);
       } catch (batchError) {
         console.warn('Failed to register batch:', batchError.message);
       }

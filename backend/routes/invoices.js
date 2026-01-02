@@ -660,14 +660,15 @@ router.post('/import', importUpload.array('files', 500), async (req, res) => {
     const importId = uuidv4();
     const userId = req.user.userId;
     
-    // Register batch for notification tracking
+    // Register batch for notification tracking (uses Redis for cross-process communication)
     try {
       const { registerBatch } = require('../services/batchNotificationService');
-      registerBatch(importId, req.files.length, {
+      await registerBatch(importId, req.files.length, {
         userId: userId,
         userEmail: req.user.email,
         source: 'manual-upload'
       });
+      console.log(`[Batch ${importId}] Registered batch with ${req.files.length} jobs for notification tracking`);
     } catch (batchError) {
       console.warn('Failed to register batch:', batchError.message);
     }
