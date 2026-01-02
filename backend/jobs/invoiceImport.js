@@ -35,7 +35,7 @@ async function processInvoiceImport(job) {
   // Check if import was cancelled
   if (importId) {
     const importStore = require('../utils/importStore');
-    if (importStore.isCancelled(importId)) {
+    if (await importStore.isCancelled(importId)) {
       console.log(`🛑 [Import ${importId}] Import was cancelled. Skipping job for ${originalName || fileName}`);
       throw new Error('Import was cancelled by user');
     }
