@@ -61,11 +61,7 @@ const UserManagement = () => {
   });
   
   // Company assignment states
-  const [companySearchQuery, setCompanySearchQuery] = useState('');
-  const [companySearchResults, setCompanySearchResults] = useState([]);
-  const [companyPagination, setCompanyPagination] = useState({ page: 1, limit: 30, total: 0, pages: 0 });
-  const [loadingCompanies, setLoadingCompanies] = useState(false);
-  const debouncedCompanySearch = useDebounce(companySearchQuery, 300);
+  const [showCompanyAssignmentModal, setShowCompanyAssignmentModal] = useState(false);
   const [userAssignedCompanyObjects, setUserAssignedCompanyObjects] = useState([]); // Full company objects for currently edited user
   
   // Assigned Companies Modal state
@@ -294,44 +290,12 @@ const UserManagement = () => {
     }
   };
   
-  // Fetch companies for assignment (with pagination and search)
-  const fetchCompaniesForAssignment = async (page = 1, search = '') => {
-    setLoadingCompanies(true);
-    try {
-      const response = await api.get('/api/companies/for-assignment', {
-        params: { page, limit: 20, search }
-      });
-      setCompanySearchResults(response.data.data);
-      setCompanyPagination(response.data.pagination);
-    } catch (error) {
-      console.error('Error fetching companies:', error);
-      toast.error('Error fetching companies: ' + (error.response?.data?.message || error.message));
-    } finally {
-      setLoadingCompanies(false);
-    }
-  };
-  
-  // Debounced company search effect
-  useEffect(() => {
-    if (!formData.allCompanies) {
-      fetchCompaniesForAssignment(1, debouncedCompanySearch);
-    }
-  }, [debouncedCompanySearch, formData.role, formData.allCompanies]);
-  
-  // Handle company selection
-  const handleCompanyToggle = (companyId) => {
-    // Don't allow toggling if "All Companies" is enabled
-    if (formData.allCompanies) {
-      return;
-    }
-    setFormData(prev => {
-      const companyIds = prev.companyIds || [];
-      if (companyIds.includes(companyId)) {
-        return { ...prev, companyIds: companyIds.filter(id => id !== companyId) };
-      } else {
-        return { ...prev, companyIds: [...companyIds, companyId] };
-      }
-    });
+  // Handle company assignment from hierarchical filter
+  const handleCompanyAssignmentChange = (selectedIds) => {
+    setFormData(prev => ({
+      ...prev,
+      companyIds: selectedIds
+    }));
   };
 
   // Handle "All Companies" toggle
@@ -640,10 +604,8 @@ const UserManagement = () => {
         allCompanies: response.data.allCompanies || false,
         companyIds: assignedCompanyList.map(c => c.id)
       }));
-      // Store full company objects so they appear first in the list
+      // Store full company objects so they appear in the pills display
       setUserAssignedCompanyObjects(assignedCompanyList);
-      // Load companies for assignment UI
-      fetchCompaniesForAssignment(1, '');
     } catch (error) {
       console.error('Error fetching user companies:', error);
       setUserAssignedCompanyObjects([]);
@@ -1510,90 +1472,33 @@ const UserManagement = () => {
                         
                         {!formData.allCompanies && (
                           <>
-                            <div className="mb-3">
-                              <input
-                                type="text"
-                                className="form-control"
-                                placeholder="Search companies..."
-                                value={companySearchQuery || ''}
-                                onChange={(e) => setCompanySearchQuery(e.target.value)}
-                                disabled={formData.allCompanies}
-                              />
-                            </div>
+                            <button
+                              type="button"
+                              className={`btn w-100 mb-3 ${formData.companyIds?.length > 0 ? 'btn-primary' : 'btn-outline-secondary'}`}
+                              onClick={() => setShowCompanyAssignmentModal(true)}
+                            >
+                              {formData.companyIds?.length > 0 
+                                ? `${formData.companyIds.length} Compan${formData.companyIds.length !== 1 ? 'ies' : 'y'} Selected` 
+                                : 'Select Companies...'}
+                            </button>
                             
-                            <div className="flex-grow-1" style={{ minHeight: '250px', maxHeight: '300px', overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: '4px', padding: '10px' }}>
-                              {loadingCompanies ? (
-                                <div className="text-center py-3 text-muted">Loading companies...</div>
-                              ) : companySearchResults.length === 0 && userAssignedCompanyObjects.length === 0 ? (
-                                <div className="text-center py-3 text-muted">No companies found</div>
-                              ) : (
-                                <>
-                                  {/* Merge assigned companies with search results, assigned first */}
-                                  {(() => {
-                                    // Get IDs of companies already in search results
-                                    const searchResultIds = new Set(companySearchResults.map(c => c.id));
-                                    // Filter assigned companies not already in search results
-                                    const assignedNotInSearch = userAssignedCompanyObjects.filter(c => !searchResultIds.has(c.id));
-                                    // Combine: assigned first (sorted), then search results (sorted)
-                                    const assignedSorted = [...assignedNotInSearch].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-                                    const searchSorted = [...companySearchResults].sort((a, b) => {
-                                      const aAssigned = formData.companyIds?.includes(a.id) || false;
-                                      const bAssigned = formData.companyIds?.includes(b.id) || false;
-                                      if (aAssigned && !bAssigned) return -1;
-                                      if (!aAssigned && bAssigned) return 1;
-                                      return (a.name || '').localeCompare(b.name || '');
-                                    });
-                                    const allCompanies = [...assignedSorted, ...searchSorted];
-                                    
-                                    return allCompanies.map((company) => {
-                                      const isAssigned = formData.companyIds?.includes(company.id) || false;
-                                      return (
-                                        <label key={company.id} className="form-check mb-2">
-                                          <input
-                                            type="checkbox"
-                                            className="form-check-input"
-                                            checked={isAssigned}
-                                            onChange={() => handleCompanyToggle(company.id)}
-                                            disabled={formData.allCompanies}
-                                          />
-                                          <span className={`form-check-label ${isAssigned ? 'fw-bold' : ''}`}>
-                                            {company.name} {company.referenceNo && `(${company.referenceNo})`}
-                                          </span>
-                                        </label>
-                                      );
-                                    });
-                                  })()}
-                                  {companyPagination.pages > 1 && (
-                                    <div className="d-flex justify-content-between align-items-center mt-3">
-                                      <button
-                                        type="button"
-                                        className="btn btn-sm btn-secondary"
-                                        disabled={companyPagination.page === 1 || formData.allCompanies}
-                                        onClick={() => fetchCompaniesForAssignment(companyPagination.page - 1, companySearchQuery)}
-                                      >
-                                        Previous
-                                      </button>
-                                      <span className="text-muted">
-                                        Page {companyPagination.page} of {companyPagination.pages}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        className="btn btn-sm btn-secondary"
-                                        disabled={companyPagination.page === companyPagination.pages || formData.allCompanies}
-                                        onClick={() => fetchCompaniesForAssignment(companyPagination.page + 1, companySearchQuery)}
-                                      >
-                                        Next
-                                      </button>
-                                    </div>
-                                  )}
-                                </>
-                              )}
-                            </div>
+                            {/* Show selected company names */}
+                            {formData.companyIds?.length > 0 && formData.companyIds.length <= 10 && userAssignedCompanyObjects.length > 0 && (
+                              <div className="d-flex flex-wrap gap-1 mb-2">
+                                {userAssignedCompanyObjects
+                                  .filter(c => formData.companyIds.includes(c.id))
+                                  .map(company => (
+                                    <span key={company.id} className="badge bg-primary-lt">
+                                      {company.name} {company.referenceNo && `(${company.referenceNo})`}
+                                    </span>
+                                  ))}
+                              </div>
+                            )}
                             
-                            {formData.companyIds?.length > 0 && (
-                              <div className="mt-2">
+                            {formData.companyIds?.length > 10 && (
+                              <div className="mb-2">
                                 <small className="text-muted">
-                                  {formData.companyIds.length} compan{formData.companyIds.length !== 1 ? 'ies' : 'y'} selected
+                                  {formData.companyIds.length} companies selected
                                 </small>
                               </div>
                             )}
@@ -1787,6 +1692,16 @@ const UserManagement = () => {
           }}
           onClose={() => setShowCompanyFilterModal(false)}
           onApply={() => setShowCompanyFilterModal(false)}
+        />
+      )}
+      
+      {/* Company Assignment Modal for Add/Edit User */}
+      {showCompanyAssignmentModal && (
+        <HierarchicalCompanyFilter
+          selectedCompanyIds={formData.companyIds || []}
+          onSelectionChange={handleCompanyAssignmentChange}
+          onClose={() => setShowCompanyAssignmentModal(false)}
+          onApply={() => setShowCompanyAssignmentModal(false)}
         />
       )}
     </div>
