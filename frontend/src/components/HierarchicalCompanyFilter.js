@@ -237,7 +237,7 @@ const HierarchicalCompanyFilter = ({
     const isExpanded = expandedIds.has(String(node.id));
     const isSelected = getSelectionState(node) === 'checked';
     const childrenSelected = hasSelectedChildren(node);
-    const indent = level * 20; // Indentation per level
+    const indent = level * 16; // Indentation per level (left side only)
     const isChild = level > 0;
     
     // Type badge colors
@@ -252,12 +252,14 @@ const HierarchicalCompanyFilter = ({
         <div 
           className={`d-flex align-items-center py-2 px-2 border-bottom ${isSelected ? 'bg-primary-lt' : childrenSelected ? 'bg-azure-lt' : ''}`}
           style={{ 
-            paddingLeft: `${8 + indent}px`,
             cursor: 'pointer',
-            fontSize: isChild ? '0.875rem' : '1rem' // Smaller font for children
+            fontSize: isChild ? '0.85rem' : '0.925rem' // Slightly smaller for children
           }}
           onClick={() => toggleSelection(node)}
         >
+          {/* Left indent spacer - only affects left side */}
+          {indent > 0 && <div style={{ width: `${indent}px`, flexShrink: 0 }} />}
+          
           {/* Expand/Collapse button */}
           <div style={{ width: '24px', flexShrink: 0 }}>
             {hasChildren && (
@@ -297,11 +299,8 @@ const HierarchicalCompanyFilter = ({
             onClick={(e) => e.stopPropagation()}
           />
           
-          {/* Company name - bold for parents */}
-          <span 
-            className="flex-grow-1 text-truncate"
-            style={{ fontWeight: hasChildren ? '600' : 'normal' }}
-          >
+          {/* Company name - normal weight for all */}
+          <span className="flex-grow-1 text-truncate">
             {node.name}
           </span>
           
