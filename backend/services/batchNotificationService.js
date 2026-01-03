@@ -313,14 +313,14 @@ async function sendBatchNotifications(importId, batch) {
             invoiceNumber: inv.invoiceNumber,
             amount: inv.amount,
             date: inv.issueDate?.toISOString(),
-            filePath: inv.fileUrl
+            fileUrl: inv.fileUrl
           })),
           creditNotes: creditNotes.map(cn => ({
             id: cn.id,
             creditNoteNumber: cn.creditNoteNumber,
             amount: cn.amount,
             date: cn.issueDate?.toISOString(),
-            filePath: cn.fileUrl
+            fileUrl: cn.fileUrl
           })),
           statements: [], // Add statement support if needed
           triggeredByUserId: batch.userId,
