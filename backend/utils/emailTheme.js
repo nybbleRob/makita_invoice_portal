@@ -20,28 +20,18 @@ function getEmailTheme(settings) {
   const frontendUrl = process.env.FRONTEND_URL || 'https://edi.makitauk.com';
   
   // Determine logo URL (prefer light logo, fallback to dark)
-  // Logos are stored as paths like "/uploads/logos/logo.png" and served by backend
+  // Logos are stored as paths like "/uploads/logo-xxx.png" and served directly at /uploads/
   let logoUrl = null;
   if (logoLight) {
     if (logoLight.startsWith('http')) {
       logoUrl = logoLight;
-    } else if (logoLight.startsWith('/api/')) {
-      // Already an API path
-      logoUrl = `${backendUrl}${logoLight}`;
-    } else if (logoLight.startsWith('/uploads/')) {
-      // Uploads are served via /api/uploads
-      logoUrl = `${backendUrl}/api${logoLight}`;
     } else {
-      // Other relative paths
+      // Relative paths - uploads are served at /uploads/ not /api/uploads/
       logoUrl = `${backendUrl}${logoLight.startsWith('/') ? '' : '/'}${logoLight}`;
     }
   } else if (logoDark) {
     if (logoDark.startsWith('http')) {
       logoUrl = logoDark;
-    } else if (logoDark.startsWith('/api/')) {
-      logoUrl = `${backendUrl}${logoDark}`;
-    } else if (logoDark.startsWith('/uploads/')) {
-      logoUrl = `${backendUrl}/api${logoDark}`;
     } else {
       logoUrl = `${backendUrl}${logoDark.startsWith('/') ? '' : '/'}${logoDark}`;
     }
