@@ -163,6 +163,9 @@ async function recordJobCompletion(importId, result) {
         
         batch.completedJobs++;
         
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/a71118e4-5010-40f5-8a55-7b39cd0c3d75',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'batchNotificationService.js:166',message:'recordJobCompletion result',data:{documentId:result.documentId,companyId:result.companyId,documentType:result.documentType,success:result.success,fileName:result.fileName,hasDocId:!!result.documentId,hasCompanyId:!!result.companyId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H2'})}).catch(()=>{});
+        // #endregion
         if (result.success) {
           batch.successfulJobs++;
           
@@ -265,6 +268,9 @@ async function sendBatchNotifications(importId, batch) {
   
   console.log(`[Batch ${importId}] Batch data: totalJobs=${batch.totalJobs}, successfulJobs=${batch.successfulJobs}, documents=${batch.documents?.length || 0}`);
   console.log(`[Batch ${importId}] Company documents object has ${companyIds.length} companies`);
+  // #region agent log
+  fetch('http://127.0.0.1:7244/ingest/a71118e4-5010-40f5-8a55-7b39cd0c3d75',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'batchNotificationService.js:267',message:'Batch complete - sending notifications',data:{totalJobs:batch.totalJobs,documentsCount:batch.documents?.length,companyCount:companyIds.length,companyDocuments:batch.companyDocuments,firstFewDocs:batch.documents?.slice(0,3)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3-H5'})}).catch(()=>{});
+  // #endregion
   
   // Debug: log what companies have documents
   for (const cId of companyIds) {

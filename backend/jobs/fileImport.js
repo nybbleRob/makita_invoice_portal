@@ -402,6 +402,9 @@ async function processFileImport(job) {
         if (company) {
           matchedCompanyId = company.id;
           console.log(`✅ Matched company: ${company.name} (Account: ${company.referenceNo})`);
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/a71118e4-5010-40f5-8a55-7b39cd0c3d75',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'fileImport.js:402',message:'Company matched',data:{companyId:company.id,companyName:company.name,accountNumber:parsedData.accountNumber},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
+          // #endregion
           
           // Create invoice/credit note/statement based on document type
           // Only create for INVOICE or CREDIT_NOTE document types
@@ -427,6 +430,9 @@ async function processFileImport(job) {
               });
               
               console.log(`✅ Created invoice: ${document.invoiceNumber} for company: ${company.name}`);
+              // #region agent log
+              fetch('http://127.0.0.1:7244/ingest/a71118e4-5010-40f5-8a55-7b39cd0c3d75',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'fileImport.js:429',message:'Invoice created',data:{invoiceId:document.id,invoiceNumber:document.invoiceNumber,companyId:matchedCompanyId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H4'})}).catch(()=>{});
+              // #endregion
             } catch (invoiceError) {
               console.error(`⚠️  Failed to create invoice:`, invoiceError.message);
               // Continue processing even if invoice creation fails
@@ -517,6 +523,9 @@ async function processFileImport(job) {
       
       await job.updateProgress(100);
       
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/a71118e4-5010-40f5-8a55-7b39cd0c3d75',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'fileImport.js:520',message:'Job returning result',data:{matchedCompanyId,documentId:document?.id,documentExists:!!document,documentType:document?(fileType==='invoice'||parsedData.documentType?.toLowerCase()==='invoice'?'invoice':'credit_note'):null,fileName,finalStatus},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H2-H4'})}).catch(()=>{});
+      // #endregion
       return {
         success: true,
         status: finalStatus,
