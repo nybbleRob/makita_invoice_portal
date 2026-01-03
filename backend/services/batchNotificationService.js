@@ -39,6 +39,10 @@ async function getBatch(importId) {
     if (!batch.companyDocuments || typeof batch.companyDocuments !== 'object') {
       batch.companyDocuments = {};
     }
+    
+    const companyKeys = Object.keys(batch.companyDocuments);
+    console.log(`[Batch ${importId}] DEBUG getBatch: documents=${batch.documents?.length || 0}, companyDocuments keys=${companyKeys.length}`);
+    
     return batch;
   } catch (error) {
     console.error(`[Batch] Error getting batch ${importId}:`, error.message);
@@ -63,6 +67,9 @@ async function saveBatch(importId, batch) {
     };
     // Remove the Map version - we only save the plain object
     delete batchToSave.companyDocumentsMap;
+    
+    const companyKeys = Object.keys(batchToSave.companyDocuments);
+    console.log(`[Batch ${importId}] DEBUG saveBatch: documents=${batchToSave.documents?.length || 0}, companyDocuments keys=${companyKeys.length}, companies=${companyKeys.slice(0,3).join(',')}`);
     
     await redis.setex(`${BATCH_KEY_PREFIX}${importId}`, BATCH_TTL, JSON.stringify(batchToSave));
   } catch (error) {
@@ -163,9 +170,7 @@ async function recordJobCompletion(importId, result) {
         
         batch.completedJobs++;
         
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/a71118e4-5010-40f5-8a55-7b39cd0c3d75',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'batchNotificationService.js:166',message:'recordJobCompletion result',data:{documentId:result.documentId,companyId:result.companyId,documentType:result.documentType,success:result.success,fileName:result.fileName,hasDocId:!!result.documentId,hasCompanyId:!!result.companyId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1-H2'})}).catch(()=>{});
-        // #endregion
+        console.log(`[Batch ${importId}] DEBUG result: documentId=${result.documentId}, companyId=${result.companyId}, documentType=${result.documentType}, success=${result.success}`);
         if (result.success) {
           batch.successfulJobs++;
           
@@ -185,6 +190,14 @@ async function recordJobCompletion(importId, result) {
             
             // Group by company (using plain object)
             const companyId = result.companyId;
+            console.log(`[Batch ${importId}] DEBUG: Adding to companyDocuments. companyId=${companyId}, type=${typeof batch.companyDocuments}, keys before=${Object.keys(batch.companyDocuments || {}).length}`);
+            
+            // Ensure companyDocuments exists
+            if (!batch.companyDocuments) {
+              console.log(`[Batch ${importId}] DEBUG: companyDocuments was undefined/null, initializing`);
+              batch.companyDocuments = {};
+            }
+            
             if (!batch.companyDocuments[companyId]) {
               batch.companyDocuments[companyId] = {
                 invoices: [],
@@ -196,11 +209,14 @@ async function recordJobCompletion(importId, result) {
             const companyDocs = batch.companyDocuments[companyId];
             if (result.documentType === 'invoice') {
               companyDocs.invoices.push(docInfo);
+              console.log(`[Batch ${importId}] DEBUG: Added invoice to company ${companyId}, now has ${companyDocs.invoices.length} invoices`);
             } else if (result.documentType === 'credit_note') {
               companyDocs.creditNotes.push(docInfo);
             } else if (result.documentType === 'statement') {
               companyDocs.statements.push(docInfo);
             }
+            
+            console.log(`[Batch ${importId}] DEBUG: companyDocuments keys after=${Object.keys(batch.companyDocuments).length}`);
           } else {
             // Document not tracked - either unallocated (no companyId) or no document created
             console.log(`[Batch ${importId}] Document NOT tracked: documentId=${result.documentId}, companyId=${result.companyId}, status=${result.status}`);
@@ -268,9 +284,7 @@ async function sendBatchNotifications(importId, batch) {
   
   console.log(`[Batch ${importId}] Batch data: totalJobs=${batch.totalJobs}, successfulJobs=${batch.successfulJobs}, documents=${batch.documents?.length || 0}`);
   console.log(`[Batch ${importId}] Company documents object has ${companyIds.length} companies`);
-  // #region agent log
-  fetch('http://127.0.0.1:7244/ingest/a71118e4-5010-40f5-8a55-7b39cd0c3d75',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'batchNotificationService.js:267',message:'Batch complete - sending notifications',data:{totalJobs:batch.totalJobs,documentsCount:batch.documents?.length,companyCount:companyIds.length,companyDocuments:batch.companyDocuments,firstFewDocs:batch.documents?.slice(0,3)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3-H5'})}).catch(()=>{});
-  // #endregion
+  console.log(`[Batch ${importId}] DEBUG final: companyDocuments=${JSON.stringify(batch.companyDocuments).substring(0, 500)}`);
   
   // Debug: log what companies have documents
   for (const cId of companyIds) {
