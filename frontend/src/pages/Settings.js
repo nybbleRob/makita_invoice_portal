@@ -2300,6 +2300,72 @@ const Settings = () => {
                         <small className="form-hint">Email address to use for test emails</small>
                       </div>
 
+                      {/* Email Test Mode */}
+                      <div className={`card mb-3 ${settings.emailProvider?.testMode?.enabled ? 'border-warning' : ''}`} style={settings.emailProvider?.testMode?.enabled ? { backgroundColor: '#fff3cd' } : {}}>
+                        <div className="card-body">
+                          <h4 className="card-title d-flex align-items-center gap-2">
+                            Email Test Mode
+                            {settings.emailProvider?.testMode?.enabled && (
+                              <span className="badge bg-warning text-dark">ACTIVE</span>
+                            )}
+                          </h4>
+                          <p className="text-muted small mb-3">
+                            When enabled, ALL system emails (notifications, password resets, summaries, etc.) will be redirected to a single email address. 
+                            The original recipient will be shown in the subject line.
+                          </p>
+                          
+                          {settings.emailProvider?.testMode?.enabled && (
+                            <div className="alert alert-warning mb-3">
+                              <strong>Test Mode is ACTIVE!</strong><br />
+                              All emails are being redirected to: <strong>{settings.emailProvider?.testMode?.redirectEmail || 'Not Set'}</strong>
+                            </div>
+                          )}
+                          
+                          <div className="mb-3">
+                            <label className="form-check form-switch">
+                              <input
+                                className="form-check-input"
+                                type="checkbox"
+                                checked={settings.emailProvider?.testMode?.enabled || false}
+                                onChange={(e) => setSettings(prev => ({
+                                  ...prev,
+                                  emailProvider: {
+                                    ...prev.emailProvider,
+                                    testMode: {
+                                      ...prev.emailProvider?.testMode,
+                                      enabled: e.target.checked
+                                    }
+                                  }
+                                }))}
+                              />
+                              <span className="form-check-label">Enable Email Test Mode</span>
+                            </label>
+                          </div>
+                          
+                          <div className="mb-0">
+                            <label className="form-label">Redirect All Emails To</label>
+                            <input
+                              type="email"
+                              className="form-control"
+                              value={settings.emailProvider?.testMode?.redirectEmail || ''}
+                              onChange={(e) => setSettings(prev => ({
+                                ...prev,
+                                emailProvider: {
+                                  ...prev.emailProvider,
+                                  testMode: {
+                                    ...prev.emailProvider?.testMode,
+                                    redirectEmail: e.target.value
+                                  }
+                                }
+                              }))}
+                              placeholder="your-test-email@example.com"
+                              disabled={!settings.emailProvider?.testMode?.enabled}
+                            />
+                            <small className="form-hint">All system emails will be sent to this address with [TEST -&gt; original@recipient.com] in the subject</small>
+                          </div>
+                        </div>
+                      </div>
+
                       {/* SMTP Configuration */}
                       {settings.emailProvider?.provider === 'smtp' && (
                         <div className="card mt-3">

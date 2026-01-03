@@ -121,6 +121,10 @@ module.exports = (sequelize) => {
           fromEmail: '',
           fromName: 'Makita Invoice Portal',
           rejectUnauthorized: false
+        },
+        testMode: {
+          enabled: false,
+          redirectEmail: '' // All emails redirect to this address when enabled
         }
       }
     },

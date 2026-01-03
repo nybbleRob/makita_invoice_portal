@@ -160,7 +160,16 @@ function isEmailEnabled(settings) {
  * @returns {Promise<Object>} - Result object with success status and message
  */
 async function sendEmail(options, settings) {
-  const { to, subject, html, text, attachments = [] } = options;
+  let { to, subject, html, text, attachments = [] } = options;
+  
+  // EMAIL TEST MODE: Redirect all emails to a single test address
+  const testMode = settings?.emailProvider?.testMode;
+  if (testMode?.enabled && testMode?.redirectEmail) {
+    const originalRecipient = to;
+    to = testMode.redirectEmail;
+    subject = `[TEST -> ${originalRecipient}] ${subject}`;
+    console.log(`[EmailService] TEST MODE: Redirecting from ${originalRecipient} to ${to}`);
+  }
   
   // Get provider config from database or environment
   const providerConfig = getEmailProviderConfig(settings);
@@ -173,25 +182,28 @@ async function sendEmail(options, settings) {
 
   const provider = providerConfig.provider || 'smtp';
   const startTime = Date.now();
+  
+  // Build the final options (may have modified to/subject from test mode)
+  const finalOptions = { to, subject, html, text, attachments };
 
   try {
     let result;
     switch (provider) {
       case 'smtp':
-        result = await sendViaSMTP(options, providerConfig.smtp);
+        result = await sendViaSMTP(finalOptions, providerConfig.smtp);
         break;
       case 'office365':
-        result = await sendViaOffice365(options, providerConfig.office365);
+        result = await sendViaOffice365(finalOptions, providerConfig.office365);
         break;
       case 'resend':
-        result = await sendViaResend(options, providerConfig.resend);
+        result = await sendViaResend(finalOptions, providerConfig.resend);
         break;
       case 'smtp2go':
-        result = await sendViaSMTP2Go(options, providerConfig.smtp2go);
+        result = await sendViaSMTP2Go(finalOptions, providerConfig.smtp2go);
         break;
       case 'mailtrap':
         // Mailtrap uses standard SMTP, reuse sendViaSMTP
-        result = await sendViaSMTP(options, providerConfig.mailtrap);
+        result = await sendViaSMTP(finalOptions, providerConfig.mailtrap);
         break;
       default:
         throw new Error(`Unsupported email provider: ${provider}`);
