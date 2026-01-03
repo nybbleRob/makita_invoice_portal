@@ -95,7 +95,24 @@ async function getNotificationRecipients(companyId, notificationType) {
     }
   }
   
-  console.log(`[NotificationService]    Checking users assigned to company and ${ancestorIds.length - 1} ancestor(s)`);
+  console.log(`[NotificationService]    Checking users assigned to company ${companyId} and ${ancestorIds.length - 1} ancestor(s)`);
+  console.log(`[NotificationService]    Ancestor IDs to check: [${ancestorIds.join(', ')}]`);
+  
+  // DEBUG: First check what users are assigned to any of these companies
+  const allAssignedUsers = await User.findAll({
+    include: [{
+      model: Company,
+      as: 'companies',
+      where: { id: { [Op.in]: ancestorIds } },
+      through: { attributes: [] }
+    }],
+    where: { isActive: true }
+  });
+  
+  console.log(`[NotificationService]    DEBUG: Total active users assigned to company/ancestors: ${allAssignedUsers.length}`);
+  for (const u of allAssignedUsers) {
+    console.log(`[NotificationService]      - ${u.email} role=${u.role} sendInvoiceEmail=${u.sendInvoiceEmail} sendStatementEmail=${u.sendStatementEmail}`);
+  }
   
   // Get all users assigned to this company OR any of its parent companies
   const assignedUsers = await User.findAll({
@@ -107,9 +124,7 @@ async function getNotificationRecipients(companyId, notificationType) {
     }],
     where: {
       isActive: true,
-      [Op.or]: [
-        notificationType === 'invoice' ? { sendInvoiceEmail: true } : { sendStatementEmail: true }
-      ]
+      ...(notificationType === 'invoice' ? { sendInvoiceEmail: true } : { sendStatementEmail: true })
     }
   });
   

@@ -128,12 +128,17 @@ async function registerBatch(importId, totalJobs, options = {}) {
  * @param {Object} result - Job result
  */
 async function recordJobCompletion(importId, result) {
-  if (!importId) return;
+  if (!importId) {
+    console.log(`[Batch] recordJobCompletion called without importId, skipping`);
+    return;
+  }
+  
+  console.log(`[Batch ${importId}] Recording job completion: success=${result.success}, documentId=${result.documentId}, companyId=${result.companyId}, fileName=${result.fileName}`);
   
   const batch = await getBatch(importId);
   if (!batch) {
-    // This is normal if batch wasn't registered or expired
-    console.log(`[Batch ${importId}] Batch not found in Redis, skipping notification tracking`);
+    // This is a problem - means batch was never registered or expired before jobs completed
+    console.error(`[Batch ${importId}] CRITICAL: Batch not found in Redis! Jobs completed before batch was registered. Notifications will NOT be sent.`);
     return;
   }
   
@@ -144,6 +149,7 @@ async function recordJobCompletion(importId, result) {
     
     // Track document if created and assigned to a company
     if (result.documentId && result.companyId) {
+      console.log(`[Batch ${importId}] Tracking document ${result.documentId} (type=${result.documentType}) for company ${result.companyId}`);
       const docInfo = {
         id: result.documentId,
         type: result.documentType,
@@ -173,9 +179,13 @@ async function recordJobCompletion(importId, result) {
       } else if (result.documentType === 'statement') {
         companyDocs.statements.push(docInfo);
       }
+    } else {
+      // Document not tracked - either unallocated (no companyId) or no document created
+      console.log(`[Batch ${importId}] Document NOT tracked: documentId=${result.documentId}, companyId=${result.companyId}, status=${result.status}`);
     }
   } else {
     batch.failedJobs++;
+    console.log(`[Batch ${importId}] Job failed: ${result.error || 'Unknown error'}`);
   }
   
   console.log(`[Batch ${importId}] Progress: ${batch.completedJobs}/${batch.totalJobs} (${batch.successfulJobs} success, ${batch.failedJobs} failed)`);
@@ -219,9 +229,17 @@ async function sendBatchNotifications(importId, batch) {
   // Get companyDocuments as Map
   const companyDocuments = batch.companyDocumentsMap || new Map(Object.entries(batch.companyDocuments || {}));
   
+  console.log(`[Batch ${importId}] Batch data: totalJobs=${batch.totalJobs}, successfulJobs=${batch.successfulJobs}, documents=${batch.documents?.length || 0}`);
+  console.log(`[Batch ${importId}] Company documents map has ${companyDocuments.size} companies`);
+  
+  // Debug: log what companies have documents
+  for (const [cId, cDocs] of companyDocuments) {
+    console.log(`[Batch ${importId}]   - Company ${cId}: ${cDocs.invoices?.length || 0} invoices, ${cDocs.creditNotes?.length || 0} credit notes`);
+  }
+  
   // Send user notifications if there are company documents
   if (companyDocuments.size === 0) {
-    console.log(`[Batch ${importId}] No company documents to notify users about`);
+    console.log(`[Batch ${importId}] No company documents to notify users about - documents may be unallocated or batch tracking failed`);
   } else {
     // Send notifications for each company
     for (const [companyId, docs] of companyDocuments) {

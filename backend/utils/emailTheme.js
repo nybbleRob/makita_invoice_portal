@@ -9,24 +9,45 @@
  * @returns {Object} - Theme configuration
  */
 function getEmailTheme(settings) {
-  const companyName = settings?.companyName || 'Makita Invoice Portal';
+  const companyName = settings?.companyName || settings?.portalName || settings?.siteTitle || 'Makita Invoice Portal';
   const primaryColor = settings?.primaryColor || '#066fd1';
   const logoLight = settings?.logoLight;
   const logoDark = settings?.logoDark;
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  
+  // For emails, we need absolute URLs that work from email clients
+  // The backend serves uploaded files, so use the backend URL
+  const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'https://edi.makitauk.com';
+  const frontendUrl = process.env.FRONTEND_URL || 'https://edi.makitauk.com';
   
   // Determine logo URL (prefer light logo, fallback to dark)
+  // Logos are stored as paths like "/uploads/logos/logo.png" and served by backend
   let logoUrl = null;
   if (logoLight) {
-    // If logo path is relative, make it absolute
-    logoUrl = logoLight.startsWith('http') 
-      ? logoLight 
-      : `${frontendUrl}${logoLight.startsWith('/') ? '' : '/'}${logoLight}`;
+    if (logoLight.startsWith('http')) {
+      logoUrl = logoLight;
+    } else if (logoLight.startsWith('/api/')) {
+      // Already an API path
+      logoUrl = `${backendUrl}${logoLight}`;
+    } else if (logoLight.startsWith('/uploads/')) {
+      // Uploads are served via /api/uploads
+      logoUrl = `${backendUrl}/api${logoLight}`;
+    } else {
+      // Other relative paths
+      logoUrl = `${backendUrl}${logoLight.startsWith('/') ? '' : '/'}${logoLight}`;
+    }
   } else if (logoDark) {
-    logoUrl = logoDark.startsWith('http') 
-      ? logoDark 
-      : `${frontendUrl}${logoDark.startsWith('/') ? '' : '/'}${logoDark}`;
+    if (logoDark.startsWith('http')) {
+      logoUrl = logoDark;
+    } else if (logoDark.startsWith('/api/')) {
+      logoUrl = `${backendUrl}${logoDark}`;
+    } else if (logoDark.startsWith('/uploads/')) {
+      logoUrl = `${backendUrl}/api${logoDark}`;
+    } else {
+      logoUrl = `${backendUrl}${logoDark.startsWith('/') ? '' : '/'}${logoDark}`;
+    }
   }
+  
+  console.log(`[EmailTheme] Logo URL resolved: ${logoUrl} (from logoLight=${logoLight}, logoDark=${logoDark})`);
 
   return {
     companyName,
