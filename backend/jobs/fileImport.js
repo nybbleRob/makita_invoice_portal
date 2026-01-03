@@ -441,6 +441,7 @@ async function processFileImport(job) {
                 issueDate: issueDate,
                 amount: parsedData.amount || 0,
                 status: 'draft',
+                fileUrl: file.filePath, // Will be updated after file is moved
                 metadata: {
                   source: 'ftp_import',
                   fileId: file.id,
@@ -502,6 +503,13 @@ async function processFileImport(job) {
             movedAt: new Date().toISOString()
           }
         });
+        
+        // CRITICAL: Update the document's fileUrl with the new location
+        // so email attachments can find the file
+        if (document) {
+          await document.update({ fileUrl: destinationPath });
+          console.log(`✅ Updated document fileUrl to: ${destinationPath}`);
+        }
       } catch (moveError) {
         console.error(`⚠️  Failed to move file to Processed folder: ${moveError.message}`);
         // Don't fail the job if move fails - file is still processed
