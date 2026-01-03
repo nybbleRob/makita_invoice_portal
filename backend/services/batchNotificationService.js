@@ -14,7 +14,7 @@ const { Company, Invoice, CreditNote, File, Settings, User } = require('../model
 const { queueDocumentNotifications } = require('./documentNotificationService');
 const { logActivity, ActivityType } = require('./activityLogger');
 const { isEmailEnabled, sendEmail } = require('../utils/emailService');
-const { wrapEmailContent } = require('../utils/emailTheme');
+const { wrapEmailContent, emailButton, getEmailTheme } = require('../utils/emailTheme');
 const { Op } = require('sequelize');
 const { redis } = require('../config/redis');
 
@@ -343,6 +343,8 @@ async function sendBatchNotifications(importId, batch) {
  */
 async function sendAdminSummaryEmail(importId, batch, processingTime, notificationsSent) {
   const settings = await Settings.getSettings();
+  const theme = getEmailTheme(settings);
+  const primaryColor = theme.primaryColor;
   
   if (!isEmailEnabled(settings)) {
     console.log(`[Batch ${importId}] Email not enabled, skipping admin summary`);
@@ -396,7 +398,7 @@ async function sendAdminSummaryEmail(importId, batch, processingTime, notificati
   
   const htmlContent = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: #206bc4; margin-bottom: 20px;">Import Batch Summary</h2>
+      <h2 style="color: ${primaryColor}; margin-bottom: 20px;">Import Batch Summary</h2>
       
       <h3 style="color: #495057; margin-bottom: 12px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">Timing</h3>
       <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
@@ -433,8 +435,8 @@ async function sendAdminSummaryEmail(importId, batch, processingTime, notificati
           <td style="padding: 12px; border: 1px solid #e0e0e0; color: #d63939;">${batch.failedJobs}</td>
         </tr>
         <tr>
-          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600; color: #206bc4;">Assigned to Company</td>
-          <td style="padding: 12px; border: 1px solid #e0e0e0; color: #206bc4;">${allocatedCount}</td>
+          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600; color: ${primaryColor};">Assigned to Company</td>
+          <td style="padding: 12px; border: 1px solid #e0e0e0; color: ${primaryColor};">${allocatedCount}</td>
         </tr>
         <tr style="background: #f4f6fa;">
           <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600; color: #f59f00;">Unallocated</td>

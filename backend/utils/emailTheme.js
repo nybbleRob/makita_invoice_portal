@@ -110,6 +110,7 @@ function wrapEmailContent(content, settings) {
 
 /**
  * Generate styled button HTML for emails
+ * Uses VML for Outlook compatibility and table-based layout
  * @param {string} text - Button text
  * @param {string} url - Button URL
  * @param {Object} settings - Settings object (for color)
@@ -117,13 +118,29 @@ function wrapEmailContent(content, settings) {
  */
 function emailButton(text, url, settings) {
   const theme = getEmailTheme(settings);
-  const buttonColor = theme.primaryColor;
+  const color = theme.primaryColor;
   
+  // Outlook-compatible button using VML + table fallback
+  // VML renders in Outlook, the <a> tag renders in all other clients
   return `
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 20px 0;">
       <tr>
-        <td align="center">
-          <a href="${url}" style="background-color: ${buttonColor}; color: #ffffff; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: 600; font-size: 16px;">${text}</a>
+        <td align="center" style="border-radius: 6px; background-color: ${color};">
+          <!--[if mso]>
+          <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" 
+            href="${url}" style="height:44px;v-text-anchor:middle;width:200px;" arcsize="14%" 
+            strokecolor="${color}" fillcolor="${color}">
+            <w:anchorlock/>
+            <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">
+              ${text}
+            </center>
+          </v:roundrect>
+          <![endif]-->
+          <!--[if !mso]><!-->
+          <a href="${url}" style="background-color: ${color}; border-radius: 6px; color: #ffffff; display: inline-block; font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; line-height: 44px; text-align: center; text-decoration: none; width: 200px; -webkit-text-size-adjust: none; mso-hide: all;">
+            ${text}
+          </a>
+          <!--<![endif]-->
         </td>
       </tr>
     </table>

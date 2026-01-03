@@ -364,8 +364,9 @@ router.post('/', canManageUsers, async (req, res) => {
           console.warn('Welcome email template not found, using default:', templateError.message);
           // Fallback to simple welcome email with branding
           const { sendEmail } = require('../utils/emailService');
-          const { wrapEmailContent } = require('../utils/emailTheme');
-          const primaryColor = settings.primaryColor || '#066fd1';
+          const { wrapEmailContent, emailButton, getEmailTheme } = require('../utils/emailTheme');
+          const theme = getEmailTheme(settings);
+          const primaryColor = theme.primaryColor;
           
           const emailContent = `
             <h2 style="color: ${primaryColor}; margin-bottom: 20px;">Welcome to ${companyName}!</h2>
@@ -378,9 +379,7 @@ router.post('/', canManageUsers, async (req, res) => {
                 <p style="margin: 12px 0 0 0; color: #d63939; font-size: 13px;">You will be required to change this password on your first login.</p>
               </div>
             ` : ''}
-            <p style="margin-top: 24px;">
-              <a href="${loginUrl}" style="display: inline-block; padding: 12px 24px; background-color: ${primaryColor}; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">Login to Portal</a>
-            </p>
+            ${emailButton('Login to Portal', loginUrl, settings)}
           `;
           
           await sendEmail({

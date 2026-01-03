@@ -1325,7 +1325,7 @@ router.post('/email-stress-test', auth, async (req, res) => {
     const emailCount = Math.min(Math.max(parseInt(count) || 10, 1), 100);
     
     const settings = await Settings.getSettings();
-    const { wrapEmailContent } = require('../utils/emailTheme');
+    const { wrapEmailContent, emailButton, getEmailTheme } = require('../utils/emailTheme');
     const { emailQueue } = require('../config/queue');
     const { PROCESSED_BASE } = require('../config/storage');
     const { isEmailEnabled } = require('../utils/emailService');
@@ -1346,7 +1346,8 @@ router.post('/email-stress-test', auth, async (req, res) => {
       });
     }
     
-    const primaryColor = settings.primaryColor || '#066fd1';
+    const theme = getEmailTheme(settings);
+    const primaryColor = theme.primaryColor;
     const portalName = settings.portalName || settings.siteTitle || 'Makita Invoice Portal';
     const recipientEmail = currentUser.email;
     const recipientName = currentUser.name || currentUser.email;
@@ -1454,11 +1455,7 @@ startxref
           </tr>
         </table>
         
-        <p style="margin-top: 24px;">
-          <a href="#" style="display: inline-block; padding: 12px 24px; background-color: ${primaryColor}; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">
-            View Document
-          </a>
-        </p>
+        ${emailButton('View Document', '#', settings)}
         
         <div style="margin-top: 30px; padding: 12px; background: #fff3cd; border: 1px solid #f59f00; border-radius: 4px;">
           <strong style="color: #856404;">Test Email ${i} of ${emailCount}</strong><br>

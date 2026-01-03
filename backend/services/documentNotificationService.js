@@ -12,7 +12,7 @@
 const { Company, User, UserCompany, Settings, sequelize } = require('../models');
 const { queueEmail } = require('../utils/emailQueue');
 const { renderEmailTemplate } = require('../utils/emailTemplateRenderer');
-const { wrapEmailContent } = require('../utils/emailTheme');
+const { wrapEmailContent, emailButton, getEmailTheme } = require('../utils/emailTheme');
 const { Op } = require('sequelize');
 
 /**
@@ -337,7 +337,8 @@ async function queueSummaryEmail(options) {
   
   // Get settings for theming
   const settings = await Settings.getSettings();
-  const primaryColor = settings?.primaryColor || '#206bc4';
+  const theme = getEmailTheme(settings);
+  const primaryColor = theme.primaryColor;
   
   // Build document tables
   let documentTables = '';
@@ -423,11 +424,7 @@ async function queueSummaryEmail(options) {
     
     ${documentTables}
     
-    <p style="margin-top: 24px;">
-      <a href="${portalUrl}" style="display: inline-block; padding: 12px 24px; background-color: ${primaryColor}; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">
-        View All Documents
-      </a>
-    </p>
+    ${emailButton('View All Documents', portalUrl, settings)}
     
     <div style="margin-top: 24px; padding: 12px 16px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; color: #856404; font-size: 13px;">
       <strong>Important:</strong> Invoices and Credit Notes are only available for ${retentionDays} days from the upload date. Please download any documents you wish to keep for your records.
@@ -478,11 +475,18 @@ async function queueIndividualEmail(options) {
   
   // Get settings for theming
   const settings = await Settings.getSettings();
-  const primaryColor = settings?.primaryColor || '#206bc4';
+  const theme = getEmailTheme(settings);
+  const primaryColor = theme.primaryColor;
   
   const documentTypeName = documentType === 'credit_note' ? 'Credit Note' 
     : documentType === 'statement' ? 'Statement' 
     : 'Invoice';
+  
+  // Build direct document URL (e.g., /invoices/123 or /credit-notes/456)
+  const documentPath = documentType === 'credit_note' ? 'credit-notes' 
+    : documentType === 'statement' ? 'statements' 
+    : 'invoices';
+  const documentUrl = `${portalUrl}/${documentPath}/${document.id}`;
   
   const documentNumber = document.invoiceNumber || document.creditNoteNumber || 
     document.statementNumber || document.id;
@@ -525,11 +529,7 @@ async function queueIndividualEmail(options) {
       ` : ''}
     </table>
     
-    <p style="margin-top: 24px;">
-      <a href="${portalUrl}" style="display: inline-block; padding: 12px 24px; background-color: ${primaryColor}; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">
-        View Document
-      </a>
-    </p>
+    ${emailButton(`View ${documentTypeName}`, documentUrl, settings)}
     
     <div style="margin-top: 24px; padding: 12px 16px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; color: #856404; font-size: 13px;">
       <strong>Important:</strong> Invoices and Credit Notes are only available for ${retentionDays} days from the upload date. Please download any documents you wish to keep for your records.

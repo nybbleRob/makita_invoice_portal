@@ -3,7 +3,7 @@ const { DocumentQuery, Invoice, CreditNote, Statement, Company, User, UserCompan
 const { Op } = Sequelize;
 const auth = require('../middleware/auth');
 const { sendEmail, isEmailEnabled } = require('../utils/emailService');
-const { wrapEmailContent } = require('../utils/emailTheme');
+const { wrapEmailContent, emailButton, getEmailTheme } = require('../utils/emailTheme');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const { v4: uuidv4 } = require('uuid');
 const router = express.Router();
@@ -274,7 +274,8 @@ router.post('/:documentType/:documentId', async (req, res) => {
     
     // Get settings for email branding
     const settings = await Settings.getSettings();
-    const primaryColor = settings?.primaryColor || '#066fd1';
+    const theme = getEmailTheme(settings);
+    const primaryColor = theme.primaryColor;
     
     if (isCustomer) {
       // Check if company has EDI enabled - if so, skip email notifications
@@ -304,9 +305,7 @@ router.post('/:documentType/:documentId', async (req, res) => {
                   <p style="margin: 0 0 8px 0; font-weight: 600;">Message:</p>
                   <p style="margin: 0;">${message.trim().replace(/\n/g, '<br>')}</p>
                 </div>
-                <p style="margin-top: 24px;">
-                  <a href="${queryUrl}" style="display: inline-block; padding: 12px 24px; background-color: ${primaryColor}; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">View and Reply</a>
-                </p>
+                ${emailButton('View and Reply', queryUrl, settings)}
               `;
               await sendEmail({
                 to: staffUser.email,
@@ -343,9 +342,7 @@ router.post('/:documentType/:documentId', async (req, res) => {
                 <p style="margin: 0 0 8px 0; font-weight: 600;">Message:</p>
                 <p style="margin: 0;">${message.trim().replace(/\n/g, '<br>')}</p>
               </div>
-              <p style="margin-top: 24px;">
-                <a href="${queryUrl}" style="display: inline-block; padding: 12px 24px; background-color: ${primaryColor}; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">View and Reply</a>
-              </p>
+              ${emailButton('View and Reply', queryUrl, settings)}
             `;
             await sendEmail({
               to: customerUser.email,
@@ -483,7 +480,8 @@ router.post('/:documentType/:documentId/reply', async (req, res) => {
           
           // Get settings for email branding
           const settings = await Settings.getSettings();
-          const primaryColor = settings?.primaryColor || '#066fd1';
+          const theme = getEmailTheme(settings);
+          const primaryColor = theme.primaryColor;
           
           try {
             const emailContent = `
@@ -493,9 +491,7 @@ router.post('/:documentType/:documentId/reply', async (req, res) => {
                 <p style="margin: 0 0 8px 0; font-weight: 600;">Reply:</p>
                 <p style="margin: 0;">${message.trim().replace(/\n/g, '<br>')}</p>
               </div>
-              <p style="margin-top: 24px;">
-                <a href="${queryUrl}" style="display: inline-block; padding: 12px 24px; background-color: ${primaryColor}; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">View Document</a>
-              </p>
+              ${emailButton('View Document', queryUrl, settings)}
             `;
             await sendEmail({
               to: customer.email,
@@ -634,7 +630,8 @@ router.post('/:documentType/:documentId/resolve', async (req, res) => {
           
           // Get settings for email branding
           const settings = await Settings.getSettings();
-          const primaryColor = settings?.primaryColor || '#066fd1';
+          const theme = getEmailTheme(settings);
+          const primaryColor = theme.primaryColor;
           
           try {
             const emailContent = `
@@ -645,9 +642,7 @@ router.post('/:documentType/:documentId/resolve', async (req, res) => {
                 <p style="margin: 0; color: #155724;">${resolutionReason.trim().replace(/\n/g, '<br>')}</p>
               </div>
               <p style="font-size: 13px; color: #667085; font-style: italic;">This query is now closed. For any further questions, please contact support directly via email.</p>
-              <p style="margin-top: 24px;">
-                <a href="${queryUrl}" style="display: inline-block; padding: 12px 24px; background-color: ${primaryColor}; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">View Document</a>
-              </p>
+              ${emailButton('View Document', queryUrl, settings)}
             `;
             await sendEmail({
               to: customer.email,
