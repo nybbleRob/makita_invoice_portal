@@ -12,9 +12,10 @@ const redisPort = parseInt(process.env.REDIS_PORT) || 6379;
 const redisPassword = process.env.REDIS_PASSWORD || undefined;
 
 // Email rate limiting configuration
-// Default: 4 emails per 60 seconds = ~240/hour (well under typical 250/hour limits)
-const EMAIL_RATE_MAX = parseInt(process.env.EMAIL_RATE_MAX) || 4;
-const EMAIL_RATE_DURATION_MS = parseInt(process.env.EMAIL_RATE_DURATION_MS) || 60000;
+// Default: 10 emails per 10 seconds (matches Mailtrap's rate limit)
+// Can be overridden via environment variables for different providers
+const EMAIL_RATE_MAX = parseInt(process.env.EMAIL_RATE_MAX) || 10;
+const EMAIL_RATE_DURATION_MS = parseInt(process.env.EMAIL_RATE_DURATION_MS) || 10000;
 
 // Create shared Redis connection for all queues
 let connection = null;
