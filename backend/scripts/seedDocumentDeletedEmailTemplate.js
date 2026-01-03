@@ -26,7 +26,7 @@ async function seedDocumentDeletedTemplate() {
               <p style="margin: 5px 0;"><strong>Deletion Date:</strong> {{deletionDate}}</p>
               <p style="margin: 5px 0;"><strong>Retention Period:</strong> {{retentionPeriod}} days</p>
             </div>
-            <p>As per our document retention policy, documents are automatically removed from the portal after {{retentionPeriod}} days to prevent the system from becoming a document storage repository.</p>
+            <p>As per our document retention policy, documents are automatically removed from the portal after 30 days to prevent the system from becoming a document storage repository.</p>
             <p><strong>If you need an archived copy of this document, please contact Credit Control directly via email.</strong></p>
             <p>Thank you for your understanding.</p>
             <p>Best regards,<br>{{companyName}}</p>
@@ -44,7 +44,7 @@ Document Number: {{documentNumber}}
 Deletion Date: {{deletionDate}}
 Retention Period: {{retentionPeriod}} days
 
-As per our document retention policy, documents are automatically removed from the portal after {{retentionPeriod}} days to prevent the system from becoming a document storage repository.
+As per our document retention policy, documents are automatically removed from the portal after 30 days to prevent the system from becoming a document storage repository.
 
 If you need an archived copy of this document, please contact Credit Control directly via email.
 
