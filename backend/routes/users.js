@@ -361,31 +361,22 @@ router.post('/', canManageUsers, async (req, res) => {
             settings
           );
         } catch (templateError) {
-          console.warn('Welcome email template not found, using default:', templateError.message);
-          // Fallback to simple welcome email with branding
+          console.warn('Welcome email template not found, using Tabler template:', templateError.message);
+          // Fallback to Tabler template
           const { sendEmail } = require('../utils/emailService');
-          const { wrapEmailContent, emailButton, getEmailTheme } = require('../utils/emailTheme');
-          const theme = getEmailTheme(settings);
-          const primaryColor = theme.primaryColor;
+          const { renderTemplate } = require('../utils/tablerEmailRenderer');
           
-          const emailContent = `
-            <h2 style="color: ${primaryColor}; margin-bottom: 20px;">Welcome to ${companyName}!</h2>
-            <p>Hello ${user.name},</p>
-            <p>Your account has been created successfully. You can now access the ${companyName} portal.</p>
-            ${passwordWasGenerated ? `
-              <div style="background: #f8f9fa; border-radius: 6px; padding: 16px; margin: 16px 0;">
-                <p style="margin: 0 0 8px 0;"><strong>Your temporary password:</strong></p>
-                <code style="display: inline-block; padding: 8px 12px; background: #fff; border: 1px solid #e0e0e0; border-radius: 4px; font-family: monospace; font-size: 14px;">${tempPassword}</code>
-                <p style="margin: 12px 0 0 0; color: #d63939; font-size: 13px;">You will be required to change this password on your first login.</p>
-              </div>
-            ` : ''}
-            ${emailButton('Login to Portal', loginUrl, settings)}
-          `;
+          const html = renderTemplate('welcome', {
+            userName: user.name,
+            userEmail: user.email,
+            tempPassword: passwordWasGenerated ? tempPassword : '',
+            loginUrl
+          }, settings);
           
           await sendEmail({
             to: user.email,
             subject: `Welcome to ${companyName}`,
-            html: wrapEmailContent(emailContent, settings),
+            html,
             text: `
 Welcome to ${companyName}!
 

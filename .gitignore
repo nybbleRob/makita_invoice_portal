@@ -47,3 +47,6 @@ backend/credentials/
 **/credentials/*.json
 !package.json
 !package-lock.json
+
+# Tabler email templates source (purchased asset)
+emails/

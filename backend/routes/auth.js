@@ -322,28 +322,20 @@ router.post('/forgot-password', async (req, res) => {
               settings
             );
           } catch (templateError) {
-            console.warn('Email template not found, using default:', templateError.message);
-            // Fallback to hardcoded template with branding
-            const { wrapEmailContent, emailButton, getEmailTheme } = require('../utils/emailTheme');
-            const theme = getEmailTheme(settings);
-            const primaryColor = theme.primaryColor;
+            console.warn('Email template not found, using Tabler template:', templateError.message);
+            // Fallback to Tabler template
+            const { renderTemplate } = require('../utils/tablerEmailRenderer');
             
-            const emailContent = `
-              <h2 style="color: ${primaryColor}; margin-bottom: 20px;">Password Reset Request</h2>
-              <p>Hello ${user.name},</p>
-              <p>You requested to reset your password. Click the button below to reset it:</p>
-              ${emailButton('Reset Password', resetUrl, settings)}
-              <p style="font-size: 13px; color: #667085;">Or copy and paste this URL into your browser:</p>
-              <p style="font-size: 13px; color: #667085; word-break: break-all;">${resetUrl}</p>
-              <div style="margin-top: 24px; padding: 12px 16px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; color: #856404; font-size: 13px;">
-                <strong>Note:</strong> This link will expire in 1 hour. If you didn't request this, please ignore this email.
-              </div>
-            `;
+            const html = renderTemplate('password-reset', {
+              userName: user.name,
+              resetUrl,
+              expiryTime: '1 hour'
+            }, settings);
             
             await sendEmail({
               to: user.email,
               subject: 'Password Reset Request',
-              html: wrapEmailContent(emailContent, settings),
+              html,
               text: `
 Password Reset Request
 

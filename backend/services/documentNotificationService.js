@@ -7,12 +7,12 @@
  * - Sends notifications to all assigned users with notifications enabled
  * - Supports individual emails per document or summary emails per import batch
  * - Integrates with BullMQ email queue for rate limiting and reliability
+ * - Uses Tabler email templates for professional, Outlook-compatible emails
  */
 
 const { Company, User, UserCompany, Settings, sequelize } = require('../models');
 const { queueEmail } = require('../utils/emailQueue');
-const { renderEmailTemplate } = require('../utils/emailTemplateRenderer');
-const { wrapEmailContent, emailButton, getEmailTheme } = require('../utils/emailTheme');
+const { renderTemplate, formatDate, formatCurrency } = require('../utils/tablerEmailRenderer');
 const { Op } = require('sequelize');
 
 /**
@@ -312,7 +312,7 @@ async function queueDocumentNotifications(options) {
 }
 
 /**
- * Queue a summary email for a recipient
+ * Queue a summary email for a recipient (using Tabler template)
  */
 async function queueSummaryEmail(options) {
   const {
@@ -335,104 +335,21 @@ async function queueSummaryEmail(options) {
     return null;
   }
   
-  // Get settings for theming
+  // Get settings for template
   const settings = await Settings.getSettings();
-  const theme = getEmailTheme(settings);
-  const primaryColor = theme.primaryColor;
-  
-  // Build document tables
-  let documentTables = '';
-  
-  if (invoices.length > 0) {
-    documentTables += `
-      <h3 style="color: ${primaryColor}; margin-top: 20px;">Invoices (${invoices.length})</h3>
-      <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
-        <thead>
-          <tr style="background: #f4f6fa;">
-            <th style="padding: 10px; border: 1px solid #e0e0e0; text-align: left;">Invoice Number</th>
-            <th style="padding: 10px; border: 1px solid #e0e0e0; text-align: left;">Date</th>
-            <th style="padding: 10px; border: 1px solid #e0e0e0; text-align: right;">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${invoices.map(inv => `
-            <tr>
-              <td style="padding: 10px; border: 1px solid #e0e0e0;">${inv.invoiceNumber || inv.id}</td>
-              <td style="padding: 10px; border: 1px solid #e0e0e0;">${inv.date ? new Date(inv.date).toLocaleDateString('en-GB') : '-'}</td>
-              <td style="padding: 10px; border: 1px solid #e0e0e0; text-align: right;">${inv.amount ? `£${Number(inv.amount).toFixed(2)}` : '-'}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    `;
-  }
-  
-  if (creditNotes.length > 0) {
-    documentTables += `
-      <h3 style="color: ${primaryColor}; margin-top: 20px;">Credit Notes (${creditNotes.length})</h3>
-      <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
-        <thead>
-          <tr style="background: #f4f6fa;">
-            <th style="padding: 10px; border: 1px solid #e0e0e0; text-align: left;">Credit Note Number</th>
-            <th style="padding: 10px; border: 1px solid #e0e0e0; text-align: left;">Date</th>
-            <th style="padding: 10px; border: 1px solid #e0e0e0; text-align: right;">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${creditNotes.map(cn => `
-            <tr>
-              <td style="padding: 10px; border: 1px solid #e0e0e0;">${cn.creditNoteNumber || cn.id}</td>
-              <td style="padding: 10px; border: 1px solid #e0e0e0;">${cn.date ? new Date(cn.date).toLocaleDateString('en-GB') : '-'}</td>
-              <td style="padding: 10px; border: 1px solid #e0e0e0; text-align: right;">${cn.amount ? `£${Number(cn.amount).toFixed(2)}` : '-'}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    `;
-  }
-  
-  if (statements.length > 0) {
-    documentTables += `
-      <h3 style="color: ${primaryColor}; margin-top: 20px;">Statements (${statements.length})</h3>
-      <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
-        <thead>
-          <tr style="background: #f4f6fa;">
-            <th style="padding: 10px; border: 1px solid #e0e0e0; text-align: left;">Statement</th>
-            <th style="padding: 10px; border: 1px solid #e0e0e0; text-align: left;">Period</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${statements.map(st => `
-            <tr>
-              <td style="padding: 10px; border: 1px solid #e0e0e0;">${st.statementNumber || st.id}</td>
-              <td style="padding: 10px; border: 1px solid #e0e0e0;">${st.periodStart ? new Date(st.periodStart).toLocaleDateString('en-GB') : '-'} - ${st.periodEnd ? new Date(st.periodEnd).toLocaleDateString('en-GB') : '-'}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    `;
-  }
-  
-  // Get retention period for disclaimer
   const retentionDays = settings?.documentRetentionPeriod || 30;
   
-  const subject = `${totalDocuments} New Document${totalDocuments > 1 ? 's' : ''} Available - ${companyName}`;
-  const emailContent = `
-    <h2 style="color: ${primaryColor}; margin-bottom: 20px;">New Documents Available</h2>
-    <p>Hello ${recipient.name},</p>
-    <p>${totalDocuments} new document${totalDocuments > 1 ? 's have' : ' has'} been uploaded for <strong>${companyName}</strong>:</p>
-    
-    ${documentTables}
-    
-    ${emailButton('View All Documents', portalUrl, settings)}
-    
-    <div style="margin-top: 24px; padding: 12px 16px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; color: #856404; font-size: 13px;">
-      <strong>Important:</strong> Invoices and Credit Notes are only available for ${retentionDays} days from the upload date. Please download any documents you wish to keep for your records.
-    </div>
-  `;
+  // Render using Tabler template
+  const html = renderTemplate('document-summary', {
+    userName: recipient.name,
+    totalDocuments: totalDocuments.toString(),
+    invoiceCount: invoices.length > 0 ? invoices.length.toString() : '',
+    creditNoteCount: creditNotes.length > 0 ? creditNotes.length.toString() : '',
+    statementCount: statements.length > 0 ? statements.length.toString() : '',
+    retentionPeriod: retentionDays.toString()
+  }, settings);
   
-  // Wrap with email theme (applies header, footer, branding)
-  const html = wrapEmailContent(emailContent, settings);
+  const subject = `Document Summary - ${totalDocuments} new document${totalDocuments > 1 ? 's' : ''} available`;
   
   const result = await queueEmail({
     to: recipient.email,
@@ -458,7 +375,7 @@ async function queueSummaryEmail(options) {
 }
 
 /**
- * Queue an individual document notification email
+ * Queue an individual document notification email (using Tabler template)
  */
 async function queueIndividualEmail(options) {
   const {
@@ -473,10 +390,8 @@ async function queueIndividualEmail(options) {
     triggeredByEmail
   } = options;
   
-  // Get settings for theming
+  // Get settings for template
   const settings = await Settings.getSettings();
-  const theme = getEmailTheme(settings);
-  const primaryColor = theme.primaryColor;
   
   const documentTypeName = documentType === 'credit_note' ? 'Credit Note' 
     : documentType === 'statement' ? 'Statement' 
@@ -493,51 +408,31 @@ async function queueIndividualEmail(options) {
   
   // Format amount with currency if present
   const formattedAmount = document.amount 
-    ? (typeof document.amount === 'number' ? `£${document.amount.toFixed(2)}` : document.amount)
-    : null;
+    ? formatCurrency(document.amount)
+    : '';
   
   // Format date if present
   const formattedDate = document.date 
-    ? new Date(document.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-    : null;
+    ? formatDate(document.date)
+    : '';
   
   // Get retention period for disclaimer
   const retentionDays = settings?.documentRetentionPeriod || 30;
   
-  const subject = `New ${documentTypeName} Available - ${companyName}`;
-  const emailContent = `
-    <h2 style="color: ${primaryColor}; margin-bottom: 20px;">New ${documentTypeName} Available</h2>
-    <p>Hello ${recipient.name},</p>
-    <p>A new ${documentTypeName.toLowerCase()} has been uploaded for <strong>${companyName}</strong>:</p>
-    
-    <table style="width: 100%; border-collapse: collapse; margin: 20px 0; background: #f8f9fa; border-radius: 8px;">
-      <tr>
-        <td style="padding: 12px 16px; border-bottom: 1px solid #e9ecef; font-weight: 600; width: 40%;">${documentTypeName} Number</td>
-        <td style="padding: 12px 16px; border-bottom: 1px solid #e9ecef;">${documentNumber}</td>
-      </tr>
-      ${formattedAmount ? `
-      <tr>
-        <td style="padding: 12px 16px; border-bottom: 1px solid #e9ecef; font-weight: 600;">Amount</td>
-        <td style="padding: 12px 16px; border-bottom: 1px solid #e9ecef;">${formattedAmount}</td>
-      </tr>
-      ` : ''}
-      ${formattedDate ? `
-      <tr>
-        <td style="padding: 12px 16px; font-weight: 600;">Date</td>
-        <td style="padding: 12px 16px;">${formattedDate}</td>
-      </tr>
-      ` : ''}
-    </table>
-    
-    ${emailButton(`View ${documentTypeName}`, documentUrl, settings)}
-    
-    <div style="margin-top: 24px; padding: 12px 16px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; color: #856404; font-size: 13px;">
-      <strong>Important:</strong> Invoices and Credit Notes are only available for ${retentionDays} days from the upload date. Please download any documents you wish to keep for your records.
-    </div>
-  `;
+  // Render using Tabler template
+  const html = renderTemplate('document-notification', {
+    userName: recipient.name,
+    documentTypeName,
+    documentNumber: documentNumber.toString(),
+    documentDate: formattedDate,
+    documentAmount: formattedAmount,
+    documentUrl,
+    supplierName: companyName,
+    hasAttachment: recipient.sendAttachment && document.filePath ? 'true' : '',
+    retentionPeriod: retentionDays.toString()
+  }, settings);
   
-  // Wrap with email theme (applies header, footer, branding)
-  const html = wrapEmailContent(emailContent, settings);
+  const subject = `New ${documentTypeName} Available - ${companyName}`;
   
   // Prepare attachments if enabled
   const attachments = [];
@@ -580,4 +475,3 @@ module.exports = {
   queueSummaryEmail,
   queueIndividualEmail
 };
-

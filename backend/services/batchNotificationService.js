@@ -14,7 +14,7 @@ const { Company, Invoice, CreditNote, File, Settings, User } = require('../model
 const { queueDocumentNotifications } = require('./documentNotificationService');
 const { logActivity, ActivityType } = require('./activityLogger');
 const { isEmailEnabled, sendEmail } = require('../utils/emailService');
-const { wrapEmailContent, emailButton, getEmailTheme } = require('../utils/emailTheme');
+const { renderTemplate, formatDate } = require('../utils/tablerEmailRenderer');
 const { Op } = require('sequelize');
 const { redis } = require('../config/redis');
 
@@ -335,7 +335,7 @@ async function sendBatchNotifications(importId, batch) {
 }
 
 /**
- * Send summary email to global administrators
+ * Send summary email to global administrators (using Tabler template)
  * @param {string} importId - Import batch ID
  * @param {Object} batch - Batch data
  * @param {number} processingTime - Processing time in ms
@@ -343,8 +343,6 @@ async function sendBatchNotifications(importId, batch) {
  */
 async function sendAdminSummaryEmail(importId, batch, processingTime, notificationsSent) {
   const settings = await Settings.getSettings();
-  const theme = getEmailTheme(settings);
-  const primaryColor = theme.primaryColor;
   
   if (!isEmailEnabled(settings)) {
     console.log(`[Batch ${importId}] Email not enabled, skipping admin summary`);
@@ -393,89 +391,23 @@ async function sendAdminSummaryEmail(importId, batch, processingTime, notificati
       ? 'Manual Upload' 
       : batch.source || 'System';
   
-  // Build email content
+  // Render using Tabler template
+  const html = renderTemplate('import-summary', {
+    importDate: formatDate(new Date()),
+    totalFiles: batch.totalJobs.toString(),
+    successfulCount: batch.successfulJobs.toString(),
+    failedCount: batch.failedJobs > 0 ? batch.failedJobs.toString() : '',
+    allocatedCount: allocatedCount.toString(),
+    unallocatedCount: unallocatedCount.toString(),
+    duplicateCount: '', // Add if tracking duplicates
+    importSource: sourceLabel,
+    startTime: startTimeFormatted,
+    endTime: endTimeFormatted,
+    processingTime: formatTime(processingTime),
+    retentionPeriod: (settings?.documentRetentionPeriod || 30).toString()
+  }, settings);
+  
   const subject = `Import Summary: ${batch.successfulJobs} of ${batch.totalJobs} documents processed`;
-  
-  const htmlContent = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: ${primaryColor}; margin-bottom: 20px;">Import Batch Summary</h2>
-      
-      <h3 style="color: #495057; margin-bottom: 12px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">Timing</h3>
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-        <tr style="background: #f4f6fa;">
-          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Import Started</td>
-          <td style="padding: 12px; border: 1px solid #e0e0e0;">${startTimeFormatted}</td>
-        </tr>
-        <tr>
-          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Import Finished</td>
-          <td style="padding: 12px; border: 1px solid #e0e0e0;">${endTimeFormatted}</td>
-        </tr>
-        <tr style="background: #f4f6fa;">
-          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Processing Time</td>
-          <td style="padding: 12px; border: 1px solid #e0e0e0;">${formatTime(processingTime)}</td>
-        </tr>
-        <tr>
-          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Source</td>
-          <td style="padding: 12px; border: 1px solid #e0e0e0;">${sourceLabel}</td>
-        </tr>
-      </table>
-      
-      <h3 style="color: #495057; margin-bottom: 12px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">Results</h3>
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-        <tr style="background: #f4f6fa;">
-          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Total Files Uploaded</td>
-          <td style="padding: 12px; border: 1px solid #e0e0e0;">${batch.totalJobs}</td>
-        </tr>
-        <tr>
-          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600; color: #2fb344;">Successfully Processed</td>
-          <td style="padding: 12px; border: 1px solid #e0e0e0; color: #2fb344;">${batch.successfulJobs}</td>
-        </tr>
-        <tr style="background: #f4f6fa;">
-          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600; color: #d63939;">Failed</td>
-          <td style="padding: 12px; border: 1px solid #e0e0e0; color: #d63939;">${batch.failedJobs}</td>
-        </tr>
-        <tr>
-          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600; color: ${primaryColor};">Assigned to Company</td>
-          <td style="padding: 12px; border: 1px solid #e0e0e0; color: ${primaryColor};">${allocatedCount}</td>
-        </tr>
-        <tr style="background: #f4f6fa;">
-          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600; color: #f59f00;">Unallocated</td>
-          <td style="padding: 12px; border: 1px solid #e0e0e0; color: #f59f00;">${unallocatedCount}</td>
-        </tr>
-        <tr>
-          <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">User Notifications Queued</td>
-          <td style="padding: 12px; border: 1px solid #e0e0e0;">${notificationsSent}</td>
-        </tr>
-      </table>
-      
-      ${unallocatedCount > 0 ? `
-      <div style="background: #fff3cd; border: 1px solid #f59f00; border-radius: 4px; padding: 12px; margin-bottom: 20px;">
-        <strong style="color: #856404;">Action Required:</strong> 
-        <span style="color: #856404;">${unallocatedCount} document(s) could not be matched to a company and are in the Unallocated queue.</span>
-      </div>
-      ` : ''}
-      
-      ${batch.failedJobs > 0 ? `
-      <div style="background: #f8d7da; border: 1px solid #d63939; border-radius: 4px; padding: 12px; margin-bottom: 20px;">
-        <strong style="color: #721c24;">Warning:</strong> 
-        <span style="color: #721c24;">${batch.failedJobs} document(s) failed to process. Check the activity logs for details.</span>
-      </div>
-      ` : ''}
-      
-      <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 12px; margin-bottom: 20px;">
-        <strong style="color: #856404;">Reminder:</strong> 
-        <span style="color: #856404;">Documents are only available for ${settings?.documentRetentionPeriod || 30} days from the upload date as per the configured retention policy.</span>
-      </div>
-      
-      <p style="color: #667085; font-size: 12px; margin-top: 20px;">
-        Import ID: ${importId}<br>
-        Triggered by: ${batch.userEmail || 'System (scheduled scan)'}
-      </p>
-    </div>
-  `;
-  
-  // Wrap HTML content with email theme (branding, header, footer)
-  const themedHtml = wrapEmailContent(htmlContent, settings);
   
   // Send to each opted-in admin
   for (const admin of adminRecipients) {
@@ -483,7 +415,7 @@ async function sendAdminSummaryEmail(importId, batch, processingTime, notificati
       await sendEmail({
         to: admin.email,
         subject,
-        html: themedHtml,
+        html,
         text: `Import Summary
 
 Timing:

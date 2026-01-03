@@ -3,7 +3,7 @@ const { DocumentQuery, Invoice, CreditNote, Statement, Company, User, UserCompan
 const { Op } = Sequelize;
 const auth = require('../middleware/auth');
 const { sendEmail, isEmailEnabled } = require('../utils/emailService');
-const { wrapEmailContent, emailButton, getEmailTheme } = require('../utils/emailTheme');
+const { renderTemplate } = require('../utils/tablerEmailRenderer');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const { v4: uuidv4 } = require('uuid');
 const router = express.Router();
@@ -274,8 +274,6 @@ router.post('/:documentType/:documentId', async (req, res) => {
     
     // Get settings for email branding
     const settings = await Settings.getSettings();
-    const theme = getEmailTheme(settings);
-    const primaryColor = theme.primaryColor;
     
     if (isCustomer) {
       // Check if company has EDI enabled - if so, skip email notifications
@@ -298,19 +296,24 @@ router.post('/:documentType/:documentId', async (req, res) => {
         for (const staffUser of staffUsers) {
           if (staffUser.email) {
             try {
-              const emailContent = `
-                <h2 style="color: ${primaryColor}; margin-bottom: 20px;">New Document Query</h2>
-                <p><strong>${req.user.name || req.user.email}</strong> from <strong>${company?.name || 'Unknown Company'}</strong> has sent a query regarding ${documentTypeLabel} <strong>${documentNumber}</strong>.</p>
-                <div style="background: #f8f9fa; border-radius: 6px; padding: 16px; margin: 16px 0;">
-                  <p style="margin: 0 0 8px 0; font-weight: 600;">Message:</p>
-                  <p style="margin: 0;">${message.trim().replace(/\n/g, '<br>')}</p>
-                </div>
-                ${emailButton('View and Reply', queryUrl, settings)}
-              `;
+              const html = renderTemplate('query-notification', {
+                emailTitle: 'New Document Query',
+                preheaderText: `Query from ${company?.name || 'Unknown Company'} about ${documentTypeLabel} ${documentNumber}`,
+                greeting: `Hello ${staffUser.name || 'Team'},`,
+                introText: `${req.user.name || req.user.email} from ${company?.name || 'Unknown Company'} has sent a query regarding ${documentTypeLabel} ${documentNumber}.`,
+                documentTypeName: documentTypeLabel,
+                documentNumber,
+                senderName: req.user.name || req.user.email,
+                messageContent: message.trim().replace(/\n/g, '<br>'),
+                queryUrl,
+                buttonText: 'View and Reply',
+                iconColor: settings?.primaryColor || '#066FD1'
+              }, settings);
+              
               await sendEmail({
                 to: staffUser.email,
                 subject: `Query regarding ${documentTypeLabel} ${documentNumber}`,
-                html: wrapEmailContent(emailContent, settings)
+                html
               }, settings);
             } catch (emailError) {
               console.error(`Failed to send email to ${staffUser.email}:`, emailError);
@@ -335,19 +338,24 @@ router.post('/:documentType/:documentId', async (req, res) => {
       for (const customerUser of customerUsers) {
         if (customerUser.email) {
           try {
-            const emailContent = `
-              <h2 style="color: ${primaryColor}; margin-bottom: 20px;">Query from Staff</h2>
-              <p><strong>${req.user.name || req.user.email}</strong> has sent a query regarding your ${documentTypeLabel} <strong>${documentNumber}</strong>.</p>
-              <div style="background: #f8f9fa; border-radius: 6px; padding: 16px; margin: 16px 0;">
-                <p style="margin: 0 0 8px 0; font-weight: 600;">Message:</p>
-                <p style="margin: 0;">${message.trim().replace(/\n/g, '<br>')}</p>
-              </div>
-              ${emailButton('View and Reply', queryUrl, settings)}
-            `;
+            const html = renderTemplate('query-notification', {
+              emailTitle: 'Query from Staff',
+              preheaderText: `Staff query about your ${documentTypeLabel} ${documentNumber}`,
+              greeting: `Hello ${customerUser.name || 'Customer'},`,
+              introText: `${req.user.name || req.user.email} has sent a query regarding your ${documentTypeLabel} ${documentNumber}.`,
+              documentTypeName: documentTypeLabel,
+              documentNumber,
+              senderName: req.user.name || req.user.email,
+              messageContent: message.trim().replace(/\n/g, '<br>'),
+              queryUrl,
+              buttonText: 'View and Reply',
+              iconColor: settings?.primaryColor || '#066FD1'
+            }, settings);
+            
             await sendEmail({
               to: customerUser.email,
               subject: `Query regarding ${documentTypeLabel} ${documentNumber}`,
-              html: wrapEmailContent(emailContent, settings)
+              html
             }, settings);
           } catch (emailError) {
             console.error(`Failed to send email to ${customerUser.email}:`, emailError);
@@ -480,23 +488,26 @@ router.post('/:documentType/:documentId/reply', async (req, res) => {
           
           // Get settings for email branding
           const settings = await Settings.getSettings();
-          const theme = getEmailTheme(settings);
-          const primaryColor = theme.primaryColor;
           
           try {
-            const emailContent = `
-              <h2 style="color: ${primaryColor}; margin-bottom: 20px;">Reply to Your Query</h2>
-              <p><strong>${req.user.name || req.user.email}</strong> has replied to your query regarding ${documentTypeLabel} <strong>${query.documentNumber}</strong>.</p>
-              <div style="background: #f8f9fa; border-radius: 6px; padding: 16px; margin: 16px 0;">
-                <p style="margin: 0 0 8px 0; font-weight: 600;">Reply:</p>
-                <p style="margin: 0;">${message.trim().replace(/\n/g, '<br>')}</p>
-              </div>
-              ${emailButton('View Document', queryUrl, settings)}
-            `;
+            const html = renderTemplate('query-notification', {
+              emailTitle: 'Reply to Your Query',
+              preheaderText: `Reply received for your ${documentTypeLabel} ${query.documentNumber} query`,
+              greeting: `Hello ${customer.name || 'Customer'},`,
+              introText: `${req.user.name || req.user.email} has replied to your query regarding ${documentTypeLabel} ${query.documentNumber}.`,
+              documentTypeName: documentTypeLabel,
+              documentNumber: query.documentNumber,
+              senderName: req.user.name || req.user.email,
+              messageContent: message.trim().replace(/\n/g, '<br>'),
+              queryUrl,
+              buttonText: 'View Document',
+              iconColor: settings?.primaryColor || '#066FD1'
+            }, settings);
+            
             await sendEmail({
               to: customer.email,
               subject: `Reply to your query regarding ${documentTypeLabel} ${query.documentNumber}`,
-              html: wrapEmailContent(emailContent, settings)
+              html
             }, settings);
           } catch (emailError) {
             console.error(`Failed to send email to ${customer.email}:`, emailError);
@@ -630,24 +641,29 @@ router.post('/:documentType/:documentId/resolve', async (req, res) => {
           
           // Get settings for email branding
           const settings = await Settings.getSettings();
-          const theme = getEmailTheme(settings);
-          const primaryColor = theme.primaryColor;
           
           try {
-            const emailContent = `
-              <h2 style="color: ${primaryColor}; margin-bottom: 20px;">Query Resolved</h2>
-              <p>Your query regarding ${documentTypeLabel} <strong>${query.documentNumber}</strong> has been resolved.</p>
-              <div style="background: #d4edda; border: 1px solid #28a745; border-radius: 6px; padding: 16px; margin: 16px 0;">
-                <p style="margin: 0 0 8px 0; font-weight: 600; color: #155724;">Resolution:</p>
-                <p style="margin: 0; color: #155724;">${resolutionReason.trim().replace(/\n/g, '<br>')}</p>
-              </div>
-              <p style="font-size: 13px; color: #667085; font-style: italic;">This query is now closed. For any further questions, please contact support directly via email.</p>
-              ${emailButton('View Document', queryUrl, settings)}
-            `;
+            const html = renderTemplate('query-notification', {
+              emailTitle: 'Query Resolved',
+              preheaderText: `Your query about ${documentTypeLabel} ${query.documentNumber} has been resolved`,
+              greeting: `Hello ${customer.name || 'Customer'},`,
+              introText: `Your query regarding ${documentTypeLabel} ${query.documentNumber} has been resolved.`,
+              documentTypeName: documentTypeLabel,
+              documentNumber: query.documentNumber,
+              queryStatus: 'Resolved',
+              statusColor: '#d4edda',
+              statusTextColor: '#155724',
+              senderName: userDetails?.name || 'Support Team',
+              messageContent: resolutionReason.trim().replace(/\n/g, '<br>'),
+              queryUrl,
+              buttonText: 'View Document',
+              iconColor: '#2fb344'
+            }, settings);
+            
             await sendEmail({
               to: customer.email,
               subject: `Query resolved: ${documentTypeLabel} ${query.documentNumber}`,
-              html: wrapEmailContent(emailContent, settings)
+              html
             }, settings);
           } catch (emailError) {
             console.error(`Failed to send email to ${customer.email}:`, emailError);
