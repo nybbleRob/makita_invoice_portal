@@ -336,7 +336,12 @@ async function sendViaOffice365(options, config) {
         if (att.path) {
           contentBytes = fs.readFileSync(att.path).toString('base64');
         } else if (att.content) {
-          contentBytes = Buffer.from(att.content).toString('base64');
+          // Check if already base64 encoded
+          if (att.encoding === 'base64') {
+            contentBytes = att.content;
+          } else {
+            contentBytes = Buffer.from(att.content).toString('base64');
+          }
         } else {
           throw new Error('Attachment must have either path or content');
         }
@@ -403,18 +408,23 @@ async function sendViaResend(options, config) {
         const fs = require('fs');
         const path = require('path');
         
-        let content;
+        let base64Content;
         if (att.path) {
-          content = fs.readFileSync(att.path);
+          base64Content = fs.readFileSync(att.path).toString('base64');
         } else if (att.content) {
-          content = Buffer.from(att.content);
+          // Check if already base64 encoded
+          if (att.encoding === 'base64') {
+            base64Content = att.content;
+          } else {
+            base64Content = Buffer.from(att.content).toString('base64');
+          }
         } else {
           throw new Error('Attachment must have either path or content');
         }
 
         return {
           filename: att.filename || path.basename(att.path || 'attachment'),
-          content: content.toString('base64'),
+          content: base64Content,
           ...(att.contentType && { type: att.contentType })
         };
       })
@@ -467,18 +477,27 @@ async function sendViaSMTP2Go(options, config) {
     
     payload.attachments = await Promise.all(
       options.attachments.map(async (att) => {
-        let content;
+        let base64Content;
+        
         if (att.path) {
-          content = fs.readFileSync(att.path);
+          // Read file from disk and encode to base64
+          base64Content = fs.readFileSync(att.path).toString('base64');
         } else if (att.content) {
-          content = Buffer.from(att.content);
+          // Content provided - check if already base64 encoded
+          if (att.encoding === 'base64') {
+            // Already base64 encoded, use as-is
+            base64Content = att.content;
+          } else {
+            // Raw content, encode to base64
+            base64Content = Buffer.from(att.content).toString('base64');
+          }
         } else {
           throw new Error('Attachment must have either path or content');
         }
 
         return {
           filename: att.filename || path.basename(att.path || 'attachment'),
-          filecontent: content.toString('base64'),
+          filecontent: base64Content,
           mimetype: att.contentType || 'application/octet-stream'
         };
       })
