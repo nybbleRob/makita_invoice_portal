@@ -135,78 +135,116 @@ async function recordJobCompletion(importId, result) {
   
   console.log(`[Batch ${importId}] Recording job completion: success=${result.success}, documentId=${result.documentId}, companyId=${result.companyId}, fileName=${result.fileName}`);
   
-  const batch = await getBatch(importId);
-  if (!batch) {
-    // This is a problem - means batch was never registered or expired before jobs completed
-    console.error(`[Batch ${importId}] CRITICAL: Batch not found in Redis! Jobs completed before batch was registered. Notifications will NOT be sent.`);
+  if (!redis) {
+    console.warn(`[Batch ${importId}] Redis not available, batch tracking disabled`);
     return;
   }
   
-  batch.completedJobs++;
+  const batchKey = `${BATCH_KEY_PREFIX}${importId}`;
+  const lockKey = `${batchKey}:lock`;
+  const maxRetries = 10;
+  const lockTimeout = 5000; // 5 seconds
   
-  if (result.success) {
-    batch.successfulJobs++;
-    
-    // Track document if created and assigned to a company
-    if (result.documentId && result.companyId) {
-      console.log(`[Batch ${importId}] Tracking document ${result.documentId} (type=${result.documentType}) for company ${result.companyId}`);
-      const docInfo = {
-        id: result.documentId,
-        type: result.documentType,
-        companyId: result.companyId,
-        fileName: result.fileName,
-        invoiceNumber: result.invoiceNumber,
-        amount: result.amount
-      };
-      
-      batch.documents.push(docInfo);
-      
-      // Group by company (using plain object)
-      const companyId = result.companyId;
-      if (!batch.companyDocuments[companyId]) {
-        batch.companyDocuments[companyId] = {
-          invoices: [],
-          creditNotes: [],
-          statements: []
-        };
-      }
-      
-      const companyDocs = batch.companyDocuments[companyId];
-      if (result.documentType === 'invoice') {
-        companyDocs.invoices.push(docInfo);
-      } else if (result.documentType === 'credit_note') {
-        companyDocs.creditNotes.push(docInfo);
-      } else if (result.documentType === 'statement') {
-        companyDocs.statements.push(docInfo);
-      }
-    } else {
-      // Document not tracked - either unallocated (no companyId) or no document created
-      console.log(`[Batch ${importId}] Document NOT tracked: documentId=${result.documentId}, companyId=${result.companyId}, status=${result.status}`);
-    }
-  } else {
-    batch.failedJobs++;
-    console.log(`[Batch ${importId}] Job failed: ${result.error || 'Unknown error'}`);
-  }
-  
-  console.log(`[Batch ${importId}] Progress: ${batch.completedJobs}/${batch.totalJobs} (${batch.successfulJobs} success, ${batch.failedJobs} failed)`);
-  
-  // Check if batch is complete
-  if (batch.completedJobs >= batch.totalJobs) {
-    console.log(`[Batch ${importId}] All jobs complete! Triggering notifications...`);
-    
+  // Use Redis-based lock to prevent race conditions
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      // Convert companyDocuments to Map for sendBatchNotifications
-      batch.companyDocumentsMap = new Map(Object.entries(batch.companyDocuments));
-      await sendBatchNotifications(importId, batch);
+      // Try to acquire lock with NX (only set if not exists) and PX (expire in ms)
+      const lockAcquired = await redis.set(lockKey, Date.now().toString(), 'PX', lockTimeout, 'NX');
+      
+      if (!lockAcquired) {
+        // Lock not acquired, wait and retry
+        await new Promise(resolve => setTimeout(resolve, 50 + Math.random() * 100));
+        continue;
+      }
+      
+      try {
+        // Lock acquired - now safe to read-modify-write
+        const batch = await getBatch(importId);
+        if (!batch) {
+          console.error(`[Batch ${importId}] CRITICAL: Batch not found in Redis! Notifications will NOT be sent.`);
+          return;
+        }
+        
+        batch.completedJobs++;
+        
+        if (result.success) {
+          batch.successfulJobs++;
+          
+          // Track document if created and assigned to a company
+          if (result.documentId && result.companyId) {
+            console.log(`[Batch ${importId}] Tracking document ${result.documentId} (type=${result.documentType}) for company ${result.companyId}`);
+            const docInfo = {
+              id: result.documentId,
+              type: result.documentType,
+              companyId: result.companyId,
+              fileName: result.fileName,
+              invoiceNumber: result.invoiceNumber,
+              amount: result.amount
+            };
+            
+            batch.documents.push(docInfo);
+            
+            // Group by company (using plain object)
+            const companyId = result.companyId;
+            if (!batch.companyDocuments[companyId]) {
+              batch.companyDocuments[companyId] = {
+                invoices: [],
+                creditNotes: [],
+                statements: []
+              };
+            }
+            
+            const companyDocs = batch.companyDocuments[companyId];
+            if (result.documentType === 'invoice') {
+              companyDocs.invoices.push(docInfo);
+            } else if (result.documentType === 'credit_note') {
+              companyDocs.creditNotes.push(docInfo);
+            } else if (result.documentType === 'statement') {
+              companyDocs.statements.push(docInfo);
+            }
+          } else {
+            // Document not tracked - either unallocated (no companyId) or no document created
+            console.log(`[Batch ${importId}] Document NOT tracked: documentId=${result.documentId}, companyId=${result.companyId}, status=${result.status}`);
+          }
+        } else {
+          batch.failedJobs++;
+          console.log(`[Batch ${importId}] Job failed: ${result.error || 'Unknown error'}`);
+        }
+        
+        console.log(`[Batch ${importId}] Progress: ${batch.completedJobs}/${batch.totalJobs} (${batch.successfulJobs} success, ${batch.failedJobs} failed)`);
+        
+        // Check if batch is complete
+        if (batch.completedJobs >= batch.totalJobs) {
+          console.log(`[Batch ${importId}] All jobs complete! Triggering notifications...`);
+          
+          try {
+            // Convert companyDocuments to Map for sendBatchNotifications
+            batch.companyDocumentsMap = new Map(Object.entries(batch.companyDocuments));
+            await sendBatchNotifications(importId, batch);
+          } catch (error) {
+            console.error(`[Batch ${importId}] Error sending notifications:`, error.message);
+          } finally {
+            // Clean up batch from Redis
+            await deleteBatch(importId);
+          }
+        } else {
+          // Save updated batch
+          await saveBatch(importId, batch);
+        }
+        
+        return; // Success - exit the retry loop
+        
+      } finally {
+        // Always release lock
+        await redis.del(lockKey);
+      }
+      
     } catch (error) {
-      console.error(`[Batch ${importId}] Error sending notifications:`, error.message);
-    } finally {
-      // Clean up batch from Redis
-      await deleteBatch(importId);
+      console.error(`[Batch ${importId}] Error in recordJobCompletion (attempt ${attempt + 1}):`, error.message);
+      if (attempt === maxRetries - 1) {
+        console.error(`[Batch ${importId}] Failed to record job completion after ${maxRetries} attempts`);
+      }
     }
-  } else {
-    // Save updated batch
-    await saveBatch(importId, batch);
   }
 }
 
