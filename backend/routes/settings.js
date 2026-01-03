@@ -1475,30 +1475,35 @@ startxref
       
       if (shouldAttach) {
         if (samplePdfPath && fs.existsSync(samplePdfPath)) {
-          // Use real sample PDF
+          // Use real sample PDF - read as base64 to avoid Buffer serialization issues
+          const pdfContent = fs.readFileSync(samplePdfPath);
           attachments.push({
             filename: `${testInvoiceNumber}.pdf`,
-            path: samplePdfPath,
+            content: pdfContent.toString('base64'),
+            encoding: 'base64',
             contentType: 'application/pdf'
           });
         } else {
-          // Use generated dummy PDF
+          // Use generated dummy PDF - encode as base64 for proper serialization
           attachments.push({
             filename: `${testInvoiceNumber}.pdf`,
-            content: createDummyPdf(testInvoiceNumber),
+            content: createDummyPdf(testInvoiceNumber).toString('base64'),
+            encoding: 'base64',
             contentType: 'application/pdf'
           });
         }
       }
       
       // Queue the email
+      // NOTE: Don't pass full settings object - it has serialization issues through Redis
+      // Let the worker fetch fresh settings from database instead
       const job = await emailQueue.add('send-email', {
         to: recipientEmail,
         subject: `[TEST ${i}/${emailCount}] New ${documentTypeName} Available - ${testCompany}`,
         html,
         text: `Test Email ${i} of ${emailCount}\n\n${documentTypeName}: ${testInvoiceNumber}\nAmount: GBP ${testAmount}\nCompany: ${testCompany}\n\nThis is a stress test email.`,
         attachments,
-        settings,
+        // settings omitted - worker will fetch from database
         metadata: {
           type: 'stress_test',
           emailNumber: i,
