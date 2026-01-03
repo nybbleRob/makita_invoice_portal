@@ -35,11 +35,9 @@ async function getBatch(importId) {
     if (!data) return null;
     
     const batch = JSON.parse(data);
-    // Convert companyDocuments back to Map-like structure for compatibility
-    if (batch.companyDocuments && typeof batch.companyDocuments === 'object') {
-      batch.companyDocumentsMap = new Map(Object.entries(batch.companyDocuments));
-    } else {
-      batch.companyDocumentsMap = new Map();
+    // Ensure companyDocuments is always a plain object
+    if (!batch.companyDocuments || typeof batch.companyDocuments !== 'object') {
+      batch.companyDocuments = {};
     }
     return batch;
   } catch (error) {
@@ -57,15 +55,13 @@ async function saveBatch(importId, batch) {
   if (!redis) return;
   
   try {
-    // Convert Map to plain object for JSON serialization
+    // Always use batch.companyDocuments (plain object) for saving
+    // recordJobCompletion modifies companyDocuments directly, not companyDocumentsMap
     const batchToSave = {
       ...batch,
-      companyDocuments: batch.companyDocumentsMap 
-        ? Object.fromEntries(batch.companyDocumentsMap)
-        : (batch.companyDocuments instanceof Map 
-            ? Object.fromEntries(batch.companyDocuments)
-            : batch.companyDocuments || {})
+      companyDocuments: batch.companyDocuments || {}
     };
+    // Remove the Map version - we only save the plain object
     delete batchToSave.companyDocumentsMap;
     
     await redis.setex(`${BATCH_KEY_PREFIX}${importId}`, BATCH_TTL, JSON.stringify(batchToSave));
@@ -218,8 +214,7 @@ async function recordJobCompletion(importId, result) {
           console.log(`[Batch ${importId}] All jobs complete! Triggering notifications...`);
           
           try {
-            // Convert companyDocuments to Map for sendBatchNotifications
-            batch.companyDocumentsMap = new Map(Object.entries(batch.companyDocuments));
+            // companyDocuments is already a plain object - no conversion needed
             await sendBatchNotifications(importId, batch);
           } catch (error) {
             console.error(`[Batch ${importId}] Error sending notifications:`, error.message);
@@ -264,23 +259,26 @@ async function sendBatchNotifications(importId, batch) {
     return;
   }
   
-  // Get companyDocuments as Map
-  const companyDocuments = batch.companyDocumentsMap || new Map(Object.entries(batch.companyDocuments || {}));
+  // companyDocuments is a plain object: { companyId: { invoices: [], creditNotes: [], statements: [] } }
+  const companyDocuments = batch.companyDocuments || {};
+  const companyIds = Object.keys(companyDocuments);
   
   console.log(`[Batch ${importId}] Batch data: totalJobs=${batch.totalJobs}, successfulJobs=${batch.successfulJobs}, documents=${batch.documents?.length || 0}`);
-  console.log(`[Batch ${importId}] Company documents map has ${companyDocuments.size} companies`);
+  console.log(`[Batch ${importId}] Company documents object has ${companyIds.length} companies`);
   
   // Debug: log what companies have documents
-  for (const [cId, cDocs] of companyDocuments) {
+  for (const cId of companyIds) {
+    const cDocs = companyDocuments[cId];
     console.log(`[Batch ${importId}]   - Company ${cId}: ${cDocs.invoices?.length || 0} invoices, ${cDocs.creditNotes?.length || 0} credit notes`);
   }
   
   // Send user notifications if there are company documents
-  if (companyDocuments.size === 0) {
+  if (companyIds.length === 0) {
     console.log(`[Batch ${importId}] No company documents to notify users about - documents may be unallocated or batch tracking failed`);
   } else {
     // Send notifications for each company
-    for (const [companyId, docs] of companyDocuments) {
+    for (const companyId of companyIds) {
+      const docs = companyDocuments[companyId];
       try {
         const company = await Company.findByPk(companyId);
         if (!company) {
@@ -539,8 +537,7 @@ async function forceTriggerNotifications(importId) {
     throw new Error(`Batch ${importId} not found`);
   }
   
-  // Convert companyDocuments to Map for sendBatchNotifications
-  batch.companyDocumentsMap = new Map(Object.entries(batch.companyDocuments || {}));
+  // companyDocuments is already a plain object - no conversion needed
   await sendBatchNotifications(importId, batch);
   await deleteBatch(importId);
 }
