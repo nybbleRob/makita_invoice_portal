@@ -181,7 +181,10 @@ async function scanLocalFolder() {
     const queuedFileNames = new Set(existingJobs.map(job => job.data?.fileName).filter(Boolean));
     const queuedHashes = new Set(existingJobs.map(job => job.data?.fileHash).filter(Boolean));
     
-    // Process each file
+    // FIRST PASS: Determine which files will be queued (without actually queuing)
+    // This fixes the race condition where jobs complete before batch is registered
+    const filesToQueue = [];
+    
     for (const fileName of supportedFiles) {
       const filePath = path.join(FTP_UPLOAD_PATH, fileName);
       
@@ -191,14 +194,14 @@ async function scanLocalFolder() {
         // Skip if file is too new (still being uploaded) - wait 30 seconds
         const fileAge = Date.now() - stats.mtimeMs;
         if (fileAge < 30000) {
-          console.log(`⏭️  File too new, waiting: ${fileName} (${Math.round(fileAge/1000)}s old)`);
+          console.log(`[Scan] File too new, waiting: ${fileName} (${Math.round(fileAge/1000)}s old)`);
           results.skipped++;
           continue;
         }
         
         // Skip if already in queue by filename
         if (queuedFileNames.has(fileName)) {
-          console.log(`⏭️  File already queued (by name): ${fileName}`);
+          console.log(`[Scan] File already queued (by name): ${fileName}`);
           results.skipped++;
           continue;
         }
@@ -208,7 +211,7 @@ async function scanLocalFolder() {
         
         // Skip if hash already in queue
         if (queuedHashes.has(fileHash)) {
-          console.log(`⏭️  File already queued (by hash): ${fileName}`);
+          console.log(`[Scan] File already queued (by hash): ${fileName}`);
           results.skipped++;
           continue;
         }
@@ -217,7 +220,7 @@ async function scanLocalFolder() {
         const isDuplicate = await isDuplicateHash(fileHash);
         
         if (isDuplicate) {
-          console.log(`📋 Duplicate detected (hash match): ${fileName}`);
+          console.log(`[Scan] Duplicate detected (hash match): ${fileName}`);
           await importLogger.log.info(`Duplicate file detected: ${fileName}`);
           
           // Move to duplicates folder immediately
@@ -238,48 +241,21 @@ async function scanLocalFolder() {
         });
         
         if (recentFile) {
-          console.log(`⏭️  File recently processed: ${fileName}`);
+          console.log(`[Scan] File recently processed: ${fileName}`);
           results.skipped++;
           continue;
         }
         
-        // Queue file for import using batch import ID
-        // The invoice import job will move the file to processed/ or unprocessed/failed/
-        await invoiceImportQueue.add('invoice-import', {
-          filePath: filePath,
-          fileName: fileName,
-          originalName: fileName,
-          importId: batchImportId, // Use batch ID for notification tracking
-          userId: systemUser?.id || null,
-          source: 'ftp-upload',
-          fileHash: fileHash,
-          documentType: 'auto', // Auto-detect from template matching
-          priority: 0 // Normal priority (manual uploads get priority 1)
-        }, {
-          jobId: `ftp-import-${Date.now()}-${fileHash.substring(0, 8)}`,
-          priority: 0, // Normal priority
-          attempts: 3,
-          backoff: {
-            type: 'exponential',
-            delay: 2000
-          },
-          removeOnComplete: true,
-          removeOnFail: false
-        });
-        
-        console.log(`✅ Queued file: ${fileName} (batch: ${batchImportId})`);
-        await importLogger.log.info(`Queued: ${fileName}`);
-        
-        results.queued++;
-        results.files.push({
+        // This file will be queued - add to list
+        filesToQueue.push({
+          filePath,
           fileName,
-          fileSize: stats.size,
           fileHash,
-          importId: batchImportId
+          fileSize: stats.size
         });
         
       } catch (fileError) {
-        console.error(`❌ Error processing file ${fileName}:`, fileError.message);
+        console.error(`[Scan] Error processing file ${fileName}:`, fileError.message);
         await importLogger.log.error(`Error: ${fileName} - ${fileError.message}`);
         
         results.errors.push({
@@ -296,18 +272,64 @@ async function scanLocalFolder() {
       }
     }
     
-    // Register batch for notification tracking (after we know final count)
-    if (results.queued > 0) {
+    // REGISTER BATCH BEFORE QUEUING JOBS (critical for notification tracking)
+    // This ensures the batch exists in Redis before any job can complete
+    if (filesToQueue.length > 0) {
       try {
         const { registerBatch } = require('../services/batchNotificationService');
-        await registerBatch(batchImportId, results.queued, {
+        await registerBatch(batchImportId, filesToQueue.length, {
           userId: systemUser?.id || null,
           userEmail: systemUser?.email || 'system',
           source: 'ftp-scan'
         });
-        console.log(`[Batch ${batchImportId}] Registered batch with ${results.queued} jobs for notification tracking`);
+        console.log(`[Batch ${batchImportId}] Registered batch with ${filesToQueue.length} jobs for notification tracking`);
       } catch (batchError) {
         console.warn('Failed to register batch:', batchError.message);
+      }
+    }
+    
+    // SECOND PASS: Actually queue the files
+    for (const file of filesToQueue) {
+      try {
+        await invoiceImportQueue.add('invoice-import', {
+          filePath: file.filePath,
+          fileName: file.fileName,
+          originalName: file.fileName,
+          importId: batchImportId, // Use batch ID for notification tracking
+          userId: systemUser?.id || null,
+          source: 'ftp-upload',
+          fileHash: file.fileHash,
+          documentType: 'auto', // Auto-detect from template matching
+          priority: 0 // Normal priority (manual uploads get priority 1)
+        }, {
+          jobId: `ftp-import-${Date.now()}-${file.fileHash.substring(0, 8)}`,
+          priority: 0, // Normal priority
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000
+          },
+          removeOnComplete: true,
+          removeOnFail: false
+        });
+        
+        console.log(`[Scan] Queued file: ${file.fileName} (batch: ${batchImportId})`);
+        await importLogger.log.info(`Queued: ${file.fileName}`);
+        
+        results.queued++;
+        results.files.push({
+          fileName: file.fileName,
+          fileSize: file.fileSize,
+          fileHash: file.fileHash,
+          importId: batchImportId
+        });
+        
+      } catch (queueError) {
+        console.error(`[Scan] Error queuing file ${file.fileName}:`, queueError.message);
+        results.errors.push({
+          fileName: file.fileName,
+          error: queueError.message
+        });
       }
     }
     
@@ -378,11 +400,12 @@ async function processLocalFolderScan(job) {
  */
 async function sendScanSummaryEmail(results) {
   const { Settings, User } = require('../models');
+  const { wrapEmailContent } = require('../utils/emailTheme');
   const settings = await Settings.getSettings();
   
   // Check if email is enabled (Mailtrap = test mode, always enabled)
   if (!isEmailEnabled(settings)) {
-    console.log('ℹ️  Email not enabled, skipping scan summary email');
+    console.log('[Scan] Email not enabled, skipping scan summary email');
     return;
   }
   
@@ -396,77 +419,79 @@ async function sendScanSummaryEmail(results) {
   });
   
   if (admins.length === 0) {
-    console.log('ℹ️  No active global admins to notify');
+    console.log('[Scan] No active global admins to notify');
     return;
   }
   
-  const portalName = settings.portalName || 'Makita Invoice Portal';
+  const portalName = settings.portalName || settings.siteTitle || 'Makita Invoice Portal';
+  const primaryColor = settings.primaryColor || '#066fd1';
   const hasErrors = results.errors.length > 0;
   
-  // Build email content
+  // Build email content (will be wrapped with branding)
   const subject = hasErrors 
-    ? `⚠️ FTP Import Scan Complete (${results.errors.length} errors) - ${portalName}`
-    : `✅ FTP Import Scan Complete - ${portalName}`;
+    ? `FTP Import Scan Complete (${results.errors.length} errors) - ${portalName}`
+    : `FTP Import Scan Complete - ${portalName}`;
   
-  let html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: ${hasErrors ? '#dc3545' : '#198754'};">FTP Import Scan Results</h2>
-      <p>The scheduled FTP folder scan has completed.</p>
-      
-      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-        <tr style="background: #f8f9fa;">
-          <td style="padding: 10px; border: 1px solid #dee2e6;"><strong>Files Scanned</strong></td>
-          <td style="padding: 10px; border: 1px solid #dee2e6;">${results.scanned}</td>
-        </tr>
-        <tr>
-          <td style="padding: 10px; border: 1px solid #dee2e6;"><strong>Queued for Import</strong></td>
-          <td style="padding: 10px; border: 1px solid #dee2e6; color: #198754;">${results.queued}</td>
-        </tr>
-        <tr style="background: #f8f9fa;">
-          <td style="padding: 10px; border: 1px solid #dee2e6;"><strong>Duplicates (Moved)</strong></td>
-          <td style="padding: 10px; border: 1px solid #dee2e6;">${results.duplicates}</td>
-        </tr>
-        <tr>
-          <td style="padding: 10px; border: 1px solid #dee2e6;"><strong>Skipped</strong></td>
-          <td style="padding: 10px; border: 1px solid #dee2e6;">${results.skipped}</td>
-        </tr>
-        <tr style="background: #f8f9fa;">
-          <td style="padding: 10px; border: 1px solid #dee2e6;"><strong>Errors</strong></td>
-          <td style="padding: 10px; border: 1px solid #dee2e6; color: ${hasErrors ? '#dc3545' : 'inherit'};">${results.errors.length}</td>
-        </tr>
-      </table>
+  let emailContent = `
+    <h2 style="color: ${hasErrors ? '#dc3545' : primaryColor}; margin-bottom: 20px;">FTP Import Scan Results</h2>
+    <p>The scheduled FTP folder scan has completed.</p>
+    
+    <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+      <tr style="background: #f8f9fa;">
+        <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Files Scanned</td>
+        <td style="padding: 12px; border: 1px solid #e0e0e0;">${results.scanned}</td>
+      </tr>
+      <tr>
+        <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Queued for Import</td>
+        <td style="padding: 12px; border: 1px solid #e0e0e0; color: #198754; font-weight: 600;">${results.queued}</td>
+      </tr>
+      <tr style="background: #f8f9fa;">
+        <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Duplicates (Moved)</td>
+        <td style="padding: 12px; border: 1px solid #e0e0e0;">${results.duplicates}</td>
+      </tr>
+      <tr>
+        <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Skipped</td>
+        <td style="padding: 12px; border: 1px solid #e0e0e0;">${results.skipped}</td>
+      </tr>
+      <tr style="background: #f8f9fa;">
+        <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Errors</td>
+        <td style="padding: 12px; border: 1px solid #e0e0e0; color: ${hasErrors ? '#dc3545' : 'inherit'}; font-weight: ${hasErrors ? '600' : 'normal'};">${results.errors.length}</td>
+      </tr>
+    </table>
   `;
   
   // Add queued files list (limit to first 20)
   if (results.files.length > 0) {
     const displayFiles = results.files.slice(0, 20);
-    html += `
-      <h3>Files Queued for Import:</h3>
-      <ul style="padding-left: 20px;">
-        ${displayFiles.map(f => `<li>${f.fileName} (${(f.fileSize / 1024).toFixed(1)} KB)</li>`).join('')}
-        ${results.files.length > 20 ? `<li><em>...and ${results.files.length - 20} more</em></li>` : ''}
+    emailContent += `
+      <h3 style="color: ${primaryColor}; margin-top: 24px;">Files Queued for Import:</h3>
+      <ul style="padding-left: 20px; margin: 12px 0;">
+        ${displayFiles.map(f => `<li style="margin-bottom: 4px;">${f.fileName} (${(f.fileSize / 1024).toFixed(1)} KB)</li>`).join('')}
+        ${results.files.length > 20 ? `<li style="font-style: italic; color: #667085;">...and ${results.files.length - 20} more</li>` : ''}
       </ul>
     `;
   }
   
   // Add errors if any
   if (results.errors.length > 0) {
-    html += `
-      <h3 style="color: #dc3545;">Errors:</h3>
-      <ul style="padding-left: 20px; color: #dc3545;">
-        ${results.errors.map(e => `<li><strong>${e.fileName || 'General'}</strong>: ${e.error}</li>`).join('')}
-      </ul>
+    emailContent += `
+      <div style="background: #f8d7da; border: 1px solid #d63939; border-radius: 4px; padding: 12px; margin-top: 20px;">
+        <h3 style="color: #721c24; margin: 0 0 12px 0;">Errors:</h3>
+        <ul style="padding-left: 20px; color: #721c24; margin: 0;">
+          ${results.errors.map(e => `<li><strong>${e.fileName || 'General'}</strong>: ${e.error}</li>`).join('')}
+        </ul>
+      </div>
     `;
   }
   
-  html += `
-      <hr style="margin: 20px 0; border: none; border-top: 1px solid #dee2e6;">
-      <p style="color: #6c757d; font-size: 12px;">
-        This is an automated message from ${portalName}.<br>
-        Scan time: ${new Date().toISOString()}
-      </p>
-    </div>
+  emailContent += `
+    <p style="color: #667085; font-size: 12px; margin-top: 24px;">
+      Scan completed: ${new Date().toLocaleString()}
+    </p>
   `;
+  
+  // Wrap with portal branding
+  const html = wrapEmailContent(emailContent, settings);
   
   // Queue email for each admin
   for (const admin of admins) {
@@ -482,7 +507,7 @@ async function sendScanSummaryEmail(results) {
       }
     });
     
-    console.log(`📧 Queued scan summary email to: ${admin.email}`);
+    console.log(`[Scan] Queued scan summary email to: ${admin.email}`);
   }
 }
 
