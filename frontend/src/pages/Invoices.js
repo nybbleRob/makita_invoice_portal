@@ -615,7 +615,8 @@ const Invoices = () => {
         setImportStatus(importSession);
         
         // If processing is complete, fetch full results with summary
-        if (importSession.status === 'completed' && !importStatus?.summary) {
+        // Note: Check importSession (the fresh data), not importStatus (stale closure)
+        if (importSession.status === 'completed') {
           try {
             const resultsResponse = await api.get(`/api/invoices/import/${id}/results`);
             const importData = resultsResponse.data.import;
@@ -627,6 +628,9 @@ const Invoices = () => {
             
             // Refresh invoices list
             fetchInvoices();
+            
+            // Clear files for next upload
+            setImportFiles([]);
             
             return true; // Stop polling
           } catch (error) {
