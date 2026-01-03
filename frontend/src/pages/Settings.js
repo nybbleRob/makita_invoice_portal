@@ -33,6 +33,13 @@ const Settings = () => {
   const [updatingGlobalEDI, setUpdatingGlobalEDI] = useState(false);
   const [updatingGlobalEmail, setUpdatingGlobalEmail] = useState(false);
   
+  // Email Stress Test state
+  const [stressTestCount, setStressTestCount] = useState(10);
+  const [stressTestAttachment, setStressTestAttachment] = useState(true);
+  const [stressTestDocType, setStressTestDocType] = useState('invoice');
+  const [runningStressTest, setRunningStressTest] = useState(false);
+  const [stressTestResult, setStressTestResult] = useState(null);
+  
   // Import Settings state
   const [importSettings, setImportSettings] = useState(null);
   const [importLogs, setImportLogs] = useState([]);
@@ -464,6 +471,28 @@ const Settings = () => {
       toast.error('Error testing retention: ' + (error.response?.data?.message || error.message));
     } finally {
       setTestingRetention(false);
+    }
+  };
+
+  // Email stress test
+  const handleEmailStressTest = async () => {
+    setRunningStressTest(true);
+    setStressTestResult(null);
+    
+    try {
+      const response = await api.post('/api/settings/email-stress-test', {
+        count: stressTestCount,
+        includeAttachment: stressTestAttachment,
+        documentType: stressTestDocType
+      });
+      
+      setStressTestResult(response.data);
+      toast.success(`Queued ${response.data.emailCount} test emails to ${response.data.recipientEmail}`);
+    } catch (error) {
+      console.error('Error running email stress test:', error);
+      toast.error('Error running stress test: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setRunningStressTest(false);
     }
   };
 
@@ -1844,6 +1873,99 @@ const Settings = () => {
                               </>
                             )}
                           </button>
+                        </div>
+                      </div>
+                      
+                      {/* Email Queue Stress Test */}
+                      <div className="card mb-3">
+                        <div className="card-header">
+                          <h3 className="card-title">Email Queue Stress Test</h3>
+                        </div>
+                        <div className="card-body">
+                          <p className="text-muted mb-3">
+                            Queue test notification emails to yourself to verify email deliverability and attachments.
+                            Emails will be sent to: <strong>{user?.email}</strong>
+                          </p>
+                          
+                          <div className="row g-3 mb-3">
+                            <div className="col-md-4">
+                              <label className="form-label">Number of Emails</label>
+                              <input
+                                type="number"
+                                className="form-control"
+                                min="1"
+                                max="500"
+                                value={stressTestCount}
+                                onChange={(e) => setStressTestCount(Math.min(500, Math.max(1, parseInt(e.target.value) || 1)))}
+                              />
+                              <small className="form-hint">1-500 emails</small>
+                            </div>
+                            
+                            <div className="col-md-4">
+                              <label className="form-label">Document Type</label>
+                              <select
+                                className="form-select"
+                                value={stressTestDocType}
+                                onChange={(e) => setStressTestDocType(e.target.value)}
+                              >
+                                <option value="invoice">Invoice</option>
+                                <option value="credit_note">Credit Note</option>
+                              </select>
+                            </div>
+                            
+                            <div className="col-md-4">
+                              <label className="form-label">Include PDF Attachment</label>
+                              <div className="form-check form-switch mt-2">
+                                <input
+                                  type="checkbox"
+                                  className="form-check-input"
+                                  checked={stressTestAttachment}
+                                  onChange={(e) => setStressTestAttachment(e.target.checked)}
+                                />
+                                <label className="form-check-label">
+                                  {stressTestAttachment ? 'Yes (uses sample PDF)' : 'No'}
+                                </label>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="alert alert-info mb-3">
+                            <strong>Rate Limiting:</strong> Emails are sent at 4 per minute.
+                            {stressTestCount > 1 && (
+                              <span> Estimated delivery time: ~{Math.ceil(stressTestCount / 4)} minute(s)</span>
+                            )}
+                          </div>
+                          
+                          <button
+                            className="btn btn-primary"
+                            onClick={handleEmailStressTest}
+                            disabled={runningStressTest}
+                          >
+                            {runningStressTest ? (
+                              <>
+                                <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                                Queuing Emails...
+                              </>
+                            ) : (
+                              <>
+                                <i className="fas fa-paper-plane me-2"></i>
+                                Run Stress Test
+                              </>
+                            )}
+                          </button>
+                          
+                          {stressTestResult && (
+                            <div className="alert alert-success mt-3">
+                              <strong>Test Queued Successfully!</strong>
+                              <ul className="mb-0 mt-2">
+                                <li>Emails queued: {stressTestResult.emailCount}</li>
+                                <li>Recipient: {stressTestResult.recipientEmail}</li>
+                                <li>Document type: {stressTestResult.documentType}</li>
+                                <li>Attachments: {stressTestResult.hasAttachments ? `Yes (${stressTestResult.samplePdfUsed})` : 'No'}</li>
+                                <li>Estimated delivery: ~{stressTestResult.estimatedDeliveryMinutes} minute(s)</li>
+                              </ul>
+                            </div>
+                          )}
                         </div>
                       </div>
                       

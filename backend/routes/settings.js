@@ -1311,5 +1311,186 @@ router.post('/purge-files', auth, async (req, res) => {
   }
 });
 
+// Email Queue Stress Test - queues test notification emails to current user
+router.post('/email-stress-test', auth, async (req, res) => {
+  try {
+    // Only global admins and administrators can run stress tests
+    if (!['global_admin', 'administrator'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied. Only administrators can run email stress tests.' });
+    }
+    
+    const { count = 10, includeAttachment = false, documentType = 'invoice' } = req.body;
+    
+    // Validate count
+    const emailCount = Math.min(Math.max(parseInt(count) || 10, 1), 500);
+    
+    const settings = await Settings.getSettings();
+    const { wrapEmailContent } = require('../utils/emailTheme');
+    const { emailQueue } = require('../config/queue');
+    const { PROCESSED_BASE } = require('../config/storage');
+    const { isEmailEnabled } = require('../utils/emailService');
+    
+    // Check if email is enabled
+    if (!isEmailEnabled(settings)) {
+      return res.status(400).json({ 
+        message: 'Email is not enabled. Please configure an email provider first.' 
+      });
+    }
+    
+    const primaryColor = settings.primaryColor || '#066fd1';
+    const portalName = settings.portalName || settings.siteTitle || 'Makita Invoice Portal';
+    const recipientEmail = req.user.email;
+    const recipientName = req.user.name || req.user.email;
+    
+    // Find a sample PDF for attachments if requested
+    let samplePdfPath = null;
+    let samplePdfName = null;
+    
+    if (includeAttachment) {
+      // Look for any PDF in processed invoices folder
+      const invoicesDir = path.join(PROCESSED_BASE, 'invoices');
+      
+      const findPdf = (dir, depth = 0) => {
+        if (depth > 5 || !fs.existsSync(dir)) return null;
+        try {
+          const items = fs.readdirSync(dir);
+          for (const item of items) {
+            const itemPath = path.join(dir, item);
+            const stat = fs.statSync(itemPath);
+            if (stat.isFile() && item.toLowerCase().endsWith('.pdf')) {
+              return itemPath;
+            } else if (stat.isDirectory()) {
+              const found = findPdf(itemPath, depth + 1);
+              if (found) return found;
+            }
+          }
+        } catch (e) { /* ignore */ }
+        return null;
+      };
+      
+      samplePdfPath = findPdf(invoicesDir);
+      if (samplePdfPath) {
+        samplePdfName = path.basename(samplePdfPath);
+        console.log(`[StressTest] Found sample PDF: ${samplePdfName}`);
+      } else {
+        console.log('[StressTest] No sample PDF found, emails will be sent without attachments');
+      }
+    }
+    
+    // Queue the emails
+    const queuedJobs = [];
+    const documentTypeName = documentType === 'invoice' ? 'Invoice' : 'Credit Note';
+    
+    for (let i = 1; i <= emailCount; i++) {
+      const testInvoiceNumber = `TEST-${Date.now()}-${i.toString().padStart(4, '0')}`;
+      const testAmount = (Math.random() * 1000 + 100).toFixed(2);
+      const testCompany = 'Test Company Ltd';
+      
+      // Build email content similar to real notification
+      const emailContent = `
+        <h2 style="color: ${primaryColor}; margin-bottom: 20px;">New ${documentTypeName} Available</h2>
+        <p>Hello ${recipientName},</p>
+        <p>A new ${documentTypeName.toLowerCase()} has been uploaded for <strong>${testCompany}</strong>:</p>
+        
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+          <tr style="background: #f8f9fa;">
+            <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">${documentTypeName} Number</td>
+            <td style="padding: 12px; border: 1px solid #e0e0e0;">${testInvoiceNumber}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Amount</td>
+            <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600; color: ${primaryColor};">GBP ${testAmount}</td>
+          </tr>
+          <tr style="background: #f8f9fa;">
+            <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Date</td>
+            <td style="padding: 12px; border: 1px solid #e0e0e0;">${new Date().toLocaleDateString('en-GB')}</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px; border: 1px solid #e0e0e0; font-weight: 600;">Company</td>
+            <td style="padding: 12px; border: 1px solid #e0e0e0;">${testCompany}</td>
+          </tr>
+        </table>
+        
+        <p style="margin-top: 24px;">
+          <a href="#" style="display: inline-block; padding: 12px 24px; background-color: ${primaryColor}; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">
+            View Document
+          </a>
+        </p>
+        
+        <div style="margin-top: 30px; padding: 12px; background: #fff3cd; border: 1px solid #f59f00; border-radius: 4px;">
+          <strong style="color: #856404;">Test Email ${i} of ${emailCount}</strong><br>
+          <span style="color: #856404; font-size: 12px;">This is a stress test email. No action required.</span>
+        </div>
+      `;
+      
+      const html = wrapEmailContent(emailContent, settings);
+      
+      // Build attachments array
+      const attachments = [];
+      if (samplePdfPath && fs.existsSync(samplePdfPath)) {
+        attachments.push({
+          filename: `${testInvoiceNumber}.pdf`,
+          path: samplePdfPath,
+          contentType: 'application/pdf'
+        });
+      }
+      
+      // Queue the email
+      const job = await emailQueue.add('send-email', {
+        to: recipientEmail,
+        subject: `[TEST ${i}/${emailCount}] New ${documentTypeName} Available - ${testCompany}`,
+        html,
+        text: `Test Email ${i} of ${emailCount}\n\n${documentTypeName}: ${testInvoiceNumber}\nAmount: GBP ${testAmount}\nCompany: ${testCompany}\n\nThis is a stress test email.`,
+        attachments,
+        settings,
+        metadata: {
+          type: 'stress_test',
+          emailNumber: i,
+          totalEmails: emailCount,
+          documentType,
+          hasAttachment: attachments.length > 0
+        }
+      }, {
+        priority: 0, // Normal priority
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 2000
+        }
+      });
+      
+      queuedJobs.push({
+        jobId: job.id,
+        emailNumber: i,
+        hasAttachment: attachments.length > 0
+      });
+    }
+    
+    // Calculate estimated delivery time based on rate limiting (4 emails per 60 seconds)
+    const rateLimitPerMinute = 4;
+    const estimatedMinutes = Math.ceil(emailCount / rateLimitPerMinute);
+    
+    console.log(`[StressTest] Queued ${emailCount} test emails to ${recipientEmail}`);
+    console.log(`[StressTest] Attachments: ${includeAttachment ? (samplePdfPath ? 'Yes' : 'No sample PDF found') : 'Disabled'}`);
+    console.log(`[StressTest] Estimated delivery time: ~${estimatedMinutes} minute(s)`);
+    
+    res.json({
+      success: true,
+      message: `Queued ${emailCount} test emails to ${recipientEmail}`,
+      emailCount,
+      recipientEmail,
+      documentType,
+      hasAttachments: includeAttachment && !!samplePdfPath,
+      samplePdfUsed: samplePdfName,
+      estimatedDeliveryMinutes: estimatedMinutes,
+      rateLimitInfo: `${rateLimitPerMinute} emails per minute`
+    });
+    
+  } catch (error) {
+    console.error('Error running email stress test:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router;
 
