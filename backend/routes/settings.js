@@ -1329,6 +1329,7 @@ router.post('/email-stress-test', auth, async (req, res) => {
     const { emailQueue } = require('../config/queue');
     const { PROCESSED_BASE } = require('../config/storage');
     const { isEmailEnabled } = require('../utils/emailService');
+    const { User } = require('../models');
     
     // Check if email is enabled
     if (!isEmailEnabled(settings)) {
@@ -1337,10 +1338,18 @@ router.post('/email-stress-test', auth, async (req, res) => {
       });
     }
     
+    // Fetch current user from database to get email (JWT only has userId and role)
+    const currentUser = await User.findByPk(req.user.userId);
+    if (!currentUser || !currentUser.email) {
+      return res.status(400).json({ 
+        message: 'Could not determine your email address. Please try logging in again.' 
+      });
+    }
+    
     const primaryColor = settings.primaryColor || '#066fd1';
     const portalName = settings.portalName || settings.siteTitle || 'Makita Invoice Portal';
-    const recipientEmail = req.user.email;
-    const recipientName = req.user.name || req.user.email;
+    const recipientEmail = currentUser.email;
+    const recipientName = currentUser.name || currentUser.email;
     
     // Find a sample PDF for attachments if requested
     let samplePdfPath = null;
