@@ -428,7 +428,7 @@ async function queueIndividualEmail(options) {
     documentAmount: formattedAmount,
     documentUrl,
     supplierName: companyName,
-    hasAttachment: recipient.sendAttachment && document.filePath ? 'true' : '',
+    hasAttachment: recipient.sendAttachment && document.fileUrl ? 'true' : '',
     retentionPeriod: retentionDays.toString()
   }, settings);
   
@@ -436,14 +436,14 @@ async function queueIndividualEmail(options) {
   
   // Prepare attachments if enabled
   const attachments = [];
-  if (recipient.sendAttachment && document.filePath) {
+  if (recipient.sendAttachment && document.fileUrl) {
     const fs = require('fs');
     const path = require('path');
     
-    if (fs.existsSync(document.filePath)) {
+    if (fs.existsSync(document.fileUrl)) {
       attachments.push({
-        filename: document.originalName || path.basename(document.filePath),
-        path: document.filePath
+        filename: document.originalName || path.basename(document.fileUrl),
+        path: document.fileUrl
       });
     }
   }
