@@ -59,17 +59,13 @@ if (process.env.NODE_ENV !== 'production' && connection) {
       }
       
       const settings = await Settings.getSettings();
+      const { isEmailEnabled } = require('./utils/emailService');
       
-      // Check if email provider is enabled (same pattern as other emails)
-      if (!settings.emailProvider?.enabled && !settings.smtp?.enabled) {
-        console.log('⚠️  Email provider not enabled, skipping bulk test notification');
+      // Check if email provider is enabled
+      if (!isEmailEnabled(settings)) {
+        console.log('[Server] Email not enabled, skipping bulk test notification');
         return { success: false, message: 'Email provider not enabled' };
       }
-      
-      // Use new emailProvider if available, otherwise fall back to legacy smtp (same pattern as other emails)
-      const emailSettings = settings.emailProvider?.enabled 
-        ? settings 
-        : { ...settings, emailProvider: { ...settings.smtp, provider: 'smtp', enabled: settings.smtp.enabled } };
       
       // Calculate summary
       const successful = test.results.filter(r => r.success).length;

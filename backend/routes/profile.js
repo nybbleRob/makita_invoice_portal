@@ -110,7 +110,8 @@ router.put('/password', auth, async (req, res) => {
       const Settings = require('../models/Settings');
       const settings = await Settings.getSettings();
       
-      if (settings.emailProvider?.enabled || settings.smtp?.enabled) {
+      const { isEmailEnabled } = require('../utils/emailService');
+      if (isEmailEnabled(settings)) {
         const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
         await sendTemplatedEmail(
           'password-changed',

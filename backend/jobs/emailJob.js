@@ -27,6 +27,7 @@ function extractResponseCode(message) {
 
 /**
  * Classify SMTP/network error for retry decisions
+ * Enhanced for multiple email provider support (SMTP, Resend, SendGrid, Mailtrap, Office365)
  * @param {Error} error - The error to classify
  * @returns {Object} { type: 'TEMPORARY'|'PERMANENT'|'RATE_LIMITED'|'UNKNOWN', code: string|number|null }
  */
@@ -36,8 +37,23 @@ function classifySmtpError(error) {
   const errorMessage = (error.message || '').toLowerCase();
   
   // Check for rate limiting patterns first (special handling)
-  if (/exceeded|rate.?limit|messages.per.*hour|too many/i.test(error.message)) {
-    return { type: 'RATE_LIMITED', code: responseCode || 450 };
+  // Covers: Mailtrap, SendGrid, Mailgun, generic SMTP, Resend
+  const rateLimitPatterns = [
+    /exceeded/i,
+    /rate.?limit/i,
+    /messages.per.*hour/i,
+    /too many/i,
+    /too many emails/i,
+    /quota exceeded/i,
+    /sending.?limit/i,
+    /throttl/i,
+    /429/,  // HTTP 429 Too Many Requests (API-based providers)
+    /daily.?limit/i
+  ];
+  for (const pattern of rateLimitPatterns) {
+    if (pattern.test(error.message)) {
+      return { type: 'RATE_LIMITED', code: responseCode || 429 };
+    }
   }
   
   // PERMANENT failures (5xx) - do not retry
@@ -51,24 +67,43 @@ function classifySmtpError(error) {
   }
   
   // Network/connection errors - retry
-  const transientCodes = ['ETIMEDOUT', 'ECONNRESET', 'EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED', 'ESOCKET'];
+  const transientCodes = [
+    'ETIMEDOUT', 'ECONNRESET', 'EAI_AGAIN', 'ENOTFOUND', 
+    'ECONNREFUSED', 'ESOCKET', 'EPIPE', 'EHOSTUNREACH',
+    'ENETUNREACH', 'EPROTO', 'ECONNABORTED'
+  ];
   if (transientCodes.includes(errorCode.toUpperCase())) {
     return { type: 'TEMPORARY', code: errorCode };
   }
   
-  // Check message for transient patterns
-  const transientPatterns = ['timeout', 'connection', 'network', 'temporarily', 'try again'];
+  // Check message for transient patterns (expanded for multiple providers)
+  const transientPatterns = [
+    'timeout', 'connection', 'network', 'temporarily', 'try again',
+    'service unavailable', 'busy', 'overload', 'please retry',
+    'server too busy', 'temporary failure', 'system not available',
+    'resources temporarily unavailable', 'connection refused'
+  ];
   for (const pattern of transientPatterns) {
     if (errorMessage.includes(pattern)) {
       return { type: 'TEMPORARY', code: errorCode || 'NETWORK' };
     }
   }
   
-  // Check message for permanent patterns
+  // Check message for permanent patterns (expanded for multiple providers)
   const permanentPatterns = [
+    // Standard SMTP permanent errors
     'user unknown', 'mailbox not found', 'does not exist',
     'invalid recipient', 'rejected', 'blocked', 'blacklisted',
-    'authentication failed', 'relay denied', 'not allowed'
+    'authentication failed', 'relay denied', 'not allowed',
+    // Resend/SendGrid/API errors
+    'invalid api key', 'unauthorized', 'forbidden',
+    'domain not verified', 'sender not verified', 'unsubscribed',
+    'invalid_email', 'email_invalid', 'bounced', 'complaint',
+    // Office 365 specific
+    'recipient rejected', 'mailbox unavailable', 'action not allowed',
+    // General permanent errors
+    'permanent', 'fatal', 'bad address', 'mailbox disabled',
+    'no such user', 'user disabled', 'account disabled'
   ];
   for (const pattern of permanentPatterns) {
     if (errorMessage.includes(pattern)) {

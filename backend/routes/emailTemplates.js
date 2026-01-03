@@ -147,7 +147,8 @@ router.post('/bulk-test', globalAdmin, async (req, res) => {
     }
     
     const settings = await Settings.getSettings();
-    if (!settings.emailProvider?.enabled && !settings.smtp?.enabled) {
+    const { isEmailEnabled } = require('../utils/emailService');
+    if (!isEmailEnabled(settings)) {
       return res.status(400).json({ message: 'Email provider is not configured or enabled' });
     }
     
@@ -231,16 +232,12 @@ router.post('/:name/test', globalAdmin, async (req, res) => {
 
     const { Settings } = require('../models');
     const settings = await Settings.getSettings();
+    const { isEmailEnabled } = require('../utils/emailService');
     
     // Check if email provider is enabled
-    if (!settings.emailProvider?.enabled && !settings.smtp?.enabled) {
+    if (!isEmailEnabled(settings)) {
       return res.status(400).json({ message: 'Email provider is not configured or enabled' });
     }
-
-    // Use new emailProvider if available, otherwise fall back to legacy smtp
-    const emailSettings = settings.emailProvider?.enabled 
-      ? settings 
-      : { ...settings, emailProvider: { ...settings.smtp, provider: 'smtp', enabled: settings.smtp.enabled } };
 
     // Special handling for document notification templates
     const documentNotificationTemplates = ['invoice-notification', 'invoice-summary', 'statement-notification', 'statement-summary'];
@@ -466,7 +463,7 @@ router.post('/:name/test', globalAdmin, async (req, res) => {
         subject: emailSubject,
         html: html,
         text: text
-      }, emailSettings);
+      }, settings);
       
       if (emailResult.success) {
         res.json({
@@ -612,7 +609,7 @@ This is an automated notification from ${settings.siteTitle || settings.companyN
         subject: subject,
         html: html,
         text: text
-      }, emailSettings);
+      }, settings);
       
       if (emailResult.success) {
         res.json({
@@ -644,7 +641,7 @@ This is an automated notification from ${settings.siteTitle || settings.companyN
         temporaryPassword: data.temporaryPassword || 'TempPass123!',
         ...data
       },
-      emailSettings
+      settings
     );
 
     res.json({

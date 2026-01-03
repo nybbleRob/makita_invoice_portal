@@ -276,6 +276,7 @@ router.post('/', canManageUsers, async (req, res) => {
       sendStatementEmail,
       sendStatementAttachment,
       sendEmailAsSummary,
+      sendImportSummaryReport,
       companyIds
     } = req.body;
     
@@ -315,7 +316,8 @@ router.post('/', canManageUsers, async (req, res) => {
       sendInvoiceAttachment: sendInvoiceAttachment || false,
       sendStatementEmail: sendStatementEmail || false,
       sendStatementAttachment: sendStatementAttachment || false,
-      sendEmailAsSummary: sendEmailAsSummary || false
+      sendEmailAsSummary: sendEmailAsSummary || false,
+      sendImportSummaryReport: sendImportSummaryReport || false
     });
     
     // Assign companies if provided (for ALL user roles) - already validated above
@@ -335,7 +337,8 @@ router.post('/', canManageUsers, async (req, res) => {
     
     // Send welcome email if email provider is configured
     const settings = await Settings.getSettings();
-    if (settings.emailProvider?.enabled || settings.smtp?.enabled) {
+    const { isEmailEnabled } = require('../utils/emailService');
+    if (isEmailEnabled(settings)) {
       try {
         const { sendEmail } = require('../utils/emailService');
         const { renderEmailTemplate } = require('../utils/emailTemplateRenderer');
@@ -359,35 +362,44 @@ router.post('/', canManageUsers, async (req, res) => {
           );
         } catch (templateError) {
           console.warn('Welcome email template not found, using default:', templateError.message);
-          // Fallback to simple welcome email
+          // Fallback to simple welcome email with branding
           const { sendEmail } = require('../utils/emailService');
+          const { wrapEmailContent } = require('../utils/emailTheme');
+          const primaryColor = settings.primaryColor || '#066fd1';
+          
+          const emailContent = `
+            <h2 style="color: ${primaryColor}; margin-bottom: 20px;">Welcome to ${companyName}!</h2>
+            <p>Hello ${user.name},</p>
+            <p>Your account has been created successfully. You can now access the ${companyName} portal.</p>
+            ${passwordWasGenerated ? `
+              <div style="background: #f8f9fa; border-radius: 6px; padding: 16px; margin: 16px 0;">
+                <p style="margin: 0 0 8px 0;"><strong>Your temporary password:</strong></p>
+                <code style="display: inline-block; padding: 8px 12px; background: #fff; border: 1px solid #e0e0e0; border-radius: 4px; font-family: monospace; font-size: 14px;">${tempPassword}</code>
+                <p style="margin: 12px 0 0 0; color: #d63939; font-size: 13px;">You will be required to change this password on your first login.</p>
+              </div>
+            ` : ''}
+            <p style="margin-top: 24px;">
+              <a href="${loginUrl}" style="display: inline-block; padding: 12px 24px; background-color: ${primaryColor}; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">Login to Portal</a>
+            </p>
+          `;
+          
           await sendEmail({
             to: user.email,
             subject: `Welcome to ${companyName}`,
-            html: `
-              <h2>Welcome to ${companyName}!</h2>
-              <p>Hello ${user.name},</p>
-              <p>Your account has been created successfully. You can now access the ${companyName} portal.</p>
-              ${passwordWasGenerated ? `
-                <p><strong>Your temporary password:</strong> ${tempPassword}</p>
-                <p>You will be required to change this password on your first login.</p>
-              ` : ''}
-              <p><a href="${loginUrl}" style="background-color: #066fd1; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">Login to Portal</a></p>
-              <p>Best regards,<br>${companyName} Team</p>
-            `,
+            html: wrapEmailContent(emailContent, settings),
             text: `
-              Welcome to ${companyName}!
-              
-              Hello ${user.name},
-              
-              Your account has been created successfully. You can now access the ${companyName} portal.
-              
-              ${passwordWasGenerated ? `Your temporary password: ${tempPassword}\nYou will be required to change this password on your first login.\n` : ''}
-              Login URL: ${loginUrl}
-              
-              Best regards,
-              ${companyName} Team
-            `
+Welcome to ${companyName}!
+
+Hello ${user.name},
+
+Your account has been created successfully. You can now access the ${companyName} portal.
+
+${passwordWasGenerated ? `Your temporary password: ${tempPassword}\nYou will be required to change this password on your first login.\n` : ''}
+Login URL: ${loginUrl}
+
+Best regards,
+${companyName} Team
+            `.trim()
           }, settings);
         }
       } catch (emailError) {
@@ -580,6 +592,7 @@ router.put('/:id', canManageUsers, async (req, res) => {
       sendStatementEmail,
       sendStatementAttachment,
       sendEmailAsSummary,
+      sendImportSummaryReport,
       companyIds
     } = req.body;
     
@@ -611,6 +624,7 @@ router.put('/:id', canManageUsers, async (req, res) => {
     if (sendStatementEmail !== undefined) user.sendStatementEmail = sendStatementEmail;
     if (sendStatementAttachment !== undefined) user.sendStatementAttachment = sendStatementAttachment;
     if (sendEmailAsSummary !== undefined) user.sendEmailAsSummary = sendEmailAsSummary;
+    if (sendImportSummaryReport !== undefined) user.sendImportSummaryReport = sendImportSummaryReport;
     
     await user.save();
     

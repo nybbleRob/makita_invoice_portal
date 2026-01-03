@@ -290,28 +290,22 @@ router.post('/forgot-password', async (req, res) => {
       const settings = await Settings.getSettings();
       
       // Send email if email provider is configured
-      if (settings.emailProvider?.enabled || settings.smtp?.enabled) {
+      const { isEmailEnabled, sendEmail } = require('../utils/emailService');
+      if (isEmailEnabled(settings)) {
         try {
-          const { sendEmail } = require('../utils/emailService');
-          
-          // Use new emailProvider if available, otherwise fall back to legacy smtp
-          const emailSettings = settings.emailProvider?.enabled 
-            ? settings 
-            : { ...settings, emailProvider: { ...settings.smtp, provider: 'smtp', enabled: settings.smtp.enabled } };
-          
           const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
           
           // Use systemEmail if set, otherwise use provider's fromEmail
           const fromEmail = settings.systemEmail || 
-            emailSettings.emailProvider?.smtp?.fromEmail || 
-            emailSettings.emailProvider?.office365?.fromEmail ||
-            emailSettings.emailProvider?.resend?.fromEmail ||
-            emailSettings.emailProvider?.smtp2go?.fromEmail;
+            settings.emailProvider?.smtp?.fromEmail || 
+            settings.emailProvider?.office365?.fromEmail ||
+            settings.emailProvider?.resend?.fromEmail ||
+            settings.emailProvider?.smtp2go?.fromEmail;
           
           const fromName = settings.companyName || 
-            emailSettings.emailProvider?.smtp?.fromName || 
-            emailSettings.emailProvider?.resend?.fromName ||
-            emailSettings.emailProvider?.smtp2go?.fromName ||
+            settings.emailProvider?.smtp?.fromName || 
+            settings.emailProvider?.resend?.fromName ||
+            settings.emailProvider?.smtp2go?.fromName ||
             'Makita Invoice Portal';
           
           // Try to use email template, fallback to hardcoded if template not found
@@ -325,42 +319,49 @@ router.post('/forgot-password', async (req, res) => {
                 userEmail: user.email,
                 resetUrl: resetUrl
               },
-              emailSettings
+              settings
             );
           } catch (templateError) {
             console.warn('Email template not found, using default:', templateError.message);
-            // Fallback to hardcoded template
+            // Fallback to hardcoded template with branding
+            const { wrapEmailContent } = require('../utils/emailTheme');
+            const primaryColor = settings.primaryColor || '#066fd1';
+            
+            const emailContent = `
+              <h2 style="color: ${primaryColor}; margin-bottom: 20px;">Password Reset Request</h2>
+              <p>Hello ${user.name},</p>
+              <p>You requested to reset your password. Click the button below to reset it:</p>
+              <p style="margin: 24px 0;">
+                <a href="${resetUrl}" style="display: inline-block; padding: 12px 24px; background-color: ${primaryColor}; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">Reset Password</a>
+              </p>
+              <p style="font-size: 13px; color: #667085;">Or copy and paste this URL into your browser:</p>
+              <p style="font-size: 13px; color: #667085; word-break: break-all;">${resetUrl}</p>
+              <div style="margin-top: 24px; padding: 12px 16px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; color: #856404; font-size: 13px;">
+                <strong>Note:</strong> This link will expire in 1 hour. If you didn't request this, please ignore this email.
+              </div>
+            `;
+            
             await sendEmail({
               to: user.email,
               subject: 'Password Reset Request',
-              html: `
-                <h2>Password Reset Request</h2>
-                <p>Hello ${user.name},</p>
-                <p>You requested to reset your password. Click the link below to reset it:</p>
-                <p><a href="${resetUrl}" style="background-color: #066fd1; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;">Reset Password</a></p>
-                <p>Or copy and paste this URL into your browser:</p>
-                <p>${resetUrl}</p>
-                <p>This link will expire in 1 hour.</p>
-                <p>If you didn't request this, please ignore this email.</p>
-                <p>Best regards,<br>${fromName}</p>
-              `,
+              html: wrapEmailContent(emailContent, settings),
               text: `
-                Password Reset Request
-                
-                Hello ${user.name},
-                
-                You requested to reset your password. Click the link below to reset it:
-                
-                ${resetUrl}
-                
-                This link will expire in 1 hour.
-                
-                If you didn't request this, please ignore this email.
-                
-                Best regards,
-                ${fromName}
-              `
-            }, emailSettings);
+Password Reset Request
+
+Hello ${user.name},
+
+You requested to reset your password. Click the link below to reset it:
+
+${resetUrl}
+
+This link will expire in 1 hour.
+
+If you didn't request this, please ignore this email.
+
+Best regards,
+${fromName}
+              `.trim()
+            }, settings);
           }
         } catch (emailError) {
           console.error('Error sending password reset email:', emailError);
@@ -540,7 +541,8 @@ router.post('/change-password', async (req, res) => {
       const Settings = require('../models/Settings');
       const settings = await Settings.getSettings();
       
-      if (settings.emailProvider?.enabled || settings.smtp?.enabled) {
+      const { isEmailEnabled } = require('../utils/emailService');
+      if (isEmailEnabled(settings)) {
         const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
         await sendTemplatedEmail(
           'password-changed',

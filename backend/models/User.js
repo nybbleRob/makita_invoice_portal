@@ -135,6 +135,11 @@ module.exports = (sequelize) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
       comment: 'Send one summary email per import instead of individual emails per document'
+    },
+    sendImportSummaryReport: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      comment: 'Receive import summary report emails (for Global Admins and Administrators only)'
     }
   }, {
     tableName: 'users',

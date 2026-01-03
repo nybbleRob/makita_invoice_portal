@@ -397,6 +397,9 @@ async function queueSummaryEmail(options) {
     `;
   }
   
+  // Get retention period for disclaimer
+  const retentionDays = settings?.documentRetentionPeriod || 30;
+  
   const subject = `${totalDocuments} New Document${totalDocuments > 1 ? 's' : ''} Available - ${companyName}`;
   const emailContent = `
     <h2 style="color: ${primaryColor}; margin-bottom: 20px;">New Documents Available</h2>
@@ -410,6 +413,10 @@ async function queueSummaryEmail(options) {
         View All Documents
       </a>
     </p>
+    
+    <div style="margin-top: 24px; padding: 12px 16px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; color: #856404; font-size: 13px;">
+      <strong>Important:</strong> Invoices and Credit Notes are only available for ${retentionDays} days from the upload date. Please download any documents you wish to keep for your records.
+    </div>
   `;
   
   // Wrap with email theme (applies header, footer, branding)
@@ -475,6 +482,9 @@ async function queueIndividualEmail(options) {
     ? new Date(document.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
     : null;
   
+  // Get retention period for disclaimer
+  const retentionDays = settings?.documentRetentionPeriod || 30;
+  
   const subject = `New ${documentTypeName} Available - ${companyName}`;
   const emailContent = `
     <h2 style="color: ${primaryColor}; margin-bottom: 20px;">New ${documentTypeName} Available</h2>
@@ -505,6 +515,10 @@ async function queueIndividualEmail(options) {
         View Document
       </a>
     </p>
+    
+    <div style="margin-top: 24px; padding: 12px 16px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; color: #856404; font-size: 13px;">
+      <strong>Important:</strong> Invoices and Credit Notes are only available for ${retentionDays} days from the upload date. Please download any documents you wish to keep for your records.
+    </div>
   `;
   
   // Wrap with email theme (applies header, footer, branding)

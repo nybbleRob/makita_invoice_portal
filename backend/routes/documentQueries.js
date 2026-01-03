@@ -2,7 +2,8 @@ const express = require('express');
 const { DocumentQuery, Invoice, CreditNote, Statement, Company, User, UserCompany, Settings, Sequelize } = require('../models');
 const { Op } = Sequelize;
 const auth = require('../middleware/auth');
-const { sendEmail } = require('../utils/emailService');
+const { sendEmail, isEmailEnabled } = require('../utils/emailService');
+const { wrapEmailContent } = require('../utils/emailTheme');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const { v4: uuidv4 } = require('uuid');
 const router = express.Router();
@@ -271,10 +272,14 @@ router.post('/:documentType/:documentId', async (req, res) => {
     
     const queryUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/${documentType}s/${documentId}/view`;
     
+    // Get settings for email branding
+    const settings = await Settings.getSettings();
+    const primaryColor = settings?.primaryColor || '#066fd1';
+    
     if (isCustomer) {
       // Check if company has EDI enabled - if so, skip email notifications
       if (company?.edi) {
-        console.log(`📧 [Query] Company ${company.name} has EDI enabled, skipping email notifications`);
+        console.log('[Query] Company has EDI enabled, skipping email notifications');
       } else {
         // Customer created query - notify all staff assigned to this company
         const staffUsers = await User.findAll({
@@ -292,17 +297,22 @@ router.post('/:documentType/:documentId', async (req, res) => {
         for (const staffUser of staffUsers) {
           if (staffUser.email) {
             try {
+              const emailContent = `
+                <h2 style="color: ${primaryColor}; margin-bottom: 20px;">New Document Query</h2>
+                <p><strong>${req.user.name || req.user.email}</strong> from <strong>${company?.name || 'Unknown Company'}</strong> has sent a query regarding ${documentTypeLabel} <strong>${documentNumber}</strong>.</p>
+                <div style="background: #f8f9fa; border-radius: 6px; padding: 16px; margin: 16px 0;">
+                  <p style="margin: 0 0 8px 0; font-weight: 600;">Message:</p>
+                  <p style="margin: 0;">${message.trim().replace(/\n/g, '<br>')}</p>
+                </div>
+                <p style="margin-top: 24px;">
+                  <a href="${queryUrl}" style="display: inline-block; padding: 12px 24px; background-color: ${primaryColor}; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">View and Reply</a>
+                </p>
+              `;
               await sendEmail({
                 to: staffUser.email,
                 subject: `Query regarding ${documentTypeLabel} ${documentNumber}`,
-                html: `
-                  <h2>New Document Query</h2>
-                  <p><strong>${req.user.name || req.user.email}</strong> from <strong>${company?.name || 'Unknown Company'}</strong> has sent a query regarding ${documentTypeLabel} <strong>${documentNumber}</strong>.</p>
-                  <p><strong>Message:</strong></p>
-                  <p>${message.trim().replace(/\n/g, '<br>')}</p>
-                  <p><a href="${queryUrl}" style="background-color: #066fd1; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block; margin-top: 10px;">View and Reply</a></p>
-                `
-              });
+                html: wrapEmailContent(emailContent, settings)
+              }, settings);
             } catch (emailError) {
               console.error(`Failed to send email to ${staffUser.email}:`, emailError);
             }
@@ -326,17 +336,22 @@ router.post('/:documentType/:documentId', async (req, res) => {
       for (const customerUser of customerUsers) {
         if (customerUser.email) {
           try {
+            const emailContent = `
+              <h2 style="color: ${primaryColor}; margin-bottom: 20px;">Query from Staff</h2>
+              <p><strong>${req.user.name || req.user.email}</strong> has sent a query regarding your ${documentTypeLabel} <strong>${documentNumber}</strong>.</p>
+              <div style="background: #f8f9fa; border-radius: 6px; padding: 16px; margin: 16px 0;">
+                <p style="margin: 0 0 8px 0; font-weight: 600;">Message:</p>
+                <p style="margin: 0;">${message.trim().replace(/\n/g, '<br>')}</p>
+              </div>
+              <p style="margin-top: 24px;">
+                <a href="${queryUrl}" style="display: inline-block; padding: 12px 24px; background-color: ${primaryColor}; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">View and Reply</a>
+              </p>
+            `;
             await sendEmail({
               to: customerUser.email,
               subject: `Query regarding ${documentTypeLabel} ${documentNumber}`,
-              html: `
-                <h2>Query from Staff</h2>
-                <p><strong>${req.user.name || req.user.email}</strong> has sent a query regarding your ${documentTypeLabel} <strong>${documentNumber}</strong>.</p>
-                <p><strong>Message:</strong></p>
-                <p>${message.trim().replace(/\n/g, '<br>')}</p>
-                <p><a href="${queryUrl}" style="background-color: #066fd1; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block; margin-top: 10px;">View and Reply</a></p>
-              `
-            });
+              html: wrapEmailContent(emailContent, settings)
+            }, settings);
           } catch (emailError) {
             console.error(`Failed to send email to ${customerUser.email}:`, emailError);
           }
@@ -456,7 +471,7 @@ router.post('/:documentType/:documentId/reply', async (req, res) => {
     if (firstMessage) {
       // Check if company has EDI enabled - if so, skip email notifications
       if (query.company?.edi) {
-        console.log(`📧 [Query Reply] Company ${query.company.name} has EDI enabled, skipping email notifications`);
+        console.log('[Query Reply] Company has EDI enabled, skipping email notifications');
       } else {
         const customer = await User.findByPk(firstMessage.userId);
         if (customer && customer.email) {
@@ -466,18 +481,27 @@ router.post('/:documentType/:documentId/reply', async (req, res) => {
           
           const queryUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/${documentType}s/${documentId}/view`;
           
+          // Get settings for email branding
+          const settings = await Settings.getSettings();
+          const primaryColor = settings?.primaryColor || '#066fd1';
+          
           try {
+            const emailContent = `
+              <h2 style="color: ${primaryColor}; margin-bottom: 20px;">Reply to Your Query</h2>
+              <p><strong>${req.user.name || req.user.email}</strong> has replied to your query regarding ${documentTypeLabel} <strong>${query.documentNumber}</strong>.</p>
+              <div style="background: #f8f9fa; border-radius: 6px; padding: 16px; margin: 16px 0;">
+                <p style="margin: 0 0 8px 0; font-weight: 600;">Reply:</p>
+                <p style="margin: 0;">${message.trim().replace(/\n/g, '<br>')}</p>
+              </div>
+              <p style="margin-top: 24px;">
+                <a href="${queryUrl}" style="display: inline-block; padding: 12px 24px; background-color: ${primaryColor}; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">View Document</a>
+              </p>
+            `;
             await sendEmail({
               to: customer.email,
               subject: `Reply to your query regarding ${documentTypeLabel} ${query.documentNumber}`,
-              html: `
-                <h2>Reply to Your Query</h2>
-                <p><strong>${req.user.name || req.user.email}</strong> has replied to your query regarding ${documentTypeLabel} <strong>${query.documentNumber}</strong>.</p>
-                <p><strong>Reply:</strong></p>
-                <p>${message.trim().replace(/\n/g, '<br>')}</p>
-                <p><a href="${queryUrl}" style="background-color: #066fd1; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block; margin-top: 10px;">View Document</a></p>
-              `
-            });
+              html: wrapEmailContent(emailContent, settings)
+            }, settings);
           } catch (emailError) {
             console.error(`Failed to send email to ${customer.email}:`, emailError);
           }
@@ -608,19 +632,28 @@ router.post('/:documentType/:documentId/resolve', async (req, res) => {
           
           const queryUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/${documentType}s/${documentId}/view`;
           
+          // Get settings for email branding
+          const settings = await Settings.getSettings();
+          const primaryColor = settings?.primaryColor || '#066fd1';
+          
           try {
+            const emailContent = `
+              <h2 style="color: ${primaryColor}; margin-bottom: 20px;">Query Resolved</h2>
+              <p>Your query regarding ${documentTypeLabel} <strong>${query.documentNumber}</strong> has been resolved.</p>
+              <div style="background: #d4edda; border: 1px solid #28a745; border-radius: 6px; padding: 16px; margin: 16px 0;">
+                <p style="margin: 0 0 8px 0; font-weight: 600; color: #155724;">Resolution:</p>
+                <p style="margin: 0; color: #155724;">${resolutionReason.trim().replace(/\n/g, '<br>')}</p>
+              </div>
+              <p style="font-size: 13px; color: #667085; font-style: italic;">This query is now closed. For any further questions, please contact support directly via email.</p>
+              <p style="margin-top: 24px;">
+                <a href="${queryUrl}" style="display: inline-block; padding: 12px 24px; background-color: ${primaryColor}; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">View Document</a>
+              </p>
+            `;
             await sendEmail({
               to: customer.email,
               subject: `Query resolved: ${documentTypeLabel} ${query.documentNumber}`,
-              html: `
-                <h2>Query Resolved</h2>
-                <p>Your query regarding ${documentTypeLabel} <strong>${query.documentNumber}</strong> has been resolved.</p>
-                <p><strong>Resolution Reason:</strong></p>
-                <p>${resolutionReason.trim().replace(/\n/g, '<br>')}</p>
-                <p><em>This query is now closed. For any further questions, please contact support directly via email.</em></p>
-                <p><a href="${queryUrl}" style="background-color: #066fd1; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block; margin-top: 10px;">View Document</a></p>
-              `
-            });
+              html: wrapEmailContent(emailContent, settings)
+            }, settings);
           } catch (emailError) {
             console.error(`Failed to send email to ${customer.email}:`, emailError);
           }

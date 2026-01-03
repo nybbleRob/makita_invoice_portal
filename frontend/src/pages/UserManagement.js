@@ -57,6 +57,7 @@ const UserManagement = () => {
     sendStatementEmail: false,
     sendStatementAttachment: false,
     sendEmailAsSummary: false,
+    sendImportSummaryReport: false,
     companyIds: []
   });
   
@@ -381,7 +382,8 @@ const UserManagement = () => {
         sendInvoiceAttachment: selectedUser.sendInvoiceAttachment || false,
         sendStatementEmail: selectedUser.sendStatementEmail || false,
         sendStatementAttachment: selectedUser.sendStatementAttachment || false,
-        sendEmailAsSummary: selectedUser.sendEmailAsSummary || false
+        sendEmailAsSummary: selectedUser.sendEmailAsSummary || false,
+        sendImportSummaryReport: selectedUser.sendImportSummaryReport || false
       }));
     }
   }, [selectedUser]);
@@ -425,6 +427,7 @@ const UserManagement = () => {
       sendStatementEmail: false,
       sendStatementAttachment: false,
       sendEmailAsSummary: false,
+      sendImportSummaryReport: false,
       companyIds: []
     });
     setUserAssignedCompanyObjects([]);
@@ -590,6 +593,7 @@ const UserManagement = () => {
       sendStatementEmail: user.sendStatementEmail || false,
       sendStatementAttachment: user.sendStatementAttachment || false,
       sendEmailAsSummary: user.sendEmailAsSummary || false,
+      sendImportSummaryReport: user.sendImportSummaryReport || false,
       companyIds: []
     });
     
@@ -1441,6 +1445,29 @@ const UserManagement = () => {
                           </div>
                           <small className="form-hint mt-1">Receive one summary email per import instead of individual emails</small>
                         </div>
+                        
+                        {/* Import Summary Report - Only for Global Admins and Administrators */}
+                        {(formData.role === 'global_admin' || formData.role === 'administrator') && (
+                          <div className="mb-3">
+                            <div className="form-selectgroup-item">
+                              <label className="row">
+                                <span className="col small">Receive Import Summary Reports</span>
+                                <span className="col-auto">
+                                  <label className="form-check form-check-single form-switch mb-0">
+                                    <input
+                                      type="checkbox"
+                                      className="form-check-input"
+                                      name="sendImportSummaryReport"
+                                      checked={formData.sendImportSummaryReport || false}
+                                      onChange={handleInputChange}
+                                    />
+                                  </label>
+                                </span>
+                              </label>
+                            </div>
+                            <small className="form-hint mt-1">Receive an email summary after each import batch completes (includes: start/finish time, files processed, success/failure counts, unallocated documents)</small>
+                          </div>
+                        )}
                         
                         {/* Company Assignment */}
                         <h4 className="mb-3">Company Assignment</h4>
