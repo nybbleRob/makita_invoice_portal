@@ -497,7 +497,7 @@ async function sendViaSMTP2Go(options, config) {
 
         return {
           filename: att.filename || path.basename(att.path || 'attachment'),
-          filecontent: base64Content,
+          fileblob: base64Content,
           mimetype: att.contentType || 'application/octet-stream'
         };
       })
