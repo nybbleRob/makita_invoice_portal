@@ -1961,7 +1961,8 @@ const Settings = () => {
                                 <li>Emails queued: {stressTestResult.emailCount}</li>
                                 <li>Recipient: {stressTestResult.recipientEmail}</li>
                                 <li>Document type: {stressTestResult.documentType}</li>
-                                <li>Attachments: {stressTestResult.hasAttachments ? `Yes (${stressTestResult.samplePdfUsed})` : 'No'}</li>
+                                <li>With attachments: {stressTestResult.emailsWithAttachment || 0} ({stressTestResult.attachmentSource || 'N/A'})</li>
+                                <li>Without attachments: {stressTestResult.emailsWithoutAttachment || stressTestResult.emailCount}</li>
                                 <li>Estimated delivery: ~{stressTestResult.estimatedDeliverySeconds || stressTestResult.emailCount} seconds</li>
                               </ul>
                             </div>

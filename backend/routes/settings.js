@@ -1351,12 +1351,46 @@ router.post('/email-stress-test', auth, async (req, res) => {
     const recipientEmail = currentUser.email;
     const recipientName = currentUser.name || currentUser.email;
     
-    // Find a sample PDF for attachments if requested
+    // Create a dummy PDF for attachment testing
+    // This is a minimal valid PDF that renders a simple test page
+    const createDummyPdf = (invoiceNumber) => {
+      const content = `%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj
+4 0 obj << /Length 150 >> stream
+BT
+/F1 24 Tf
+100 700 Td
+(TEST INVOICE) Tj
+/F1 14 Tf
+0 -40 Td
+(Invoice: ${invoiceNumber}) Tj
+0 -25 Td
+(This is a test PDF for email stress testing.) Tj
+ET
+endstream endobj
+5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000266 00000 n 
+0000000468 00000 n 
+trailer << /Size 6 /Root 1 0 R >>
+startxref
+547
+%%EOF`;
+      return Buffer.from(content, 'utf-8');
+    };
+    
+    // Also try to find a real sample PDF for variety
     let samplePdfPath = null;
     let samplePdfName = null;
     
     if (includeAttachment) {
-      // Look for any PDF in processed invoices folder
       const invoicesDir = path.join(PROCESSED_BASE, 'invoices');
       
       const findPdf = (dir, depth = 0) => {
@@ -1382,7 +1416,7 @@ router.post('/email-stress-test', auth, async (req, res) => {
         samplePdfName = path.basename(samplePdfPath);
         console.log(`[StressTest] Found sample PDF: ${samplePdfName}`);
       } else {
-        console.log('[StressTest] No sample PDF found, emails will be sent without attachments');
+        console.log('[StressTest] No sample PDF found, will use generated dummy PDFs');
       }
     }
     
@@ -1435,13 +1469,26 @@ router.post('/email-stress-test', auth, async (req, res) => {
       const html = wrapEmailContent(emailContent, settings);
       
       // Build attachments array
+      // Send half with attachments, half without (alternating)
       const attachments = [];
-      if (samplePdfPath && fs.existsSync(samplePdfPath)) {
-        attachments.push({
-          filename: `${testInvoiceNumber}.pdf`,
-          path: samplePdfPath,
-          contentType: 'application/pdf'
-        });
+      const shouldAttach = includeAttachment && (i % 2 === 1); // Odd numbered emails get attachments
+      
+      if (shouldAttach) {
+        if (samplePdfPath && fs.existsSync(samplePdfPath)) {
+          // Use real sample PDF
+          attachments.push({
+            filename: `${testInvoiceNumber}.pdf`,
+            path: samplePdfPath,
+            contentType: 'application/pdf'
+          });
+        } else {
+          // Use generated dummy PDF
+          attachments.push({
+            filename: `${testInvoiceNumber}.pdf`,
+            content: createDummyPdf(testInvoiceNumber),
+            contentType: 'application/pdf'
+          });
+        }
       }
       
       // Queue the email
@@ -1478,9 +1525,12 @@ router.post('/email-stress-test', auth, async (req, res) => {
     // Calculate estimated delivery time based on Mailtrap rate limiting (10 emails per 10 seconds = 60/min)
     const rateLimitPerMinute = 60; // Mailtrap allows 10 per 10 seconds
     const estimatedSeconds = Math.ceil(emailCount / (rateLimitPerMinute / 60));
+    const emailsWithAttachment = includeAttachment ? Math.floor(emailCount / 2) : 0;
+    const emailsWithoutAttachment = emailCount - emailsWithAttachment;
     
     console.log(`[StressTest] Queued ${emailCount} test emails to ${recipientEmail}`);
-    console.log(`[StressTest] Attachments: ${includeAttachment ? (samplePdfPath ? 'Yes' : 'No sample PDF found') : 'Disabled'}`);
+    console.log(`[StressTest] With attachments: ${emailsWithAttachment}, Without: ${emailsWithoutAttachment}`);
+    console.log(`[StressTest] Attachment source: ${samplePdfPath ? 'Real PDF' : 'Generated dummy PDF'}`);
     console.log(`[StressTest] Estimated delivery time: ~${estimatedSeconds} second(s)`);
     
     res.json({
@@ -1489,8 +1539,10 @@ router.post('/email-stress-test', auth, async (req, res) => {
       emailCount,
       recipientEmail,
       documentType,
-      hasAttachments: includeAttachment && !!samplePdfPath,
-      samplePdfUsed: samplePdfName,
+      attachmentsEnabled: includeAttachment,
+      emailsWithAttachment,
+      emailsWithoutAttachment,
+      attachmentSource: includeAttachment ? (samplePdfPath ? `Real PDF (${samplePdfName})` : 'Generated dummy PDF') : 'N/A',
       estimatedDeliverySeconds: estimatedSeconds,
       rateLimitInfo: '10 emails per 10 seconds (Mailtrap limit)',
       maxEmailsPerTest: 100,
