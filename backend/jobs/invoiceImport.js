@@ -1201,6 +1201,7 @@ async function processInvoiceImport(job) {
             taxAmount: taxAmount,
             status: creditNoteStatus,
             documentStatus: documentStatus,
+            fileUrl: actualFilePath, // Use actual path after status folder move
             retentionStartDate: creditNoteRetentionDates.retentionStartDate,
             retentionExpiryDate: creditNoteRetentionDates.retentionExpiryDate,
             metadata: {
