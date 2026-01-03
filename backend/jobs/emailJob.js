@@ -146,10 +146,21 @@ async function processEmailJob(job) {
   }
   
   try {
-    // Get settings if not provided
-    let emailSettings = settings;
-    if (!emailSettings) {
-      emailSettings = await Settings.getSettings();
+    // ALWAYS fetch fresh settings to respect test mode changes
+    // Test mode redirect needs to apply even to already-queued emails
+    let emailSettings = await Settings.getSettings();
+    
+    // Merge any job-specific settings (like provider credentials from env vars)
+    // but prioritize fresh settings for testMode
+    if (settings?.emailProvider) {
+      emailSettings = {
+        ...emailSettings,
+        emailProvider: {
+          ...settings.emailProvider,
+          // Always use fresh testMode from database
+          testMode: emailSettings?.emailProvider?.testMode
+        }
+      };
     }
     
     // Send email
