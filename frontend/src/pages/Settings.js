@@ -1894,11 +1894,11 @@ const Settings = () => {
                                 type="number"
                                 className="form-control"
                                 min="1"
-                                max="500"
+                                max="100"
                                 value={stressTestCount}
-                                onChange={(e) => setStressTestCount(Math.min(500, Math.max(1, parseInt(e.target.value) || 1)))}
+                                onChange={(e) => setStressTestCount(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
                               />
-                              <small className="form-hint">1-500 emails</small>
+                              <small className="form-hint">1-100 emails (conserves Mailtrap credits)</small>
                             </div>
                             
                             <div className="col-md-4">
@@ -1930,9 +1930,9 @@ const Settings = () => {
                           </div>
                           
                           <div className="alert alert-info mb-3">
-                            <strong>Rate Limiting:</strong> Emails are sent at 4 per minute.
+                            <strong>Mailtrap Limits:</strong> 10 emails per 10 seconds, 500/month on free tier.
                             {stressTestCount > 1 && (
-                              <span> Estimated delivery time: ~{Math.ceil(stressTestCount / 4)} minute(s)</span>
+                              <span> Estimated delivery: ~{Math.ceil(stressTestCount)} seconds</span>
                             )}
                           </div>
                           
@@ -1962,7 +1962,7 @@ const Settings = () => {
                                 <li>Recipient: {stressTestResult.recipientEmail}</li>
                                 <li>Document type: {stressTestResult.documentType}</li>
                                 <li>Attachments: {stressTestResult.hasAttachments ? `Yes (${stressTestResult.samplePdfUsed})` : 'No'}</li>
-                                <li>Estimated delivery: ~{stressTestResult.estimatedDeliveryMinutes} minute(s)</li>
+                                <li>Estimated delivery: ~{stressTestResult.estimatedDeliverySeconds || stressTestResult.emailCount} seconds</li>
                               </ul>
                             </div>
                           )}

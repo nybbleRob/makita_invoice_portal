@@ -1321,8 +1321,8 @@ router.post('/email-stress-test', auth, async (req, res) => {
     
     const { count = 10, includeAttachment = false, documentType = 'invoice' } = req.body;
     
-    // Validate count
-    const emailCount = Math.min(Math.max(parseInt(count) || 10, 1), 500);
+    // Validate count - limit to 100 to conserve Mailtrap credits (500/month limit)
+    const emailCount = Math.min(Math.max(parseInt(count) || 10, 1), 100);
     
     const settings = await Settings.getSettings();
     const { wrapEmailContent } = require('../utils/emailTheme');
@@ -1466,13 +1466,13 @@ router.post('/email-stress-test', auth, async (req, res) => {
       });
     }
     
-    // Calculate estimated delivery time based on rate limiting (4 emails per 60 seconds)
-    const rateLimitPerMinute = 4;
-    const estimatedMinutes = Math.ceil(emailCount / rateLimitPerMinute);
+    // Calculate estimated delivery time based on Mailtrap rate limiting (10 emails per 10 seconds = 60/min)
+    const rateLimitPerMinute = 60; // Mailtrap allows 10 per 10 seconds
+    const estimatedSeconds = Math.ceil(emailCount / (rateLimitPerMinute / 60));
     
     console.log(`[StressTest] Queued ${emailCount} test emails to ${recipientEmail}`);
     console.log(`[StressTest] Attachments: ${includeAttachment ? (samplePdfPath ? 'Yes' : 'No sample PDF found') : 'Disabled'}`);
-    console.log(`[StressTest] Estimated delivery time: ~${estimatedMinutes} minute(s)`);
+    console.log(`[StressTest] Estimated delivery time: ~${estimatedSeconds} second(s)`);
     
     res.json({
       success: true,
@@ -1482,8 +1482,10 @@ router.post('/email-stress-test', auth, async (req, res) => {
       documentType,
       hasAttachments: includeAttachment && !!samplePdfPath,
       samplePdfUsed: samplePdfName,
-      estimatedDeliveryMinutes: estimatedMinutes,
-      rateLimitInfo: `${rateLimitPerMinute} emails per minute`
+      estimatedDeliverySeconds: estimatedSeconds,
+      rateLimitInfo: '10 emails per 10 seconds (Mailtrap limit)',
+      maxEmailsPerTest: 100,
+      monthlyLimit: '500 emails/month on Mailtrap free tier'
     });
     
   } catch (error) {
