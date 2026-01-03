@@ -504,12 +504,24 @@ async function sendViaSMTP2Go(options, config) {
     );
   }
 
-  const response = await axios.post('https://api.smtp2go.com/v3/email/send', payload, {
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Smtp2go-Api-Key': config.apiKey
+  let response;
+  try {
+    response = await axios.post('https://api.smtp2go.com/v3/email/send', payload, {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Smtp2go-Api-Key': config.apiKey
+      }
+    });
+  } catch (axiosError) {
+    // Log the full error response from SMTP2Go
+    if (axiosError.response) {
+      console.error('[SMTP2Go] API Error Response:', JSON.stringify(axiosError.response.data, null, 2));
+      console.error('[SMTP2Go] Status:', axiosError.response.status);
+      const errorMsg = axiosError.response.data?.data?.error || axiosError.response.data?.message || axiosError.message;
+      throw new Error(`SMTP2Go API error (${axiosError.response.status}): ${errorMsg}`);
     }
-  });
+    throw axiosError;
+  }
 
   if (response.data.data && response.data.data.error_code) {
     throw new Error(`SMTP2Go error: ${response.data.data.error}`);
