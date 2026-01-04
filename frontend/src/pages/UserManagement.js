@@ -722,25 +722,23 @@ const UserManagement = () => {
 
   if (loading) {
     return (
-      <div>
-        <div className="page-header d-print-none">
-          <div className="container-fluid">
-            <div className="row g-2 align-items-center">
-              <div className="col">
-                <h2 className="page-title">User Management</h2>
-                <div className="text-muted mt-1">Manage users and their permissions</div>
+      <div className="page-body">
+        <div className="container-xl">
+          <div className="card">
+            <div className="card-header">
+              <div className="row w-100 g-3">
+                <div className="col-lg-3 col-md-4 col-12">
+                  <h3 className="card-title mb-0">Users</h3>
+                  <p className="text-secondary m-0">Manage users and their permissions</p>
+                </div>
+                <div className="col-lg-9 col-md-8 col-12">
+                  <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
+                    <span className="placeholder btn disabled" style={{ width: '100px' }}></span>
+                    <span className="placeholder btn disabled" style={{ width: '80px' }}></span>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-        <div className="page-body">
-          <div className="container-fluid">
-            <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">
-                  <span className="placeholder col-2"></span>
-                </h3>
-              </div>
               <div className="table-responsive placeholder-glow">
                 <table className="table table-vcenter card-table">
                   <thead>
@@ -793,54 +791,21 @@ const UserManagement = () => {
             </div>
           </div>
         </div>
-      </div>
     );
   }
 
   return (
-    <div>
-      <div className="page-header d-print-none">
-        <div className="container-fluid">
-          <div className="row g-2 align-items-center">
-            <div className="col">
-              <h2 className="page-title">User Management</h2>
-              <div className="text-muted mt-1">Manage users and their permissions</div>
-            </div>
-            <div className="col-auto ms-auto d-flex gap-2">
-              {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && (
-                <button
-                  className="btn btn-outline-primary"
-                  onClick={() => navigate('/users/pending-accounts')}
-                >
-                  Pending Accounts
-                </button>
-              )}
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  setSelectedUser(null);
-                  setFormData({ name: '', email: '', password: '', role: 'external_user' });
-                  setShowModal(true);
-                }}
-              >
-                Add User
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="page-body">
-        <div className="container-xl">
-          <div className="card">
-            <div className="card-header">
-              <div className="row w-full">
-                <div className="col">
-                  <h3 className="card-title mb-0">Users</h3>
-                  <p className="text-secondary m-0">Manage users and their permissions</p>
-                </div>
-                <div className="col-md-auto col-sm-12">
-                  <div className="ms-auto d-flex flex-wrap btn-list gap-2">
+    <div className="page-body">
+      <div className="container-xl">
+        <div className="card">
+          <div className="card-header">
+            <div className="row w-100 g-3">
+              <div className="col-lg-3 col-md-4 col-12">
+                <h3 className="card-title mb-0">Users</h3>
+                <p className="text-secondary m-0">Manage users and their permissions</p>
+              </div>
+              <div className="col-lg-9 col-md-8 col-12">
+                <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
                     {/* Search */}
                     <div className="input-group input-group-flat w-auto">
                       <span className="input-group-text">
@@ -944,6 +909,26 @@ const UserManagement = () => {
                         </ul>
                       </div>
                     )}
+                    {/* Pending Accounts button */}
+                    {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && (
+                      <button
+                        className="btn btn-outline-primary"
+                        onClick={() => navigate('/users/pending-accounts')}
+                      >
+                        Pending Accounts
+                      </button>
+                    )}
+                    {/* Add User button */}
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setSelectedUser(null);
+                        setFormData({ name: '', email: '', password: '', role: 'external_user' });
+                        setShowModal(true);
+                      }}
+                    >
+                      Add User
+                    </button>
                   </div>
                 </div>
               </div>

@@ -378,31 +378,29 @@ const ActivityLogs = () => {
   
   if (!user || !['global_admin', 'administrator'].includes(user.role)) {
     return (
-      <div className="page-header d-print-none">
+      <div className="page-body">
         <div className="container-fluid">
-          <div className="row g-2 align-items-center">
-            <div className="col">
-              <div className="page-pretitle">Access Denied</div>
-              <h2 className="page-title">Activity Logs</h2>
-            </div>
-          </div>
-        </div>
-        <div className="page-body">
-          <div className="container-fluid">
-            <div className="card">
-              <div className="card-body">
-                <div className="empty">
-                  <div className="empty-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                      <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
-                      <path d="M12 8v4" />
-                      <path d="M12 16h.01" />
-                    </svg>
-                  </div>
-                  <p className="empty-title">Access Denied</p>
-                  <p className="empty-text">Only Global Administrators and Administrators can view activity logs.</p>
+          <div className="card">
+            <div className="card-header">
+              <div className="row w-100 g-3">
+                <div className="col-lg-3 col-md-4 col-12">
+                  <h3 className="card-title mb-0">Activity Logs</h3>
+                  <p className="text-secondary m-0">System activity and audit trail</p>
                 </div>
+              </div>
+            </div>
+            <div className="card-body">
+              <div className="empty">
+                <div className="empty-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                    <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
+                    <path d="M12 8v4" />
+                    <path d="M12 16h.01" />
+                  </svg>
+                </div>
+                <p className="empty-title">Access Denied</p>
+                <p className="empty-text">Only Global Administrators and Administrators can view activity logs.</p>
               </div>
             </div>
           </div>
@@ -412,46 +410,8 @@ const ActivityLogs = () => {
   }
   
   return (
-    <div className="page-header d-print-none">
+    <div className="page-body">
       <div className="container-fluid">
-        <div className="row g-2 align-items-center">
-          <div className="col">
-            <div className="page-pretitle">System</div>
-            <h2 className="page-title">Activity Logs</h2>
-          </div>
-          <div className="col-auto ms-auto d-print-none">
-            <div className="btn-list">
-              <button
-                className="btn btn-outline-danger"
-                onClick={() => setShowClearModal(true)}
-                disabled={pagination.total === 0}
-              >
-                Clear Logs
-              </button>
-              {user?.role === 'global_admin' && (
-                <button
-                  className="btn btn-danger"
-                  onClick={() => setShowPurgeModal(true)}
-                  disabled={pagination.total === 0}
-                  title="Permanently delete ALL logs including protected entries"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-trash-x me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                    <path d="M4 7h16" />
-                    <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" />
-                    <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
-                    <path d="M10 12l4 4m0 -4l-4 4" />
-                  </svg>
-                  Purge ALL Logs
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <div className="page-body">
-        <div className="container-fluid">
           {/* Filters Toolbar */}
           <div className="card mb-3">
             <div className="card-body">
@@ -584,12 +544,45 @@ const ActivityLogs = () => {
           {/* Logs Table */}
           <div className="card">
             <div className="card-header">
-              <h3 className="card-title">
-                Activity Logs
-                {pagination.total > 0 && (
-                  <span className="badge bg-primary-lt ms-2">{pagination.total}</span>
-                )}
-              </h3>
+              <div className="row w-100 g-3">
+                <div className="col-lg-3 col-md-4 col-12">
+                  <h3 className="card-title mb-0">
+                    Activity Logs
+                    {pagination.total > 0 && (
+                      <span className="badge bg-primary-lt ms-2">{pagination.total}</span>
+                    )}
+                  </h3>
+                  <p className="text-secondary m-0">System activity and audit trail</p>
+                </div>
+                <div className="col-lg-9 col-md-8 col-12">
+                  <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
+                    <button
+                      className="btn btn-outline-danger"
+                      onClick={() => setShowClearModal(true)}
+                      disabled={pagination.total === 0}
+                    >
+                      Clear Logs
+                    </button>
+                    {user?.role === 'global_admin' && (
+                      <button
+                        className="btn btn-danger"
+                        onClick={() => setShowPurgeModal(true)}
+                        disabled={pagination.total === 0}
+                        title="Permanently delete ALL logs including protected entries"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-trash-x me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                          <path d="M4 7h16" />
+                          <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" />
+                          <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
+                          <path d="M10 12l4 4m0 -4l-4 4" />
+                        </svg>
+                        Purge ALL Logs
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="table-responsive">
               {loading ? (
