@@ -21,6 +21,10 @@ function calculateRetentionExpiryDate(retentionPeriod, startDate) {
   const expiryDate = new Date(startDate);
   expiryDate.setDate(expiryDate.getDate() + retentionPeriod);
   
+  // Normalize to midnight (00:00:00) of the expiry day
+  // This ensures the daily midnight cleanup job catches all documents expiring that day
+  expiryDate.setHours(0, 0, 0, 0);
+  
   return expiryDate;
 }
 

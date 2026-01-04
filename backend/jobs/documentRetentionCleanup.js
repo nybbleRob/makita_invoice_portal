@@ -2,7 +2,7 @@
  * Document Retention Cleanup Job
  * HARD DELETES documents (Invoices, Credit Notes, Statements) that have passed their retention expiry date
  * Also deletes associated File records to prevent orphaned references
- * Should be run hourly via cron or scheduler for accurate < 1 hour deletion
+ * Runs daily at midnight (00:00) - documents expire at 00:00 of their expiry date
  */
 
 const { Invoice, CreditNote, Statement, Company, User, File, Settings } = require('../models');
@@ -135,14 +135,15 @@ async function cleanupExpiredDocuments() {
       await logActivity({
         type: ActivityType.DOCUMENT_DELETED,
         userId: null,
-        userEmail: 'system',
+        userEmail: 'System',
         userRole: 'system',
-        action: `Retention cleanup completed: ${deletedCount} documents hard deleted`,
+        action: `File Retention Period Expired - ${deletedCount} document(s) permanently deleted`,
         details: {
+          reason: 'File Retention Period Expired',
           deletedCount,
           errorCount,
           orphanedFilesDeleted: orphanedFilesResult.deleted,
-          retentionPeriod,
+          retentionPeriodDays: retentionPeriod,
           deletionLog: deletionLog.slice(0, 50) // Limit log size
         },
         ipAddress: 'system',
