@@ -24,8 +24,6 @@ const NEW_ROLES = ['credit_senior', 'credit_controller'];
 async function addNewRolesToEnum() {
   console.log('🔄 Starting role ENUM migration...\n');
   
-  const transaction = await sequelize.transaction();
-  
   try {
     // First, let's check what ENUM values currently exist
     const [enumValues] = await sequelize.query(`
@@ -35,31 +33,32 @@ async function addNewRolesToEnum() {
         SELECT oid FROM pg_type WHERE typname = 'enum_users_role'
       )
       ORDER BY enumsortorder;
-    `, { transaction });
+    `);
     
     const existingRoles = enumValues.map(row => row.enumlabel);
     console.log('📋 Current ENUM values:', existingRoles.join(', '));
     
     // Add each new role if it doesn't exist
+    // IMPORTANT: ALTER TYPE ADD VALUE cannot run inside a transaction!
     for (const role of NEW_ROLES) {
       if (existingRoles.includes(role)) {
         console.log(`✓ Role '${role}' already exists in ENUM`);
       } else {
-        // Add the new value to the ENUM
-        // Position it after 'manager' but before 'external_user'
+        // Add the new value to the ENUM - MUST be outside transaction
         try {
-          // First try adding with specific position
           await sequelize.query(`
-            ALTER TYPE "enum_users_role" ADD VALUE IF NOT EXISTS '${role}';
-          `, { transaction });
+            ALTER TYPE "enum_users_role" ADD VALUE '${role}';
+          `);
           console.log(`✅ Added role '${role}' to ENUM`);
-        } catch (posError) {
-          console.log(`ℹ️  Note: Role '${role}' was added (may already exist)`);
+        } catch (addError) {
+          if (addError.message.includes('already exists')) {
+            console.log(`✓ Role '${role}' already exists in ENUM`);
+          } else {
+            throw addError;
+          }
         }
       }
     }
-    
-    await transaction.commit();
     
     // Verify the changes
     const [updatedEnumValues] = await sequelize.query(`
@@ -90,7 +89,6 @@ async function addNewRolesToEnum() {
     console.log('\n✅ Role ENUM migration completed successfully!');
     
   } catch (error) {
-    await transaction.rollback();
     console.error('\n❌ Migration failed:', error.message);
     throw error;
   } finally {
