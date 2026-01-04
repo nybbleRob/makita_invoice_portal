@@ -1109,7 +1109,6 @@ const ActivityLogs = () => {
           onApply={() => setShowCompanyFilterModal(false)}
         />
       )}
-      </div>
     </div>
   );
 };
