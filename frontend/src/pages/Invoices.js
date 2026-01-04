@@ -4,6 +4,7 @@ import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
+import { usePermissions } from '../context/PermissionContext';
 import { useDebounce } from '../hooks/useDebounce';
 import DocumentRetentionTimer from '../components/DocumentRetentionTimer';
 import HierarchicalCompanyFilter from '../components/HierarchicalCompanyFilter';
@@ -12,6 +13,7 @@ const Invoices = () => {
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const { settings } = useSettings();
+  const { hasPermission } = usePermissions();
   const queriesEnabled = settings?.queriesEnabled !== false; // Default to true if not set
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -993,10 +995,7 @@ const Invoices = () => {
                               >
                                 View
                               </button>
-                              {(currentUser?.role === 'global_admin' || 
-                                currentUser?.role === 'administrator' || 
-                                currentUser?.role === 'manager' || 
-                                currentUser?.role === 'staff') && (
+                              {hasPermission('INVOICES_EDIT') && (
                                 <button 
                                   className="btn btn-sm btn-info" 
                                   title="Edit"
@@ -1005,15 +1004,16 @@ const Invoices = () => {
                                   Edit
                                 </button>
                               )}
-                              <button 
-                                className="btn btn-sm btn-success"
-                                onClick={() => handleDownloadInvoice(invoice.id)}
-                                title="Download"
-                              >
-                                Download
-                              </button>
-                              {(currentUser?.role === 'global_admin' || 
-                                currentUser?.role === 'administrator') && (
+                              {hasPermission('INVOICES_DOWNLOAD') && (
+                                <button 
+                                  className="btn btn-sm btn-success"
+                                  onClick={() => handleDownloadInvoice(invoice.id)}
+                                  title="Download"
+                                >
+                                  Download
+                                </button>
+                              )}
+                              {hasPermission('INVOICES_DELETE') && (
                                 <button 
                                   className="btn btn-sm btn-danger" 
                                   title="Delete"

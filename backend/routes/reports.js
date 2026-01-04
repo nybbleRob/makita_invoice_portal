@@ -2,10 +2,15 @@ const express = require('express');
 const { Report, Sequelize } = require('../models');
 const { Op } = Sequelize;
 const auth = require('../middleware/auth');
+const { requirePermission } = require('../middleware/permissions');
 const router = express.Router();
 
+// All routes require GA only
+router.use(auth);
+router.use(requirePermission('REPORTS_VIEW'));
+
 // Get all reports
-router.get('/', auth, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { User } = require('../models');
     const reports = await Report.findAll({
@@ -23,7 +28,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Get single report
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const { User } = require('../models');
     const report = await Report.findByPk(req.params.id, {
@@ -45,7 +50,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // Create report
-router.post('/', auth, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const report = await Report.create({
       ...req.body,
@@ -58,7 +63,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // Update report
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const report = await Report.findByPk(req.params.id);
     
@@ -79,7 +84,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // Delete report
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const report = await Report.findByPk(req.params.id);
     

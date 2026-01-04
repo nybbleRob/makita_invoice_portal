@@ -7,6 +7,7 @@ const { Op } = Sequelize;
 const auth = require('../middleware/auth');
 const globalAdmin = require('../middleware/globalAdmin');
 const { checkDocumentAccess, buildCompanyFilter } = require('../middleware/documentAccess');
+const { requirePermission, requireManager, requireStaff } = require('../middleware/permissions');
 const { updateNestedSetIndexes, queueNestedSetUpdate } = require('../utils/nestedSet');
 const { redis } = require('../config/redis');
 const { logActivity, ActivityType } = require('../services/activityLogger');
@@ -886,8 +887,8 @@ router.delete('/purge-all', auth, globalAdmin, async (req, res) => {
   }
 });
 
-// Delete company
-router.delete('/:id', auth, async (req, res) => {
+// Delete company - GA + Admin + Manager only
+router.delete('/:id', requirePermission('COMPANIES_DELETE'), async (req, res) => {
   try {
     const company = await Company.findByPk(req.params.id);
     

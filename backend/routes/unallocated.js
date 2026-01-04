@@ -3,6 +3,7 @@ const { File, Company, User, Invoice, CreditNote, sequelize } = require('../mode
 const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
 const globalAdmin = require('../middleware/globalAdmin');
+const { requirePermission, requireManager } = require('../middleware/permissions');
 const { fileImportQueue } = require('../config/queue');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const fs = require('fs');
@@ -16,8 +17,9 @@ const {
 } = require('../config/storage');
 const router = express.Router();
 
-// Only staff, managers, admins can access
+// Only GA, Admin, Manager can view unallocated (Credit Senior can also reallocate)
 router.use(auth);
+router.use(requirePermission('UNALLOCATED_VIEW'));
 
 // Diagnostic endpoint to check why files went to unallocated (Global Admin only)
 router.get('/diagnostics', globalAdmin, async (req, res) => {
@@ -346,13 +348,9 @@ router.get('/:id/view-pdf', async (req, res) => {
   }
 });
 
-// Update parsed data and requeue for processing
-router.put('/:id', async (req, res) => {
+// Update parsed data and requeue for processing - GA + Admin + Manager + Credit Senior
+router.put('/:id', requirePermission('UNALLOCATED_REALLOCATE'), async (req, res) => {
   try {
-    if (req.user.role === 'external_user') {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
     const file = await File.findByPk(req.params.id);
     if (!file) {
       return res.status(404).json({ message: 'Document not found' });
@@ -497,19 +495,10 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Bulk delete unallocated documents
+// Bulk delete unallocated documents - GA + Admin + Manager only
 // IMPORTANT: This route must be defined BEFORE /:id to avoid route conflicts
-router.delete('/bulk', async (req, res) => {
+router.delete('/bulk', requirePermission('UNALLOCATED_DELETE'), async (req, res) => {
   try {
-    if (req.user.role === 'external_user') {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
-    // Only staff, managers, and admins can delete
-    if (!['staff', 'manager', 'administrator', 'global_admin'].includes(req.user.role)) {
-      return res.status(403).json({ message: 'Access denied. Only staff and above can delete documents.' });
-    }
-
     const { fileIds, reason } = req.body;
 
     if (!fileIds || !Array.isArray(fileIds) || fileIds.length === 0) {
@@ -689,17 +678,10 @@ router.delete('/bulk', async (req, res) => {
   }
 });
 
-// Clear all unallocated documents - Only Global Admins and Administrators
+// Clear all unallocated documents - GA + Admin only
 // IMPORTANT: This route must be defined BEFORE /:id to avoid route conflicts
-router.delete('/clear-all', async (req, res) => {
+router.delete('/clear-all', requirePermission('UNALLOCATED_DELETE'), async (req, res) => {
   try {
-    // Only global_admin and administrator can clear all
-    if (!['global_admin', 'administrator'].includes(req.user.role)) {
-      return res.status(403).json({ 
-        message: 'Access denied. Only Global Administrators and Administrators can clear all unallocated documents.' 
-      });
-    }
-
     const { reason } = req.body;
 
     if (!reason || !reason.trim()) {
@@ -871,13 +853,9 @@ router.delete('/clear-all', async (req, res) => {
   }
 });
 
-// Delete single unallocated document
-router.delete('/:id', auth, async (req, res) => {
+// Delete single unallocated document - GA + Admin + Manager only
+router.delete('/:id', requirePermission('UNALLOCATED_DELETE'), async (req, res) => {
   try {
-    if (!['global_admin', 'administrator'].includes(req.user.role)) {
-      return res.status(403).json({ message: 'Access denied. Only Global Administrators and Administrators can delete documents.' });
-    }
-
     const { reason } = req.body;
     if (!reason || !reason.trim()) {
       return res.status(400).json({ message: 'Deletion reason is required for accountability' });

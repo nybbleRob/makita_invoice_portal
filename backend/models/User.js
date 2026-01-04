@@ -62,7 +62,7 @@ module.exports = (sequelize) => {
       comment: 'Flag to force password change on first login or after admin reset'
     },
     role: {
-      type: DataTypes.ENUM('global_admin', 'administrator', 'manager', 'staff', 'external_user', 'notification_contact'),
+      type: DataTypes.ENUM('global_admin', 'administrator', 'manager', 'credit_senior', 'credit_controller', 'external_user', 'notification_contact'),
       defaultValue: 'external_user'
     },
     addedById: {

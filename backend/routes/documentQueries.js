@@ -5,6 +5,7 @@ const auth = require('../middleware/auth');
 const { sendEmail, isEmailEnabled } = require('../utils/emailService');
 const { renderTemplate } = require('../utils/tablerEmailRenderer');
 const { logActivity, ActivityType } = require('../services/activityLogger');
+const { requirePermission } = require('../middleware/permissions');
 const { v4: uuidv4 } = require('uuid');
 const router = express.Router();
 
@@ -24,8 +25,10 @@ const checkQueriesEnabled = async (req, res, next) => {
   }
 };
 
-// Apply auth and queries enabled check to all routes
+// Apply auth, permission check, and queries enabled check to all routes
+// Document Queries is GA only for now as the module is disabled
 router.use(auth);
+router.use(requirePermission('QUERIES_VIEW'));
 router.use(checkQueriesEnabled);
 
 // Get query history for a document

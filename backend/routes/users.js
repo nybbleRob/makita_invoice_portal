@@ -4,6 +4,7 @@ const { Op } = Sequelize;
 const { canManageUsers } = require('../middleware/roleCheck');
 const { canManageRole, getManageableRoles, getRoleLabel, ROLE_HIERARCHY } = require('../utils/roleHierarchy');
 const auth = require('../middleware/auth');
+const { requirePermission, requireAdmin } = require('../middleware/permissions');
 const { redis } = require('../config/redis');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const router = express.Router();
@@ -802,8 +803,8 @@ router.post('/:id/reset-password', canManageUsers, async (req, res) => {
   }
 });
 
-// Delete user
-router.delete('/:id', canManageUsers, async (req, res) => {
+// Delete user - GA + Admin only
+router.delete('/:id', requirePermission('USERS_DELETE'), async (req, res) => {
   try {
     const userId = req.params.id;
     

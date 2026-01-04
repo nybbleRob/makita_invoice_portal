@@ -6,7 +6,8 @@ export const getRoleLabel = (role) => {
     global_admin: 'Global Administrator',
     administrator: 'Administrator',
     manager: 'Manager',
-    staff: 'Staff',
+    credit_senior: 'Credit Senior',
+    credit_controller: 'Credit Controller',
     external_user: 'External User',
     notification_contact: 'Notification Contact'
   };
@@ -21,7 +22,8 @@ export const getRoleBadgeClass = (role) => {
     global_admin: 'bg-purple-lt',
     administrator: 'bg-blue-lt',
     manager: 'bg-green-lt',
-    staff: 'bg-yellow-lt',
+    credit_senior: 'bg-teal-lt',
+    credit_controller: 'bg-yellow-lt',
     external_user: 'bg-secondary-lt',
     notification_contact: 'bg-cyan-lt'
   };

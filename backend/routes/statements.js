@@ -6,10 +6,13 @@ const auth = require('../middleware/auth');
 const { checkDocumentAccess, buildCompanyFilter } = require('../middleware/documentAccess');
 const { getDescendantCompanyIds } = require('../utils/companyHierarchy');
 const { logActivity, ActivityType } = require('../services/activityLogger');
+const { requirePermission } = require('../middleware/permissions');
 const router = express.Router();
 
 // Apply auth and document access check to all routes
+// Statements are GA only for now
 router.use(auth);
+router.use(requirePermission('STATEMENTS_VIEW'));
 router.use(checkDocumentAccess);
 
 // Get all statements (filtered by user's accessible companies)

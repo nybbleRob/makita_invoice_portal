@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
+import { usePermissions } from '../../context/PermissionContext';
 import { getRoleLabel } from '../../utils/roleLabels';
 import { getInitials, getAvatarColorClass } from '../../utils/avatar';
 import PageTitle from '../PageTitle';
@@ -10,6 +11,7 @@ import { API_BASE_URL } from '../../services/api';
 const Layout = () => {
   const { user, logout } = useAuth();
   const { settings } = useSettings();
+  const { hasPermission } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -73,8 +75,8 @@ const Layout = () => {
           <span className="nav-link-title">Credit Notes</span>
         </Link>
       </li>
-      {/* Statements temporarily hidden - keeping code and routes for future use */}
-      {false && (
+      {/* Statements - GA only (currently hidden) */}
+      {hasPermission('STATEMENTS_VIEW') && (
         <li className={`nav-item ${location.pathname === '/statements' ? 'active' : ''}`}>
           <Link to="/statements" className="nav-link">
             <span className="nav-link-icon">
@@ -91,52 +93,57 @@ const Layout = () => {
           </Link>
         </li>
       )}
-      {/* Admin-only menu items - Unallocated, Companies, Users */}
-      {user && ['global_admin', 'administrator'].includes(user.role) && (
-        <>
-          <li className={`nav-item ${location.pathname === '/unallocated' ? 'active' : ''}`}>
-            <Link to="/unallocated" className="nav-link">
-              <span className="nav-link-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                  <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
-                  <path d="M12 8v4" />
-                  <path d="M12 16h.01" />
-                </svg>
-              </span>
-              <span className="nav-link-title">Unallocated</span>
-            </Link>
-          </li>
-          <li className={`nav-item ${location.pathname === '/companies' ? 'active' : ''}`}>
-            <Link to="/companies" className="nav-link">
-              <span className="nav-link-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                  <path d="M3 21l18 0" />
-                  <path d="M5 21v-16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v16" />
-                  <path d="M9 7l6 0" />
-                  <path d="M9 11l6 0" />
-                  <path d="M9 15l6 0" />
-                </svg>
-              </span>
-              <span className="nav-link-title">Companies</span>
-            </Link>
-          </li>
-          <li className={`nav-item ${location.pathname === '/users' ? 'active' : ''}`}>
-            <Link to="/users" className="nav-link">
-              <span className="nav-link-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                  <path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0" />
-                  <path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" />
-                </svg>
-              </span>
-              <span className="nav-link-title">Users</span>
-            </Link>
-          </li>
-        </>
+      {/* Unallocated - GA, Admin, Manager */}
+      {hasPermission('UNALLOCATED_VIEW') && (
+        <li className={`nav-item ${location.pathname === '/unallocated' ? 'active' : ''}`}>
+          <Link to="/unallocated" className="nav-link">
+            <span className="nav-link-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
+                <path d="M12 8v4" />
+                <path d="M12 16h.01" />
+              </svg>
+            </span>
+            <span className="nav-link-title">Unallocated</span>
+          </Link>
+        </li>
       )}
-      {user && ['global_admin', 'administrator'].includes(user.role) && (
+      {/* Companies - Staff roles */}
+      {hasPermission('COMPANIES_VIEW') && (
+        <li className={`nav-item ${location.pathname === '/companies' ? 'active' : ''}`}>
+          <Link to="/companies" className="nav-link">
+            <span className="nav-link-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M3 21l18 0" />
+                <path d="M5 21v-16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v16" />
+                <path d="M9 7l6 0" />
+                <path d="M9 11l6 0" />
+                <path d="M9 15l6 0" />
+              </svg>
+            </span>
+            <span className="nav-link-title">Companies</span>
+          </Link>
+        </li>
+      )}
+      {/* Users - GA, Admin, Manager */}
+      {hasPermission('USERS_VIEW') && (
+        <li className={`nav-item ${location.pathname === '/users' ? 'active' : ''}`}>
+          <Link to="/users" className="nav-link">
+            <span className="nav-link-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0" />
+                <path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" />
+              </svg>
+            </span>
+            <span className="nav-link-title">Users</span>
+          </Link>
+        </li>
+      )}
+      {/* Activity Logs - GA, Admin */}
+      {hasPermission('ACTIVITY_LOGS_VIEW') && (
         <li className={`nav-item ${location.pathname === '/activity-logs' ? 'active' : ''}`}>
           <Link to="/activity-logs" className="nav-link">
             <span className="nav-link-icon">
@@ -316,14 +323,14 @@ const Layout = () => {
               </Link>
               <div className="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
                 <Link to="/profile" className="dropdown-item">My Profile</Link>
-                {(user?.role === 'global_admin' || user?.role === 'administrator') && (
+                {hasPermission('IMPORT_DATA_VIEW') && (
                   <Link to="/import-data" className="dropdown-item">Import Data</Link>
                 )}
-                {user?.role === 'global_admin' && (
-                  <>
-                    <Link to="/settings" className="dropdown-item">Settings</Link>
-                    <Link to="/templates" className="dropdown-item">Templates</Link>
-                  </>
+                {hasPermission('SETTINGS_VIEW') && (
+                  <Link to="/settings" className="dropdown-item">Settings</Link>
+                )}
+                {hasPermission('TEMPLATES_VIEW') && (
+                  <Link to="/templates" className="dropdown-item">Templates</Link>
                 )}
                 <div className="dropdown-divider"></div>
                 <button onClick={handleLogout} className="dropdown-item">Logout</button>

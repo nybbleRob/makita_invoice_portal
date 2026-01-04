@@ -3,19 +3,16 @@ const { File, Company, User, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
 const { fileImportQueue } = require('../config/queue');
+const { requirePermission } = require('../middleware/permissions');
 const router = express.Router();
 
-// Only staff, managers, admins can access
+// Only GA, Admin, Manager can access failed documents
 router.use(auth);
+router.use(requirePermission('FAILED_VIEW'));
 
 // Get all failed documents
 router.get('/', async (req, res) => {
   try {
-    // Only staff, managers, and admins can view failed documents
-    if (req.user.role === 'external_user') {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
     const { page = 1, limit = 50, search = '', failureReason } = req.query;
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);

@@ -7,6 +7,7 @@ const { CreditNote, Company, Invoice, Sequelize, Settings } = require('../models
 const { Op } = Sequelize;
 const auth = require('../middleware/auth');
 const { checkDocumentAccess, buildCompanyFilter } = require('../middleware/documentAccess');
+const { requirePermission } = require('../middleware/permissions');
 const { getDescendantCompanyIds } = require('../utils/companyHierarchy');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const { calculateDocumentRetentionDates } = require('../utils/documentRetention');
@@ -234,16 +235,9 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create credit note (only for admins/managers/staff)
-router.post('/', async (req, res) => {
+// Create credit note - GA + Admin only
+router.post('/', requirePermission('CREDIT_NOTES_EDIT'), async (req, res) => {
   try {
-    // Only admins, managers, and staff can create credit notes
-    if (req.user.role === 'external_user') {
-      return res.status(403).json({ 
-        message: 'Access denied. External users cannot create credit notes.' 
-      });
-    }
-    
     const {
       creditNoteNumber,
       companyId,
@@ -344,16 +338,9 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update credit note (only for admins/managers/staff)
-router.put('/:id', async (req, res) => {
+// Update credit note - GA + Admin only
+router.put('/:id', requirePermission('CREDIT_NOTES_EDIT'), async (req, res) => {
   try {
-    // Only admins, managers, and staff can update credit notes
-    if (req.user.role === 'external_user') {
-      return res.status(403).json({ 
-        message: 'Access denied. External users cannot update credit notes.' 
-      });
-    }
-    
     const creditNote = await CreditNote.findByPk(req.params.id);
     
     if (!creditNote) {
@@ -434,16 +421,9 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Delete credit note (only for admins/managers/staff)
-router.delete('/:id', async (req, res) => {
+// Delete credit note - GA + Admin only
+router.delete('/:id', requirePermission('CREDIT_NOTES_DELETE'), async (req, res) => {
   try {
-    // Only admins, managers, and staff can delete credit notes
-    if (req.user.role === 'external_user') {
-      return res.status(403).json({ 
-        message: 'Access denied. External users cannot delete credit notes.' 
-      });
-    }
-    
     const creditNote = await CreditNote.findByPk(req.params.id);
     
     if (!creditNote) {
@@ -641,16 +621,9 @@ router.get('/:id/download', async (req, res) => {
   }
 });
 
-// Bulk delete credit notes
-router.post('/bulk-delete', async (req, res) => {
+// Bulk delete credit notes - GA + Admin only
+router.post('/bulk-delete', requirePermission('CREDIT_NOTES_DELETE'), async (req, res) => {
   try {
-    // Only global_admin and administrator can delete credit notes
-    if (!['global_admin', 'administrator'].includes(req.user.role)) {
-      return res.status(403).json({ 
-        message: 'Access denied. Only Global Administrators and Administrators can delete credit notes.' 
-      });
-    }
-    
     const { creditNoteIds, reason } = req.body;
     
     if (!Array.isArray(creditNoteIds) || creditNoteIds.length === 0) {
@@ -789,16 +762,9 @@ router.post('/bulk-delete', async (req, res) => {
   }
 });
 
-// Import credit notes - bulk upload (max 500 files)
-router.post('/import', importUpload.array('files', 500), async (req, res) => {
+// Import credit notes - bulk upload (max 500 files) - GA + Admin only
+router.post('/import', requirePermission('CREDIT_NOTES_IMPORT'), importUpload.array('files', 500), async (req, res) => {
   try {
-    // Only admins, managers, and staff can import credit notes
-    if (req.user.role === 'external_user') {
-      return res.status(403).json({ 
-        message: 'Access denied. External users cannot import credit notes.' 
-      });
-    }
-    
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({
         success: false,
@@ -1154,16 +1120,9 @@ router.post('/bulk-download', async (req, res) => {
   }
 });
 
-// Test FTP/SFTP connection and list PDF files
-router.post('/sftp/test-connection', async (req, res) => {
+// Test FTP/SFTP connection and list PDF files - GA only
+router.post('/sftp/test-connection', requirePermission('FTP_CONFIGURE'), async (req, res) => {
   try {
-    // Only admins, managers, and staff can test FTP/SFTP
-    if (req.user.role === 'external_user') {
-      return res.status(403).json({ 
-        message: 'Access denied. External users cannot test FTP/SFTP connections.' 
-      });
-    }
-
     const settings = await Settings.getSettings();
     
     if (!settings.ftp || !settings.ftp.enabled) {
@@ -1243,16 +1202,9 @@ router.post('/sftp/test-connection', async (req, res) => {
   }
 });
 
-// Import files from FTP/SFTP
-router.post('/sftp/import', async (req, res) => {
+// Import files from FTP/SFTP - GA only
+router.post('/sftp/import', requirePermission('FTP_CONFIGURE'), async (req, res) => {
   try {
-    // Only admins, managers, and staff can import from FTP/SFTP
-    if (req.user.role === 'external_user') {
-      return res.status(403).json({ 
-        message: 'Access denied. External users cannot import from FTP/SFTP.' 
-      });
-    }
-
     const settings = await Settings.getSettings();
     
     if (!settings.ftp || !settings.ftp.enabled) {

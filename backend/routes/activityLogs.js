@@ -6,21 +6,16 @@
 const express = require('express');
 const { getActivityLogs, clearActivityLogs, purgeAllActivityLogs, deleteActivityLog, getActivityStats, ActivityType } = require('../services/activityLogger');
 const auth = require('../middleware/auth');
+const { requirePermission } = require('../middleware/permissions');
 const router = express.Router();
 
-// All routes require authentication
+// All routes require authentication and ACTIVITY_LOGS_VIEW permission
 router.use(auth);
+router.use(requirePermission('ACTIVITY_LOGS_VIEW'));
 
 // Get activity logs with filters and pagination
 router.get('/', async (req, res) => {
   try {
-    // Only Global Admin and Administrators can view logs
-    if (!['global_admin', 'administrator'].includes(req.user.role)) {
-      return res.status(403).json({ 
-        message: 'Access denied. Only Global Administrators and Administrators can view activity logs.' 
-      });
-    }
-
     const {
       page = 1,
       limit = 50,

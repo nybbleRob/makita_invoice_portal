@@ -33,6 +33,7 @@ import ActivityLogs from './pages/ActivityLogs';
 import ImportData from './pages/ImportData';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
+import { PermissionProvider, usePermissions } from './context/PermissionContext';
 import './App.css';
 
 // Protected Route Component
@@ -57,7 +58,7 @@ const ProtectedRoute = ({ children }) => {
   return isAuthenticated ? children : <Navigate to="/login" />;
 };
 
-// Admin Route Component - restricts access to specific roles
+// Admin Route Component - restricts access to specific roles (legacy, use PermissionRoute)
 const AdminRoute = ({ children, allowedRoles = ['global_admin', 'administrator'] }) => {
   const { user, loading } = useAuth();
   
@@ -82,51 +83,116 @@ const AdminRoute = ({ children, allowedRoles = ['global_admin', 'administrator']
   return children;
 };
 
+// Permission Route Component - restricts access based on permissions
+const PermissionRoute = ({ children, permission, anyOf, allOf }) => {
+  const { loading } = useAuth();
+  const { hasPermission, hasAnyPermission, hasAllPermissions } = usePermissions();
+  
+  if (loading) {
+    return (
+      <div className="page page-center">
+        <div className="container container-tight py-4">
+          <div className="text-center">
+            <div className="spinner-border" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  let hasAccess = false;
+  
+  if (permission) {
+    hasAccess = hasPermission(permission);
+  } else if (anyOf && anyOf.length > 0) {
+    hasAccess = hasAnyPermission(anyOf);
+  } else if (allOf && allOf.length > 0) {
+    hasAccess = hasAllPermissions(allOf);
+  } else {
+    hasAccess = true; // No permission specified
+  }
+  
+  if (!hasAccess) {
+    return <Navigate to="/" />;
+  }
+  
+  return children;
+};
+
 function AppRoutes() {
   return (
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/two-factor-setup" element={<TwoFactorSetup />} />
-          <Route path="/two-factor-verify" element={<TwoFactorVerify />} />
-          <Route path="/change-password" element={<ChangePassword />} />
+    <Routes>
+      {/* Public auth routes */}
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/two-factor-setup" element={<TwoFactorSetup />} />
+      <Route path="/two-factor-verify" element={<TwoFactorVerify />} />
+      <Route path="/change-password" element={<ChangePassword />} />
+      
+      {/* Protected routes - require authentication */}
       <Route
         path="/"
         element={
           <ProtectedRoute>
-            <Layout />
+            <PermissionProvider>
+              <Layout />
+            </PermissionProvider>
           </ProtectedRoute>
         }
       >
+        {/* Dashboard - all authenticated users */}
         <Route index element={<Dashboard />} />
-        <Route path="reports" element={<Reports />} />
-        <Route path="settings" element={<Settings />} />
-        {/* Admin-only routes */}
-        <Route path="users" element={<AdminRoute><UserManagement /></AdminRoute>} />
-        <Route path="users/:id/view" element={<AdminRoute><UserView /></AdminRoute>} />
-        <Route path="users/pending-accounts" element={<AdminRoute><PendingAccounts /></AdminRoute>} />
-        <Route path="users/pending-accounts/:id" element={<AdminRoute><PendingAccounts /></AdminRoute>} />
+        
+        {/* Profile - all authenticated users */}
         <Route path="profile" element={<Profile />} />
-        <Route path="templates" element={<AdminRoute allowedRoles={['global_admin']}><Templates /></AdminRoute>} />
-        <Route path="companies" element={<AdminRoute><Companies /></AdminRoute>} />
-        <Route path="companies/:id/view" element={<AdminRoute><CompanyView /></AdminRoute>} />
-        <Route path="companies/add-branch" element={<AdminRoute><AddBranch /></AdminRoute>} />
-        <Route path="companies/add-subsidiary" element={<AdminRoute><AddSubsidiary /></AdminRoute>} />
-        <Route path="branches" element={<AdminRoute><Branches /></AdminRoute>} />
-        {/* User-accessible routes */}
+        
+        {/* Settings - GA only */}
+        <Route path="settings" element={<PermissionRoute permission="SETTINGS_VIEW"><Settings /></PermissionRoute>} />
+        
+        {/* Templates - GA only */}
+        <Route path="templates" element={<PermissionRoute permission="TEMPLATES_VIEW"><Templates /></PermissionRoute>} />
+        
+        {/* Reports - GA only */}
+        <Route path="reports" element={<PermissionRoute permission="REPORTS_VIEW"><Reports /></PermissionRoute>} />
+        
+        {/* Import Data - GA only */}
+        <Route path="import-data" element={<PermissionRoute permission="IMPORT_DATA_VIEW"><ImportData /></PermissionRoute>} />
+        
+        {/* User Management - GA, Admin, Manager */}
+        <Route path="users" element={<PermissionRoute permission="USERS_VIEW"><UserManagement /></PermissionRoute>} />
+        <Route path="users/:id/view" element={<PermissionRoute permission="USERS_VIEW"><UserView /></PermissionRoute>} />
+        <Route path="users/pending-accounts" element={<PermissionRoute permission="USERS_VIEW"><PendingAccounts /></PermissionRoute>} />
+        <Route path="users/pending-accounts/:id" element={<PermissionRoute permission="USERS_VIEW"><PendingAccounts /></PermissionRoute>} />
+        
+        {/* Companies - Staff roles */}
+        <Route path="companies" element={<PermissionRoute permission="COMPANIES_VIEW"><Companies /></PermissionRoute>} />
+        <Route path="companies/:id/view" element={<PermissionRoute permission="COMPANIES_VIEW"><CompanyView /></PermissionRoute>} />
+        <Route path="companies/add-branch" element={<PermissionRoute permission="COMPANIES_CREATE"><AddBranch /></PermissionRoute>} />
+        <Route path="companies/add-subsidiary" element={<PermissionRoute permission="COMPANIES_CREATE"><AddSubsidiary /></PermissionRoute>} />
+        <Route path="branches" element={<PermissionRoute permission="COMPANIES_VIEW"><Branches /></PermissionRoute>} />
+        
+        {/* Invoices - All portal users can view, edit requires permission */}
         <Route path="invoices" element={<Invoices />} />
         <Route path="invoices/:id/view" element={<InvoiceView />} />
-        <Route path="invoices/:id/edit" element={<AdminRoute><InvoiceEdit /></AdminRoute>} />
+        <Route path="invoices/:id/edit" element={<PermissionRoute permission="INVOICES_EDIT"><InvoiceEdit /></PermissionRoute>} />
+        
+        {/* Credit Notes - All portal users can view */}
         <Route path="credit-notes" element={<CreditNotes />} />
         <Route path="credit-notes/:id/view" element={<CreditNoteView />} />
-        <Route path="statements" element={<Statements />} />
-        {/* Admin-only routes */}
-        <Route path="unallocated" element={<AdminRoute><Unallocated /></AdminRoute>} />
-        <Route path="unallocated/:id/view" element={<AdminRoute><UnallocatedView /></AdminRoute>} />
-        <Route path="activity-logs" element={<AdminRoute><ActivityLogs /></AdminRoute>} />
-        <Route path="import-data" element={<AdminRoute><ImportData /></AdminRoute>} />
+        
+        {/* Statements - GA only */}
+        <Route path="statements" element={<PermissionRoute permission="STATEMENTS_VIEW"><Statements /></PermissionRoute>} />
+        
+        {/* Unallocated - GA, Admin, Manager */}
+        <Route path="unallocated" element={<PermissionRoute permission="UNALLOCATED_VIEW"><Unallocated /></PermissionRoute>} />
+        <Route path="unallocated/:id/view" element={<PermissionRoute permission="UNALLOCATED_VIEW"><UnallocatedView /></PermissionRoute>} />
+        
+        {/* Activity Logs - GA, Admin */}
+        <Route path="activity-logs" element={<PermissionRoute permission="ACTIVITY_LOGS_VIEW"><ActivityLogs /></PermissionRoute>} />
       </Route>
     </Routes>
   );

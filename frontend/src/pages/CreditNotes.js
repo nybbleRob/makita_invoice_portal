@@ -4,6 +4,7 @@ import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
+import { usePermissions } from '../context/PermissionContext';
 import { useDebounce } from '../hooks/useDebounce';
 import DocumentRetentionTimer from '../components/DocumentRetentionTimer';
 import HierarchicalCompanyFilter from '../components/HierarchicalCompanyFilter';
@@ -12,6 +13,7 @@ const CreditNotes = () => {
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const { settings } = useSettings();
+  const { hasPermission } = usePermissions();
   const queriesEnabled = settings?.queriesEnabled !== false; // Default to true if not set
   const [creditNotes, setCreditNotes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -728,11 +730,8 @@ const CreditNotes = () => {
                     >
                       Reset
                     </button>
-                    {/* Upload/Import buttons */}
-                    {(currentUser?.role === 'global_admin' || 
-                      currentUser?.role === 'administrator' || 
-                      currentUser?.role === 'manager' || 
-                      currentUser?.role === 'staff') && (
+                    {/* Upload/Import buttons - GA + Admin only */}
+                    {hasPermission('CREDIT_NOTES_IMPORT') && (
                       <>
                         <input
                           ref={fileInputRef}
@@ -758,8 +757,8 @@ const CreditNotes = () => {
                         )}
                       </>
                     )}
-                    {/* Bulk Actions */}
-                    {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && selectedCreditNotes.length > 0 && (
+                    {/* Bulk Actions - GA + Admin only */}
+                    {hasPermission('CREDIT_NOTES_DELETE') && selectedCreditNotes.length > 0 && (
                       <>
                         <button 
                           className="btn btn-primary" 
@@ -938,10 +937,7 @@ const CreditNotes = () => {
                               >
                                 Download
                               </button>
-                              {(currentUser?.role === 'global_admin' || 
-                                currentUser?.role === 'administrator' || 
-                                currentUser?.role === 'manager' || 
-                                currentUser?.role === 'staff') && (
+                              {hasPermission('CREDIT_NOTES_EDIT') && (
                                 <button 
                                   className="btn btn-sm btn-info" 
                                   title="Edit"
@@ -950,8 +946,7 @@ const CreditNotes = () => {
                                   Edit
                                 </button>
                               )}
-                              {(currentUser?.role === 'global_admin' || 
-                                currentUser?.role === 'administrator') && (
+                              {hasPermission('CREDIT_NOTES_DELETE') && (
                                 <button 
                                   className="btn btn-sm btn-danger" 
                                   title="Delete"
