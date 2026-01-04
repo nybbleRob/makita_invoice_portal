@@ -900,7 +900,7 @@ const CreditNotes = () => {
                             {deliveryAddress}
                           </td>
                           <td>{poNumber}</td>
-                          <td>{amountValue}</td>
+                          <td className="text-danger fw-semibold">{amountValue}</td>
                           <td>
                             <span className={`badge ${getDocumentStatusBadgeClass(docStatus)}`}>
                               {getDocumentStatusLabel(docStatus)}
@@ -946,7 +946,7 @@ const CreditNotes = () => {
                             </td>
                           )}
                           <td>
-                            <div className="btn-list">
+                            <div className="btn-list flex-nowrap">
                               <button 
                                 className="btn btn-sm btn-primary"
                                 onClick={() => navigate(`/credit-notes/${creditNote.id}/view`)}

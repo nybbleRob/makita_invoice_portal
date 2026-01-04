@@ -639,10 +639,10 @@ const CreditNoteView = () => {
                     {creditNote?.metadata?.parsedData?.goodsAmount && (
                       <div className="list-group-item px-0 py-2">
                         <div className="d-flex flex-row align-items-center justify-content-between">
-                          <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>
+                          <div className="text-danger small" style={{ minWidth: '140px', flexShrink: 0 }}>
                             Goods Amount
                           </div>
-                          <div className="text-end" style={{ flex: 1 }}>
+                          <div className="text-danger text-end" style={{ flex: 1 }}>
                             {formatCurrency(creditNote.metadata.parsedData.goodsAmount)}
                           </div>
                         </div>
@@ -652,10 +652,10 @@ const CreditNoteView = () => {
                     {creditNote?.metadata?.parsedData?.vatAmount && (
                       <div className="list-group-item px-0 py-2">
                         <div className="d-flex flex-row align-items-center justify-content-between">
-                          <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>
+                          <div className="text-danger small" style={{ minWidth: '140px', flexShrink: 0 }}>
                             VAT Amount
                           </div>
-                          <div className="text-end" style={{ flex: 1 }}>
+                          <div className="text-danger text-end" style={{ flex: 1 }}>
                             {formatCurrency(creditNote.metadata.parsedData.vatAmount)}
                           </div>
                         </div>
@@ -663,10 +663,10 @@ const CreditNoteView = () => {
                     )}
                     <div className="list-group-item px-0 py-2">
                       <div className="d-flex flex-row align-items-center justify-content-between">
-                        <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>
+                        <div className="text-danger small" style={{ minWidth: '140px', flexShrink: 0 }}>
                           Total
                         </div>
-                        <div className="fw-semibold text-end" style={{ flex: 1 }}>
+                        <div className="fw-semibold text-danger text-end" style={{ flex: 1 }}>
                           {formatCurrency(creditNote.amount)}
                         </div>
                       </div>

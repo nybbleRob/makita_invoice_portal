@@ -987,7 +987,7 @@ const Invoices = () => {
                             </td>
                           )}
                           <td>
-                            <div className="btn-list">
+                            <div className="btn-list flex-nowrap">
                               <button 
                                 className="btn btn-sm btn-primary"
                                 onClick={() => navigate(`/invoices/${invoice.id}/view`)}
