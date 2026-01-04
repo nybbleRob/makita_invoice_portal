@@ -24,12 +24,16 @@ const Settings = () => {
   // Admin Tools state
   const [showPurgeDocumentsModal, setShowPurgeDocumentsModal] = useState(false);
   const [showPurgeCustomersModal, setShowPurgeCustomersModal] = useState(false);
+  const [showClearImportHistoryModal, setShowClearImportHistoryModal] = useState(false);
   const [testingRetention, setTestingRetention] = useState(false);
   const [retentionStatus, setRetentionStatus] = useState(null);
   const [purgeReason, setPurgeReason] = useState('');
+  const [clearHistoryReason, setClearHistoryReason] = useState('');
   const [purgingDocuments, setPurgingDocuments] = useState(false);
   const [purgingCustomers, setPurgingCustomers] = useState(false);
+  const [clearingImportHistory, setClearingImportHistory] = useState(false);
   const [purgeStats, setPurgeStats] = useState(null);
+  const [importHistoryCount, setImportHistoryCount] = useState(0);
   const [updatingGlobalEDI, setUpdatingGlobalEDI] = useState(false);
   const [updatingGlobalEmail, setUpdatingGlobalEmail] = useState(false);
   
@@ -150,10 +154,11 @@ const Settings = () => {
     }
   }, [activeSection]);
 
-  // Fetch retention status when Admin Tools section is active
+  // Fetch retention status and import history count when Admin Tools section is active
   useEffect(() => {
     if (activeSection === 'admin-tools') {
       fetchRetentionStatus();
+      fetchImportHistoryCount();
     }
   }, [activeSection]);
 
@@ -448,6 +453,41 @@ const Settings = () => {
       toast.error('Error purging customers: ' + (error.response?.data?.message || error.message));
     } finally {
       setPurgingCustomers(false);
+    }
+  };
+
+  // Fetch import history count
+  const fetchImportHistoryCount = async () => {
+    try {
+      const response = await api.get('/api/settings/import-history-count');
+      setImportHistoryCount(response.data.count || 0);
+    } catch (error) {
+      console.error('Error fetching import history count:', error);
+    }
+  };
+
+  // Handle clearing import history
+  const handleClearImportHistory = async () => {
+    if (!clearHistoryReason || clearHistoryReason.trim().length < 5) {
+      toast.error('Please provide a reason (at least 5 characters)');
+      return;
+    }
+
+    setClearingImportHistory(true);
+    try {
+      const response = await api.post('/api/settings/clear-import-history', {
+        reason: clearHistoryReason.trim()
+      });
+      
+      setShowClearImportHistoryModal(false);
+      setClearHistoryReason('');
+      setImportHistoryCount(0);
+      toast.success(response.data.message);
+    } catch (error) {
+      console.error('Error clearing import history:', error);
+      toast.error('Error clearing import history: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setClearingImportHistory(false);
     }
   };
 
@@ -2034,6 +2074,38 @@ const Settings = () => {
                         </div>
                       </div>
                       
+                      {/* Clear Import History */}
+                      <div className="card mb-3">
+                        <div className="card-header d-flex justify-content-between align-items-center">
+                          <h3 className="card-title mb-0">Clear Import History</h3>
+                          <button 
+                            className="btn btn-sm btn-outline-secondary"
+                            onClick={fetchImportHistoryCount}
+                            title="Refresh count"
+                          >
+                            <i className="fas fa-sync-alt"></i>
+                          </button>
+                        </div>
+                        <div className="card-body">
+                          <p className="text-muted mb-3">
+                            This will delete all file hash records from the import history, allowing you to re-import files that were previously imported.
+                          </p>
+                          <div className="alert alert-info mb-3">
+                            <strong>Current file records:</strong> {importHistoryCount.toLocaleString()}
+                            <br />
+                            <small>These records track which files have been imported to prevent duplicates. Clearing them allows re-importing the same files.</small>
+                          </div>
+                          <button
+                            className="btn btn-warning"
+                            onClick={() => setShowClearImportHistoryModal(true)}
+                            disabled={clearingImportHistory || importHistoryCount === 0}
+                          >
+                            <i className="fas fa-eraser me-2"></i>
+                            Clear Import History
+                          </button>
+                        </div>
+                      </div>
+                      
                       {purgeStats && (
                         <div className="card">
                           <div className="card-header">
@@ -2959,6 +3031,90 @@ const Settings = () => {
                     </>
                   ) : (
                     'Purge All Customers'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Import History Modal */}
+      {showClearImportHistoryModal && (
+        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} tabIndex="-1">
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header bg-warning">
+                <h5 className="modal-title">
+                  <i className="fas fa-eraser me-2"></i>
+                  Clear Import History
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => {
+                    setShowClearImportHistoryModal(false);
+                    setClearHistoryReason('');
+                  }}
+                  disabled={clearingImportHistory}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <div className="alert alert-warning">
+                  <h4 className="alert-title">Confirm Action</h4>
+                  <p className="mb-0">
+                    This will delete <strong>{importHistoryCount.toLocaleString()}</strong> file hash records, 
+                    allowing you to re-import files that were previously imported.
+                  </p>
+                </div>
+                <p>This action:</p>
+                <ul>
+                  <li>Removes duplicate detection for previously imported files</li>
+                  <li>Does NOT delete any documents (invoices, credit notes, etc.)</li>
+                  <li>Allows the same files to be imported again</li>
+                </ul>
+                <div className="mb-3">
+                  <label className="form-label required">
+                    <strong>Reason <span className="text-danger">*</span></strong>
+                  </label>
+                  <textarea
+                    className="form-control"
+                    rows="3"
+                    placeholder="e.g., Re-importing files after system purge..."
+                    value={clearHistoryReason}
+                    onChange={(e) => setClearHistoryReason(e.target.value)}
+                    disabled={clearingImportHistory}
+                  />
+                  <small className="form-hint">
+                    Minimum 5 characters required.
+                  </small>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setShowClearImportHistoryModal(false);
+                    setClearHistoryReason('');
+                  }}
+                  disabled={clearingImportHistory}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-warning"
+                  onClick={handleClearImportHistory}
+                  disabled={clearingImportHistory || !clearHistoryReason || clearHistoryReason.trim().length < 5}
+                >
+                  {clearingImportHistory ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Clearing...
+                    </>
+                  ) : (
+                    'Clear Import History'
                   )}
                 </button>
               </div>

@@ -1576,5 +1576,95 @@ startxref
   }
 });
 
+/**
+ * POST /api/settings/clear-import-history
+ * Clears all file records from the files table, allowing previously imported files to be re-imported
+ * Only accessible by Global Administrators
+ */
+router.post('/clear-import-history', auth, async (req, res) => {
+  try {
+    // Only global_admin can clear import history
+    if (req.user.role !== 'global_admin') {
+      return res.status(403).json({ 
+        message: 'Access denied. Only Global Administrators can clear import history.' 
+      });
+    }
+    
+    const { reason } = req.body;
+    
+    if (!reason || reason.trim().length < 5) {
+      return res.status(400).json({ 
+        message: 'A reason is required (minimum 5 characters) for accountability.' 
+      });
+    }
+    
+    const { File, sequelize } = require('../models');
+    const { logActivity, ActivityType } = require('../services/activityLogger');
+    
+    // Get count before deletion
+    const countBefore = await File.count();
+    
+    if (countBefore === 0) {
+      return res.json({
+        success: true,
+        message: 'No file records to clear.',
+        deletedCount: 0
+      });
+    }
+    
+    // Hard delete all file records (not soft delete)
+    // This removes all file hashes so files can be re-imported
+    await sequelize.query('DELETE FROM files');
+    
+    // Log the action
+    await logActivity({
+      type: ActivityType.SYSTEM_SETTINGS_UPDATED,
+      userId: req.user.userId,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: `Cleared file import history - ${countBefore} file record(s) deleted`,
+      details: {
+        deletedCount: countBefore,
+        reason: reason.trim(),
+        action: 'clear_import_history'
+      },
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    });
+    
+    console.log(`🗑️  Import history cleared by ${req.user.email}: ${countBefore} file records deleted. Reason: ${reason.trim()}`);
+    
+    res.json({
+      success: true,
+      message: `Successfully cleared ${countBefore} file record(s). Files can now be re-imported.`,
+      deletedCount: countBefore
+    });
+    
+  } catch (error) {
+    console.error('Error clearing import history:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+/**
+ * GET /api/settings/import-history-count
+ * Returns the count of file records in the files table
+ */
+router.get('/import-history-count', auth, async (req, res) => {
+  try {
+    if (!['global_admin', 'administrator'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    
+    const { File } = require('../models');
+    const count = await File.count();
+    
+    res.json({ count });
+  } catch (error) {
+    console.error('Error getting import history count:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router;
 
