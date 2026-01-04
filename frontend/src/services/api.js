@@ -30,8 +30,15 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+      // Don't redirect if we're already on an auth page (login, forgot-password, etc.)
+      // This prevents page refresh loops when login fails
+      const authPages = ['/login', '/forgot-password', '/reset-password', '/register', '/two-factor'];
+      const isAuthPage = authPages.some(page => window.location.pathname.startsWith(page));
+      
+      if (!isAuthPage) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

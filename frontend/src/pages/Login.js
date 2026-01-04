@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
@@ -14,78 +14,53 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
-  
-  // Use ref to persist error across re-renders caused by context changes
-  const errorRef = useRef('');
-  
-  // Sync ref to state
-  useEffect(() => {
-    if (errorRef.current && !error) {
-      setError(errorRef.current);
-    }
-  }, [error, settings]); // Re-apply error when settings change (which causes re-render)
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    // Don't clear error immediately - let user see previous error while loading
     setLoading(true);
 
     try {
       const result = await login(email, password);
       
-      // Clear error only on success or redirect
       if (result.success) {
-        errorRef.current = '';
         setError('');
         navigate('/');
       } else if (result.requires2FASetup) {
-        errorRef.current = '';
         setError('');
-        // SECURITY: Use session token instead of passing password
-        // Password is only stored temporarily in state for final login after 2FA setup
         console.log('Redirecting to 2FA setup with sessionToken:', result.sessionToken ? 'Present' : 'MISSING');
         navigate('/two-factor-setup', {
           state: {
             user: result.user,
-            sessionToken: result.sessionToken, // Secure session token
-            password: password // Only for final login after 2FA setup completes
+            sessionToken: result.sessionToken,
+            password: password
           }
         });
       } else if (result.requires2FA) {
-        errorRef.current = '';
         setError('');
-        // SECURITY: Use session token instead of passing password
-        // Password is only stored temporarily in state for final login after 2FA verification
         console.log('Redirecting to 2FA verify with sessionToken:', result.sessionToken ? 'Present' : 'MISSING');
         navigate('/two-factor-verify', {
           state: {
             user: result.user,
-            sessionToken: result.sessionToken, // Secure session token
-            password: password // Only for final login after 2FA verification completes
+            sessionToken: result.sessionToken,
+            password: password
           }
         });
       } else if (result.mustChangePassword) {
-        errorRef.current = '';
         setError('');
-        // First-time login or admin password reset - redirect to password change
         console.log('Redirecting to password change with sessionToken:', result.sessionToken ? 'Present' : 'MISSING');
         navigate('/change-password', {
           state: {
             user: result.user,
-            sessionToken: result.sessionToken, // Secure session token
+            sessionToken: result.sessionToken,
             isFirstTime: true
           }
         });
       } else {
-        const errorMessage = result.message || 'Login failed. Please check your credentials.';
-        errorRef.current = errorMessage;
-        setError(errorMessage);
+        setError(result.message || 'Login failed. Please check your credentials.');
       }
     } catch (err) {
       console.error('Login error:', err);
-      const errorMessage = 'An error occurred during login. Please try again.';
-      errorRef.current = errorMessage;
-      setError(errorMessage);
+      setError('An error occurred during login. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -138,7 +113,7 @@ const Login = () => {
                   </span>
                   <input
                     type="email"
-                    className={`form-control ${error && !email ? 'is-invalid' : ''}`}
+                    className="form-control"
                     placeholder="your@email.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -160,7 +135,7 @@ const Login = () => {
                   </span>
                   <input
                     type={showPassword ? 'text' : 'password'}
-                    className={`form-control ${error && !password ? 'is-invalid' : ''}`}
+                    className="form-control"
                     placeholder="Password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
