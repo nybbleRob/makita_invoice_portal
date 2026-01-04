@@ -872,9 +872,33 @@ const CreditNotes = () => {
                           <td><strong>{creditNote.creditNumber || creditNote.creditNoteNumber || '-'}</strong></td>
                           <td>{formatDate(creditNote.issueDate)}</td>
                           <td>{creditNote.company?.referenceNo || creditNote.company?.code || '-'}</td>
-                          <td>{creditNote.company?.name || '-'}</td>
-                          <td>{invoiceTo}</td>
-                          <td>{deliveryAddress}</td>
+                          <td 
+                            id={`cn-company-${creditNote.id}`}
+                            data-bs-toggle="tooltip" 
+                            data-bs-placement="top" 
+                            title={creditNote.company?.name || '-'}
+                            style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'help' }}
+                          >
+                            {creditNote.company?.name || '-'}
+                          </td>
+                          <td 
+                            id={`cn-to-${creditNote.id}`}
+                            data-bs-toggle="tooltip" 
+                            data-bs-placement="top" 
+                            title={invoiceTo}
+                            style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'help' }}
+                          >
+                            {invoiceTo}
+                          </td>
+                          <td 
+                            id={`cn-delivery-${creditNote.id}`}
+                            data-bs-toggle="tooltip" 
+                            data-bs-placement="top" 
+                            title={deliveryAddress}
+                            style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'help' }}
+                          >
+                            {deliveryAddress}
+                          </td>
                           <td>{poNumber}</td>
                           <td>{amountValue}</td>
                           <td>

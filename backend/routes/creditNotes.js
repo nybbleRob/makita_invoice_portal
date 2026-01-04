@@ -627,6 +627,95 @@ router.get('/:id/download', async (req, res) => {
   }
 });
 
+// View credit note PDF inline (for preview)
+router.get('/:id/view-pdf', async (req, res) => {
+  try {
+    const creditNote = await CreditNote.findByPk(req.params.id, {
+      include: [{
+        model: Company,
+        as: 'company',
+        attributes: ['id', 'name']
+      }]
+    });
+    
+    if (!creditNote) {
+      return res.status(404).json({ message: 'Credit note not found' });
+    }
+    
+    // Check access to this credit note's company
+    if (req.accessibleCompanyIds !== null && 
+        !req.accessibleCompanyIds.includes(creditNote.companyId)) {
+      return res.status(403).json({ 
+        message: 'Access denied. You do not have access to this credit note.' 
+      });
+    }
+    
+    if (!creditNote.fileUrl) {
+      return res.status(404).json({ message: 'No document file available for this credit note' });
+    }
+    
+    // Handle both absolute and relative paths
+    let filePath;
+    if (path.isAbsolute(creditNote.fileUrl)) {
+      filePath = creditNote.fileUrl;
+    } else {
+      filePath = path.join(__dirname, '..', creditNote.fileUrl);
+      if (!fs.existsSync(filePath)) {
+        filePath = creditNote.fileUrl;
+      }
+    }
+    
+    if (!fs.existsSync(filePath)) {
+      console.error(`File not found: ${filePath} (original: ${creditNote.fileUrl})`);
+      return res.status(404).json({ message: 'Document file not found on server' });
+    }
+    
+    // Only update status if setting allows all users OR user is external_user
+    // When setting is enabled, ONLY external users can change status (no exceptions)
+    const settings = await Settings.getSettings();
+    const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user';
+    
+    // Mark as viewed if not already
+    const wasViewed = !!creditNote.viewedAt;
+    if (canUpdateStatus && !creditNote.viewedAt) {
+      creditNote.viewedAt = new Date();
+      // Update documentStatus to 'viewed' if it's currently 'ready' or 'review'
+      if (creditNote.documentStatus === 'ready' || creditNote.documentStatus === 'review') {
+        creditNote.documentStatus = 'viewed';
+      }
+      await creditNote.save();
+    }
+    
+    // Log view (log ALL views, not just the first one)
+    await logActivity({
+      type: ActivityType.CREDIT_NOTE_VIEWED,
+      userId: req.user.userId,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: `Viewed credit note PDF ${creditNote.creditNoteNumber || creditNote.id}${wasViewed ? ' (subsequent view)' : ''}`,
+      details: { 
+        creditNoteId: creditNote.id, 
+        creditNoteNumber: creditNote.creditNoteNumber,
+        documentStatus: creditNote.documentStatus,
+        isFirstView: !wasViewed,
+        viewMethod: 'pdf_preview'
+      },
+      companyId: creditNote.companyId,
+      companyName: creditNote.company?.name || null,
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    });
+    
+    // Serve PDF with inline content-disposition (view only, no download)
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline');
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('Error viewing credit note PDF:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Bulk delete credit notes - GA + Admin only
 router.post('/bulk-delete', requirePermission('CREDIT_NOTES_DELETE'), async (req, res) => {
   try {
