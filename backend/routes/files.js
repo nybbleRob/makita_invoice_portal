@@ -468,7 +468,7 @@ router.post('/test-import', auth, globalAdmin, async (req, res) => {
         } else if (fileType === 'credit_note') {
           document = await CreditNote.create({
             companyId: matchedCompanyId,
-            creditNoteNumber: mockParsedData.invoiceNumber || mockParsedData.creditNoteNumber || `CN-${Date.now()}`,
+            creditNoteNumber: mockParsedData.invoiceNumber || mockParsedData.creditNumber || `CN-${Date.now()}`,
             issueDate: issueDate,
             amount: mockParsedData.amount || 0,
             status: 'draft', // Valid status: 'draft', 'sent', 'applied', 'cancelled'

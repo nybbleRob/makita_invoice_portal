@@ -129,7 +129,7 @@ async function createInvoicesFromParsedFiles() {
         } else if (isCreditNote) {
           const creditNote = await CreditNote.create({
             companyId: file.customerId,
-            creditNoteNumber: parsedData.invoiceNumber || parsedData.creditNoteNumber || `CN-${Date.now()}-${file.fileHash.substring(0, 8)}`,
+            creditNoteNumber: parsedData.invoiceNumber || parsedData.creditNumber || `CN-${Date.now()}-${file.fileHash.substring(0, 8)}`,
             issueDate: issueDate,
             amount: amount,
             taxAmount: taxAmount,

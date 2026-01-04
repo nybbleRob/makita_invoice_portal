@@ -437,7 +437,7 @@ async function processFileImport(job) {
               
               document = await CreditNote.create({
                 companyId: matchedCompanyId,
-                creditNoteNumber: parsedData.invoiceNumber || parsedData.creditNoteNumber || `CN-${Date.now()}-${file.id.substring(0, 8)}`,
+                creditNoteNumber: parsedData.invoiceNumber || parsedData.creditNumber || `CN-${Date.now()}-${file.id.substring(0, 8)}`,
                 issueDate: issueDate,
                 amount: parsedData.amount || 0,
                 status: 'draft',

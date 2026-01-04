@@ -1178,7 +1178,7 @@ async function processInvoiceImport(job) {
           const documentStatus = (matchedCompanyId && fileStatus === 'parsed') ? 'ready' : 'review';
           
           const invoiceNumberValue = getParsedValue(parsedData, 'invoiceNumber') || parsedData.invoiceNumber;
-          const creditNoteNumberValue = getParsedValue(parsedData, 'creditNoteNumber') || parsedData.creditNoteNumber;
+          const creditNoteNumberValue = getParsedValue(parsedData, 'creditNumber') || parsedData.creditNumber;
           
           // Get settings for retention calculation
           const settingsForRetention = await Settings.getSettings();
