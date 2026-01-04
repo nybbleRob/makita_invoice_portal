@@ -125,8 +125,7 @@ const Register = () => {
                   style={{ maxHeight: '60px', marginBottom: '1rem' }}
                 />
               )}
-              <h1 className="mb-2">{settings?.companyName || settings?.siteName || 'Makita Invoice Portal'}</h1>
-              <p className="text-muted">Register for New Account</p>
+              <h1 className="mb-2">Makita Invoice Portal</h1>
             </div>
             
             {error && (

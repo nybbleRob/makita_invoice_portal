@@ -58,8 +58,7 @@ const ForgotPassword = () => {
                   style={{ maxHeight: '60px', marginBottom: '1rem' }}
                 />
               )}
-              <h1 className="mb-2">{settings?.companyName || settings?.siteName || 'Makita Invoice Portal'}</h1>
-              <p className="text-muted">Admin Dashboard</p>
+              <h1 className="mb-2">Makita Invoice Portal</h1>
             </div>
             <h2 className="card-title text-center mb-4">Forgot password</h2>
             <p className="text-muted text-center mb-4">

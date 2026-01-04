@@ -146,8 +146,7 @@ const TwoFactorSetup = () => {
                   style={{ maxHeight: '60px', marginBottom: '1rem' }}
                 />
               )}
-              <h1 className="mb-2">{settings?.companyName || settings?.siteName || 'Makita Invoice Portal'}</h1>
-              <p className="text-muted">Two-Factor Authentication Setup</p>
+              <h1 className="mb-2">Makita Invoice Portal</h1>
             </div>
 
             <h2 className="card-title text-center mb-4">Secure Your Account</h2>

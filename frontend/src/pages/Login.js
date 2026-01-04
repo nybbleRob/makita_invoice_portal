@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
@@ -14,6 +14,16 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  
+  // Use ref to persist error across re-renders caused by context changes
+  const errorRef = useRef('');
+  
+  // Sync ref to state
+  useEffect(() => {
+    if (errorRef.current && !error) {
+      setError(errorRef.current);
+    }
+  }, [error, settings]); // Re-apply error when settings change (which causes re-render)
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -25,9 +35,11 @@ const Login = () => {
       
       // Clear error only on success or redirect
       if (result.success) {
+        errorRef.current = '';
         setError('');
         navigate('/');
       } else if (result.requires2FASetup) {
+        errorRef.current = '';
         setError('');
         // SECURITY: Use session token instead of passing password
         // Password is only stored temporarily in state for final login after 2FA setup
@@ -40,6 +52,7 @@ const Login = () => {
           }
         });
       } else if (result.requires2FA) {
+        errorRef.current = '';
         setError('');
         // SECURITY: Use session token instead of passing password
         // Password is only stored temporarily in state for final login after 2FA verification
@@ -52,6 +65,7 @@ const Login = () => {
           }
         });
       } else if (result.mustChangePassword) {
+        errorRef.current = '';
         setError('');
         // First-time login or admin password reset - redirect to password change
         console.log('Redirecting to password change with sessionToken:', result.sessionToken ? 'Present' : 'MISSING');
@@ -63,11 +77,15 @@ const Login = () => {
           }
         });
       } else {
-        setError(result.message || 'Login failed. Please check your credentials.');
+        const errorMessage = result.message || 'Login failed. Please check your credentials.';
+        errorRef.current = errorMessage;
+        setError(errorMessage);
       }
     } catch (err) {
       console.error('Login error:', err);
-      setError('An error occurred during login. Please try again.');
+      const errorMessage = 'An error occurred during login. Please try again.';
+      errorRef.current = errorMessage;
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -95,12 +113,11 @@ const Login = () => {
               {settings?.logoLight && (
                 <img 
                   src={`${API_BASE_URL}${settings.logoLight}`} 
-                  alt={settings.companyName || settings.siteName || 'Logo'} 
+                  alt="Makita Invoice Portal" 
                   style={{ maxHeight: '60px', marginBottom: '1rem' }}
                 />
               )}
-              <h1 className="mb-2">{settings?.companyName || settings?.siteName || 'Makita Invoice Portal'}</h1>
-              <p className="text-muted">Admin Dashboard</p>
+              <h1 className="mb-2">Makita Invoice Portal</h1>
             </div>
             <h2 className="card-title text-center mb-4">Login to your account</h2>
             {error && (
