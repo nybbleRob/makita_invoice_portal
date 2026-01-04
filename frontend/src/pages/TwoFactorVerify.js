@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useSettings } from '../context/SettingsContext';
 // useAuth available from '../context/AuthContext' if needed
 import api, { API_BASE_URL } from '../services/api';
@@ -13,6 +13,7 @@ const TwoFactorVerify = () => {
   const location = useLocation();
   const [verificationCode, setVerificationCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   
   // Get user data from location state (passed from login)
   const userData = location.state?.user || {};
@@ -21,6 +22,7 @@ const TwoFactorVerify = () => {
     e.preventDefault();
     
     if (!verificationCode || verificationCode.length !== 6) {
+      setError('Please enter a valid 6-digit code');
       toast.error('Please enter a valid 6-digit code');
       return;
     }
@@ -34,6 +36,7 @@ const TwoFactorVerify = () => {
     }
 
     setLoading(true);
+    setError('');
     try {
       // Complete login with 2FA code
       // Note: Password is only used here for final authentication
@@ -51,8 +54,10 @@ const TwoFactorVerify = () => {
         toast.success('Login successful!');
         window.location.href = '/'; // Force full reload to update auth context
       }
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Invalid verification code. Please try again.');
+    } catch (err) {
+      const errorMessage = err.response?.data?.message || 'Invalid verification code. Please try again.';
+      setError(errorMessage);
+      toast.error(errorMessage);
       setVerificationCode('');
     } finally {
       setLoading(false);
@@ -94,23 +99,40 @@ const TwoFactorVerify = () => {
               Open your authenticator app and enter the 6-digit code:
             </p>
 
+            {error && (
+              <div key={error} className="alert alert-danger login-alert" role="alert">
+                {error}
+              </div>
+            )}
+
             <form onSubmit={handleVerify}>
               <div className="mb-3">
                 <label className="form-label">Verification Code</label>
-                <input
-                  type="text"
-                  className="form-control text-center font-monospace"
-                  placeholder="000000"
-                  value={verificationCode}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/\D/g, '').slice(0, 6);
-                    setVerificationCode(value);
-                  }}
-                  maxLength="6"
-                  required
-                  style={{ fontSize: '1.5rem', letterSpacing: '0.5rem' }}
-                  autoFocus
-                />
+                <div className="input-icon">
+                  <span className="input-icon-addon">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                      <path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" />
+                      <path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+                      <path d="M12 12l0 2.5" />
+                    </svg>
+                  </span>
+                  <input
+                    type="text"
+                    className={`form-control text-center font-monospace ${error ? 'is-invalid' : ''}`}
+                    placeholder="000000"
+                    value={verificationCode}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setVerificationCode(value);
+                      if (error) setError('');
+                    }}
+                    maxLength="6"
+                    required
+                    style={{ fontSize: '1.5rem', letterSpacing: '0.5rem' }}
+                    autoFocus
+                  />
+                </div>
                 <small className="form-hint">Enter the 6-digit code from your authenticator app</small>
               </div>
               <div className="form-footer">
@@ -125,7 +147,7 @@ const TwoFactorVerify = () => {
             </form>
 
             <div className="text-center mt-3">
-              <a href="/login" className="text-secondary">Back to login</a>
+              <Link to="/login" className="text-secondary">Back to login</Link>
             </div>
           </div>
         </div>
@@ -135,4 +157,3 @@ const TwoFactorVerify = () => {
 };
 
 export default TwoFactorVerify;
-

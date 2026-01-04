@@ -13,8 +13,11 @@ const ResetPassword = () => {
   
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [success, setSuccess] = useState(false);
   const [validating, setValidating] = useState(true);
   const [tokenValid, setTokenValid] = useState(false);
@@ -45,24 +48,30 @@ const ResetPassword = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    const errors = {};
 
     if (password !== confirmPassword) {
+      errors.confirmPassword = 'Passwords do not match';
+      setFieldErrors(errors);
       setError('Passwords do not match');
       toast.error('Passwords do not match');
       return;
     }
 
     if (password.length < 6) {
+      errors.password = 'Password must be at least 6 characters';
+      setFieldErrors(errors);
       setError('Password must be at least 6 characters');
       toast.error('Password must be at least 6 characters');
       return;
     }
 
+    setFieldErrors({});
     setLoading(true);
 
     try {
       await api.post('/api/auth/reset-password', { token, password });
+      setError('');
       setSuccess(true);
       toast.success('Password reset successfully! Redirecting to login...');
       setTimeout(() => {
@@ -125,7 +134,7 @@ const ResetPassword = () => {
                 )}
                 <h1 className="mb-2">{settings?.companyName || settings?.siteName || 'Makita Invoice Portal'}</h1>
               </div>
-              <div className="alert alert-danger" role="alert">
+              <div className="alert alert-danger login-alert" role="alert">
                 {error || 'Invalid or expired reset token'}
               </div>
               <div className="text-center mt-3">
@@ -181,38 +190,104 @@ const ResetPassword = () => {
             ) : (
               <>
                 {error && (
-                  <div className="alert alert-danger" role="alert">
+                  <div key={error} className="alert alert-danger login-alert" role="alert">
                     {error}
                   </div>
                 )}
                 <form onSubmit={handleSubmit} autoComplete="on">
                   <div className="mb-3">
                     <label className="form-label">New Password</label>
-                    <input
-                      type="password"
-                      className="form-control"
-                      placeholder="Enter new password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      autoComplete="new-password"
-                      required
-                      minLength={6}
-                      autoFocus
-                    />
+                    <div className="input-icon">
+                      <span className="input-icon-addon">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                          <path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6z" />
+                          <path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" />
+                          <path d="M8 11v-4a4 4 0 1 1 8 0v4" />
+                        </svg>
+                      </span>
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        className={`form-control ${fieldErrors.password ? 'is-invalid' : ''}`}
+                        placeholder="Enter new password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="new-password"
+                        required
+                        minLength={6}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        className="input-icon-addon"
+                        onClick={() => setShowPassword(!showPassword)}
+                        tabIndex={-1}
+                        style={{ cursor: 'pointer', border: 'none', background: 'transparent' }}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M10.585 10.587a2 2 0 0 0 2.829 2.828" />
+                            <path d="M16.681 16.673a8.717 8.717 0 0 1 -4.681 1.327c-3.6 0 -6.6 -2 -9 -6c1.272 -2.12 2.712 -3.678 4.32 -4.674m2.86 -1.146a9.055 9.055 0 0 1 1.82 -.18c3.6 0 6.6 2 9 6c-.666 1.11 -1.379 2.067 -2.138 2.87" />
+                            <path d="M3 3l18 18" />
+                          </svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+                            <path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
                     <small className="form-hint">Password must be at least 6 characters</small>
                   </div>
                   <div className="mb-3">
                     <label className="form-label">Confirm Password</label>
-                    <input
-                      type="password"
-                      className="form-control"
-                      placeholder="Confirm new password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      autoComplete="new-password"
-                      required
-                      minLength={6}
-                    />
+                    <div className="input-icon">
+                      <span className="input-icon-addon">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                          <path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6z" />
+                          <path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" />
+                          <path d="M8 11v-4a4 4 0 1 1 8 0v4" />
+                        </svg>
+                      </span>
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        className={`form-control ${fieldErrors.confirmPassword ? 'is-invalid' : ''}`}
+                        placeholder="Confirm new password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        autoComplete="new-password"
+                        required
+                        minLength={6}
+                      />
+                      <button
+                        type="button"
+                        className="input-icon-addon"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        tabIndex={-1}
+                        style={{ cursor: 'pointer', border: 'none', background: 'transparent' }}
+                        aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showConfirmPassword ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M10.585 10.587a2 2 0 0 0 2.829 2.828" />
+                            <path d="M16.681 16.673a8.717 8.717 0 0 1 -4.681 1.327c-3.6 0 -6.6 -2 -9 -6c1.272 -2.12 2.712 -3.678 4.32 -4.674m2.86 -1.146a9.055 9.055 0 0 1 1.82 -.18c3.6 0 6.6 2 9 6c-.666 1.11 -1.379 2.067 -2.138 2.87" />
+                            <path d="M3 3l18 18" />
+                          </svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+                            <path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <div className="form-footer">
                     <button
@@ -237,4 +312,3 @@ const ResetPassword = () => {
 };
 
 export default ResetPassword;
-

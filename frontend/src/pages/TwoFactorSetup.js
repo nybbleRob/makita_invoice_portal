@@ -156,7 +156,7 @@ const TwoFactorSetup = () => {
             </p>
 
             {error && (
-              <div className="alert alert-danger mb-4" role="alert">
+              <div key={error} className="alert alert-danger login-alert mb-4" role="alert">
                 <strong>Error:</strong> {error}
               </div>
             )}
@@ -213,20 +213,30 @@ const TwoFactorSetup = () => {
                   <form onSubmit={handleVerify}>
                     <div className="mb-3">
                       <label className="form-label">Verification Code</label>
-                      <input
-                        type="text"
-                        className="form-control text-center font-monospace"
-                        placeholder="000000"
-                        value={verificationCode}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/\D/g, '').slice(0, 6);
-                          setVerificationCode(value);
-                        }}
-                        maxLength="6"
-                        required
-                        style={{ fontSize: '1.5rem', letterSpacing: '0.5rem' }}
-                        autoFocus
-                      />
+                      <div className="input-icon">
+                        <span className="input-icon-addon">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" />
+                            <path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+                            <path d="M12 12l0 2.5" />
+                          </svg>
+                        </span>
+                        <input
+                          type="text"
+                          className="form-control text-center font-monospace"
+                          placeholder="000000"
+                          value={verificationCode}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                            setVerificationCode(value);
+                          }}
+                          maxLength="6"
+                          required
+                          style={{ fontSize: '1.5rem', letterSpacing: '0.5rem' }}
+                          autoFocus
+                        />
+                      </div>
                       <small className="form-hint">Enter the 6-digit code from your authenticator app</small>
                     </div>
                     <div className="form-footer">
@@ -266,4 +276,3 @@ const TwoFactorSetup = () => {
 };
 
 export default TwoFactorSetup;
-
