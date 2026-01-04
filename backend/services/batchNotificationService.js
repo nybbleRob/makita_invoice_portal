@@ -177,17 +177,19 @@ async function recordJobCompletion(importId, result) {
           // Determine the company ID to use for notifications
           let effectiveCompanyId = result.companyId;
           
-          // If document has no company (unallocated), check if test mode default company should be used
-          if (result.documentId && !result.companyId) {
-            const settings = await Settings.getSettings();
-            const isTestMode = settings.emailProvider?.testMode?.enabled === true;
-            
-            if (isTestMode && settings.testModeDefaultCompanyId) {
-              effectiveCompanyId = settings.testModeDefaultCompanyId;
-              console.log(`[Batch ${importId}] 🧪 Test Mode: Using default company ${effectiveCompanyId} for unallocated document ${result.documentId}`);
-            } else {
-              console.log(`[Batch ${importId}] ⚠️ Document ${result.documentId} has no companyId and test mode is ${isTestMode ? 'enabled but no default company set' : 'disabled'}`);
-            }
+          // Check if test mode is enabled - if so, ALL documents go to the test company
+          const settings = await Settings.getSettings();
+          const isTestMode = settings.emailProvider?.testMode?.enabled === true;
+          const testCompanyId = settings.testModeDefaultCompanyId;
+          
+          if (isTestMode && testCompanyId) {
+            // TEST MODE: Override ALL documents to use the test company
+            // This ensures every document triggers a notification, regardless of allocation status
+            effectiveCompanyId = testCompanyId;
+            console.log(`[Batch ${importId}] 🧪 TEST MODE: Routing document ${result.documentId} to test company ${testCompanyId} (original company: ${result.companyId || 'unallocated'})`);
+          } else if (!result.companyId) {
+            // Not in test mode and document is unallocated - no notifications
+            console.log(`[Batch ${importId}] ⚠️ Document ${result.documentId} is unallocated and test mode is ${isTestMode ? 'enabled but no test company set' : 'disabled'} - no notification will be sent`);
           }
           
           // Track document if created and has a company (real or test mode default)
@@ -323,10 +325,17 @@ async function sendBatchNotifications(importId, batch) {
           continue;
         }
         
-        // Skip EDI companies (they don't receive email notifications)
-        if (company.edi) {
+        // Skip EDI companies (they don't receive email notifications) - UNLESS test mode is enabled
+        const settings = await Settings.getSettings();
+        const isTestMode = settings.emailProvider?.testMode?.enabled === true;
+        
+        if (company.edi && !isTestMode) {
           console.log(`[Batch ${importId}] Company ${company.name} has EDI enabled, skipping email notifications`);
           continue;
+        }
+        
+        if (company.edi && isTestMode) {
+          console.log(`[Batch ${importId}] 🧪 TEST MODE: Company ${company.name} has EDI but test mode overrides - sending notifications anyway`);
         }
         
         // Fetch full document objects for notification
