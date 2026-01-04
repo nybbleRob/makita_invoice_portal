@@ -27,6 +27,29 @@ async function getNotificationRecipients(companyId, notificationType) {
   
   console.log(`[NotificationService] Getting ${notificationType} recipients for company ${companyId}`);
   
+  // TEST MODE: Bypass all notification settings and always return a recipient
+  // This allows testing the full email flow without configuring real notification settings
+  const settings = await Settings.getSettings();
+  const testMode = settings?.emailProvider?.testMode;
+  if (testMode?.enabled && testMode?.redirectEmail) {
+    console.log(`[NotificationService] 🧪 TEST MODE ACTIVE - Bypassing notification settings, will send to ${testMode.redirectEmail}`);
+    
+    // Get company name for logging
+    const company = await Company.findByPk(companyId, { attributes: ['id', 'name'] });
+    const companyName = company?.name || 'Unknown Company';
+    
+    // Return a fake recipient - the email will be redirected to test address by emailService
+    return [{
+      userId: 'test-mode',
+      name: `Test Mode Recipient (${companyName})`,
+      email: testMode.redirectEmail, // This will be the actual recipient
+      role: 'test_recipient',
+      isPrimaryContact: false,
+      sendAttachment: true, // Always include attachments in test mode
+      sendAsSummary: false // Send individual emails in test mode so we can test volume
+    }];
+  }
+  
   // Get company with primaryContact
   const company = await Company.findByPk(companyId, {
     include: [{
