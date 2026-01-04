@@ -180,11 +180,13 @@ async function recordJobCompletion(importId, result) {
           // If document has no company (unallocated), check if test mode default company should be used
           if (result.documentId && !result.companyId) {
             const settings = await Settings.getSettings();
-            const isTestMode = settings.emailProvider === 'mailtrap';
+            const isTestMode = settings.emailProvider?.testMode?.enabled === true;
             
             if (isTestMode && settings.testModeDefaultCompanyId) {
               effectiveCompanyId = settings.testModeDefaultCompanyId;
               console.log(`[Batch ${importId}] 🧪 Test Mode: Using default company ${effectiveCompanyId} for unallocated document ${result.documentId}`);
+            } else {
+              console.log(`[Batch ${importId}] ⚠️ Document ${result.documentId} has no companyId and test mode is ${isTestMode ? 'enabled but no default company set' : 'disabled'}`);
             }
           }
           
