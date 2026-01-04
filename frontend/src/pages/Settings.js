@@ -902,9 +902,8 @@ const Settings = () => {
                                 </label>
                               </div>
                               <small className="form-hint d-block mt-2">
-                                When enabled, only external users (customers) can change document status automatically (viewed/downloaded). 
-                                Internal staff activity will not update document status automatically. 
-                                <strong>Note:</strong> Global Administrators are always exempt from this restriction and can change document status at any time.
+                                When enabled, <strong>only external users (customers)</strong> can change document status automatically (viewed/downloaded). 
+                                All internal staff activity (including Global Administrators) will not update document status automatically.
                               </small>
                               
                             </div>

@@ -180,8 +180,9 @@ router.get('/:id', async (req, res) => {
     }
     
     // Only update status if setting allows all users OR user is external_user
+    // When setting is enabled, ONLY external users can change status (no exceptions)
     const settings = await Settings.getSettings();
-    const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user' || req.user.role === 'global_admin';
+    const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user';
     
     // Mark as viewed when fetching (if not already downloaded)
     if (canUpdateStatus && creditNote.documentStatus !== 'downloaded') {
@@ -468,7 +469,7 @@ router.post('/:id/view', async (req, res) => {
     const settings = await Settings.getSettings();
     const onlyExternal = settings.onlyExternalUsersChangeDocumentStatus;
     const userRole = req.user.role;
-    const canUpdateStatus = !onlyExternal || userRole === 'external_user' || userRole === 'global_admin';
+    const canUpdateStatus = !onlyExternal || userRole === 'external_user';
     
     console.log(`📊 CN Document Status Check - onlyExternalUsersChangeDocumentStatus: ${onlyExternal}, userRole: ${userRole}, canUpdateStatus: ${canUpdateStatus}`);
     
@@ -560,8 +561,9 @@ router.get('/:id/download', async (req, res) => {
     }
     
     // Only update status if setting allows all users OR user is external_user
+    // When setting is enabled, ONLY external users can change status (no exceptions)
     const settings = await Settings.getSettings();
-    const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user' || req.user.role === 'global_admin';
+    const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user';
     
     const wasFirstDownload = !creditNote.downloadedAt;
     const now = new Date();
@@ -1038,8 +1040,9 @@ router.post('/bulk-download', async (req, res) => {
     }
     
     // Only update status if setting allows all users OR user is external_user
+    // When setting is enabled, ONLY external users can change status (no exceptions)
     const settings = await Settings.getSettings();
-    const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user' || req.user.role === 'global_admin';
+    const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user';
     
     // Update download timestamps and log activity
     const now = new Date();

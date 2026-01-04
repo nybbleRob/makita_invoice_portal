@@ -476,9 +476,10 @@ router.get('/:id', async (req, res) => {
     }
     
     // Mark as viewed when fetching (if not already downloaded)
-    // Only update status if setting allows all users OR user is external_user OR user is global_admin
+    // Only update status if setting allows all users OR user is external_user
+    // When setting is enabled, ONLY external users can change status (no exceptions)
     const settings = await Settings.getSettings();
-    const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user' || req.user.role === 'global_admin';
+    const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user';
     
     if (canUpdateStatus && invoice.documentStatus !== 'downloaded') {
       const wasFirstView = !invoice.viewedAt;
@@ -1016,10 +1017,10 @@ router.put('/:id', requirePermission('INVOICES_EDIT'), async (req, res) => {
       changes.status = { from: oldValues.status, to: status };
     }
     if (documentStatus !== undefined && documentStatus !== invoice.documentStatus) {
-      // Check if user can change document status (Global Admins can always change it)
+      // Check if user can change document status
+      // When setting is enabled, ONLY external users can change status (no exceptions)
       const settings = await Settings.getSettings();
-      const canChangeStatus = req.user.role === 'global_admin' || 
-                             !settings.onlyExternalUsersChangeDocumentStatus || 
+      const canChangeStatus = !settings.onlyExternalUsersChangeDocumentStatus || 
                              req.user.role === 'external_user';
       
       if (!canChangeStatus) {
@@ -1210,11 +1211,12 @@ router.post('/:id/view', async (req, res) => {
       });
     }
     
-    // Only update status if setting allows all users OR user is external_user OR user is global_admin
+    // Only update status if setting allows all users OR user is external_user
+    // When setting is enabled, ONLY external users can change status (no exceptions, not even GA)
     const settings = await Settings.getSettings();
     const onlyExternal = settings.onlyExternalUsersChangeDocumentStatus;
     const userRole = req.user.role;
-    const canUpdateStatus = !onlyExternal || userRole === 'external_user' || userRole === 'global_admin';
+    const canUpdateStatus = !onlyExternal || userRole === 'external_user';
     
     console.log(`📊 Document Status Check - onlyExternalUsersChangeDocumentStatus: ${onlyExternal}, userRole: ${userRole}, canUpdateStatus: ${canUpdateStatus}`);
     
@@ -1315,9 +1317,10 @@ router.get('/:id/view-pdf', async (req, res) => {
       return res.status(404).json({ message: 'Document file not found on server' });
     }
     
-    // Only update status if setting allows all users OR user is external_user OR user is global_admin
+    // Only update status if setting allows all users OR user is external_user
+    // When setting is enabled, ONLY external users can change status (no exceptions)
     const settings = await Settings.getSettings();
-    const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user' || req.user.role === 'global_admin';
+    const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user';
     
     // Mark as viewed if not already
     const wasViewed = !!invoice.viewedAt;
@@ -1396,11 +1399,12 @@ router.get('/:id/download', async (req, res) => {
     }
     
     // Always update status when downloaded
-    // Only update status if setting allows all users OR user is external_user OR user is global_admin
+    // Only update status if setting allows all users OR user is external_user
+    // When setting is enabled, ONLY external users can change status (no exceptions, not even GA)
     const settings = await Settings.getSettings();
     const onlyExternal = settings.onlyExternalUsersChangeDocumentStatus;
     const userRole = req.user.role;
-    const canUpdateStatus = !onlyExternal || userRole === 'external_user' || userRole === 'global_admin';
+    const canUpdateStatus = !onlyExternal || userRole === 'external_user';
     
     console.log(`📊 Document Status Check (download) - onlyExternalUsersChangeDocumentStatus: ${onlyExternal}, userRole: ${userRole}, canUpdateStatus: ${canUpdateStatus}`);
     
@@ -1505,9 +1509,10 @@ router.post('/bulk-download', async (req, res) => {
       return res.status(404).json({ message: 'No documents available for download' });
     }
     
-    // Only update status if setting allows all users OR user is external_user OR user is global_admin
+    // Only update status if setting allows all users OR user is external_user
+    // When setting is enabled, ONLY external users can change status (no exceptions)
     const settings = await Settings.getSettings();
-    const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user' || req.user.role === 'global_admin';
+    const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user';
     
     // Update download timestamps and log activity
     const now = new Date();

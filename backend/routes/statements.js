@@ -124,8 +124,9 @@ router.get('/:id', async (req, res) => {
     }
     
     // Only update status if setting allows all users OR user is external_user
+    // When setting is enabled, ONLY external users can change status (no exceptions)
     const settings = await Settings.getSettings();
-    const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user' || req.user.role === 'global_admin';
+    const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user';
     
     // Mark as viewed if not already
     if (canUpdateStatus && !statement.viewedAt) {
