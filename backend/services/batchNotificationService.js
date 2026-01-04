@@ -174,13 +174,28 @@ async function recordJobCompletion(importId, result) {
         if (result.success) {
           batch.successfulJobs++;
           
-          // Track document if created and assigned to a company
-          if (result.documentId && result.companyId) {
-            console.log(`[Batch ${importId}] Tracking document ${result.documentId} (type=${result.documentType}) for company ${result.companyId}`);
+          // Determine the company ID to use for notifications
+          let effectiveCompanyId = result.companyId;
+          
+          // If document has no company (unallocated), check if test mode default company should be used
+          if (result.documentId && !result.companyId) {
+            const settings = await Settings.getSettings();
+            const isTestMode = settings.emailProvider === 'mailtrap';
+            
+            if (isTestMode && settings.testModeDefaultCompanyId) {
+              effectiveCompanyId = settings.testModeDefaultCompanyId;
+              console.log(`[Batch ${importId}] 🧪 Test Mode: Using default company ${effectiveCompanyId} for unallocated document ${result.documentId}`);
+            }
+          }
+          
+          // Track document if created and has a company (real or test mode default)
+          if (result.documentId && effectiveCompanyId) {
+            console.log(`[Batch ${importId}] Tracking document ${result.documentId} (type=${result.documentType}) for company ${effectiveCompanyId}${result.companyId ? '' : ' (test mode default)'}`);
             const docInfo = {
               id: result.documentId,
               type: result.documentType,
-              companyId: result.companyId,
+              companyId: effectiveCompanyId,
+              originalCompanyId: result.companyId, // Keep track of original (null for unallocated)
               fileName: result.fileName,
               invoiceNumber: result.invoiceNumber,
               amount: result.amount
@@ -189,7 +204,7 @@ async function recordJobCompletion(importId, result) {
             batch.documents.push(docInfo);
             
             // Group by company (using plain object)
-            const companyId = result.companyId;
+            const companyId = effectiveCompanyId;
             console.log(`[Batch ${importId}] DEBUG: Adding to companyDocuments. companyId=${companyId}, type=${typeof batch.companyDocuments}, keys before=${Object.keys(batch.companyDocuments || {}).length}`);
             
             // Ensure companyDocuments exists
@@ -218,7 +233,7 @@ async function recordJobCompletion(importId, result) {
             
             console.log(`[Batch ${importId}] DEBUG: companyDocuments keys after=${Object.keys(batch.companyDocuments).length}`);
           } else {
-            // Document not tracked - either unallocated (no companyId) or no document created
+            // Document not tracked - either unallocated (no companyId) with no test mode default, or no document created
             console.log(`[Batch ${importId}] Document NOT tracked: documentId=${result.documentId}, companyId=${result.companyId}, status=${result.status}`);
           }
         } else {

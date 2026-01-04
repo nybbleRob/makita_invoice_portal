@@ -309,6 +309,23 @@ router.put('/', globalAdmin, async (req, res) => {
       settings.queriesEnabled = req.body.queriesEnabled === true || req.body.queriesEnabled === 'true';
     }
     
+    // Update test mode default company ID
+    if (req.body.testModeDefaultCompanyId !== undefined) {
+      // Allow null to clear the setting, otherwise validate UUID format
+      const newCompanyId = req.body.testModeDefaultCompanyId;
+      if (newCompanyId === null || newCompanyId === '' || newCompanyId === 'null') {
+        settings.testModeDefaultCompanyId = null;
+      } else {
+        // Validate that it's a valid UUID and the company exists
+        const { Company } = require('../models');
+        const company = await Company.findByPk(newCompanyId);
+        if (!company) {
+          return res.status(400).json({ message: 'Invalid company ID for test mode default company' });
+        }
+        settings.testModeDefaultCompanyId = newCompanyId;
+      }
+    }
+    
     // Update registration form fields
     if (req.body.registrationFormFields !== undefined) {
       settings.registrationFormFields = req.body.registrationFormFields;

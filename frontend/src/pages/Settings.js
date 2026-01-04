@@ -51,12 +51,28 @@ const Settings = () => {
   const [retryingFailed, setRetryingFailed] = useState(false);
   const [resettingStats, setResettingStats] = useState(false);
   
+  // Companies for test mode default company dropdown
+  const [companies, setCompanies] = useState([]);
+  const [loadingCompanies, setLoadingCompanies] = useState(false);
 
   useEffect(() => {
     if (user?.role === 'global_admin') {
       fetchSettings();
+      fetchCompanies();
     }
   }, [user]);
+  
+  const fetchCompanies = async () => {
+    setLoadingCompanies(true);
+    try {
+      const response = await api.get('/api/companies?limit=1000');
+      setCompanies(response.data.data || response.data || []);
+    } catch (error) {
+      console.error('Error fetching companies:', error);
+    } finally {
+      setLoadingCompanies(false);
+    }
+  };
 
 
   // Fetch email templates
@@ -2341,7 +2357,7 @@ const Settings = () => {
                             </label>
                           </div>
                           
-                          <div className="mb-0">
+                          <div className="mb-3">
                             <label className="form-label">Redirect All Emails To</label>
                             <input
                               type="email"
@@ -2361,6 +2377,27 @@ const Settings = () => {
                               disabled={!settings.emailProvider?.testMode?.enabled}
                             />
                             <small className="form-hint">All system emails will be sent to this address with [TEST -&gt; original@recipient.com] in the subject</small>
+                          </div>
+                          
+                          <div className="mb-0">
+                            <label className="form-label">Default Company for Unallocated Documents</label>
+                            <select
+                              className="form-select"
+                              value={settings.testModeDefaultCompanyId || ''}
+                              onChange={(e) => handleInputChange('testModeDefaultCompanyId', e.target.value || null)}
+                              disabled={!settings.emailProvider?.testMode?.enabled || loadingCompanies}
+                            >
+                              <option value="">-- No Default (Skip Unallocated) --</option>
+                              {companies.map(company => (
+                                <option key={company.id} value={company.id}>
+                                  {company.name} {company.referenceNo ? `(${company.referenceNo})` : ''}
+                                </option>
+                              ))}
+                            </select>
+                            <small className="form-hint">
+                              When set, unallocated documents (those without a company) will use this company's notification recipients during test mode. 
+                              This allows testing email notifications for ALL imported documents, not just allocated ones.
+                            </small>
                           </div>
                         </div>
                       </div>

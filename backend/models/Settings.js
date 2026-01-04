@@ -271,6 +271,12 @@ module.exports = (sequelize) => {
         nextScheduledRun: null // ISO timestamp of next scheduled run
       },
       comment: 'FTP/Local folder import scheduler settings'
+    },
+    testModeDefaultCompanyId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Company ID to use for unallocated documents in test mode - allows testing email notifications for documents without a company'
     }
   }, {
     tableName: 'settings',
