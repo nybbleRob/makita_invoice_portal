@@ -65,8 +65,12 @@ const Settings = () => {
   const fetchCompanies = async () => {
     setLoadingCompanies(true);
     try {
-      const response = await api.get('/api/companies?limit=1000');
-      setCompanies(response.data.data || response.data || []);
+      // Fetch all companies with high limit and sort by name
+      const response = await api.get('/api/companies?limit=10000&sortBy=name&sortOrder=asc');
+      const companiesData = response.data.data || response.data || [];
+      // Sort alphabetically by name in case backend doesn't sort
+      companiesData.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setCompanies(companiesData);
     } catch (error) {
       console.error('Error fetching companies:', error);
     } finally {
