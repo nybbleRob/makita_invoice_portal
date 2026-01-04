@@ -149,12 +149,23 @@ async function scanLocalFolder() {
     ensureDir(UNPROCESSED_FAILED);
     
     // Read files from upload directory
+    console.log(`🔍 DEBUG: Reading directory: ${FTP_UPLOAD_PATH}`);
+    console.log(`🔍 DEBUG: Directory exists: ${fs.existsSync(FTP_UPLOAD_PATH)}`);
+    
     const files = fs.readdirSync(FTP_UPLOAD_PATH);
+    console.log(`🔍 DEBUG: Total files/dirs in folder: ${files.length}`);
+    if (files.length > 0) {
+      console.log(`🔍 DEBUG: First 5 files: ${files.slice(0, 5).join(', ')}`);
+    }
     
     // Filter for supported file types
     const supportedFiles = files.filter(file => {
       const ext = path.extname(file).toLowerCase();
-      return SUPPORTED_EXTENSIONS.includes(ext);
+      const isSupported = SUPPORTED_EXTENSIONS.includes(ext);
+      if (!isSupported && files.length <= 10) {
+        console.log(`🔍 DEBUG: File "${file}" has extension "${ext}" - not supported`);
+      }
+      return isSupported;
     });
     
     console.log(`📁 Found ${supportedFiles.length} supported file(s) in FTP upload folder`);
