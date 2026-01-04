@@ -2759,11 +2759,9 @@ const Settings = () => {
                               className="form-select"
                               value={selectedEmailTemplate}
                               onChange={(e) => setSelectedEmailTemplate(e.target.value)}
-                              disabled={testingEmail || !settings.emailProvider?.enabled || loadingTemplates}
+                              disabled={testingEmail || !settings.emailProvider?.enabled}
                             >
-                              {loadingTemplates ? (
-                                <option>Loading templates...</option>
-                              ) : emailTemplates.length === 0 ? (
+                              {emailTemplates.length === 0 ? (
                                 <option>No templates available</option>
                               ) : (
                                 emailTemplates.map((template) => (
@@ -2781,7 +2779,7 @@ const Settings = () => {
                             type="button"
                             className="btn btn-outline-primary"
                             onClick={handleTestEmail}
-                            disabled={testingEmail || !settings.emailProvider?.enabled || loadingTemplates}
+                            disabled={testingEmail || !settings.emailProvider?.enabled}
                           >
                             {testingEmail ? 'Sending Test Email...' : 'Send Test Email'}
                           </button>
