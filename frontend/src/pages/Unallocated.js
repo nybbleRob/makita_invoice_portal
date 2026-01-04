@@ -433,7 +433,6 @@ const Unallocated = () => {
                     <th>Invoice No.</th>
                     <th>Date/Tax Point</th>
                     <th>Account No.</th>
-                    <th>Company Name</th>
                     <th>Invoice To</th>
                     <th>Delivery Address</th>
                     <th>PO Number</th>
@@ -452,7 +451,6 @@ const Unallocated = () => {
                         <td><span className="placeholder col-8"></span></td>
                         <td><span className="placeholder col-6"></span></td>
                         <td><span className="placeholder col-6"></span></td>
-                        <td><span className="placeholder col-10"></span></td>
                         <td><span className="placeholder col-8"></span></td>
                         <td><span className="placeholder col-9"></span></td>
                         <td><span className="placeholder col-5"></span></td>
@@ -479,7 +477,6 @@ const Unallocated = () => {
                       const documentType = parsed.documentType || parsed.document_type || 'invoice';
                       const accountNumber = parsed.accountNumber || parsed.customerNumber || parsed.account_no || parsed.accountNo || '-';
                       const invoiceNumber = parsed.invoiceNumber || parsed.documentNumber || parsed.invoice_number || parsed.invoiceNo || parsed.creditNumber || parsed.credit_number || '-';
-                      const companyName = parsed.customerName || parsed.customer_name || parsed.companyName || parsed.company_name || metadataParsed.customerName || metadataParsed.customer_name || '-';
                       const invoiceTo = parsed.invoiceTo || parsed.invoice_to || parsed.bill_to || metadataParsed.invoiceTo || metadataParsed.invoice_to || '-';
                       const deliveryAddress = parsed.deliveryAddress || parsed.delivery_address || parsed.ship_to || parsed.shipping_address || metadataParsed.deliveryAddress || metadataParsed.delivery_address || '-';
                       const poNumber = parsed.customerPO || parsed.poNumber || parsed.purchaseOrder || parsed.customer_po || parsed.po_number || metadataParsed.customerPO || metadataParsed.poNumber || '-';
@@ -598,7 +595,6 @@ const Unallocated = () => {
                           <td>
                             <strong>{accountNumber}</strong>
                           </td>
-                          <TruncatedCell value={companyName} maxWidth="200px" maxLength={30} />
                           <TruncatedCell value={invoiceTo} maxWidth="200px" maxLength={30} />
                           <TruncatedCell value={deliveryAddress} maxWidth="200px" maxLength={40} />
                           <TruncatedCell value={poNumber} maxWidth="150px" maxLength={20} />
@@ -610,7 +606,7 @@ const Unallocated = () => {
                           </td>
                           <td>{retentionInfo}</td>
                           <td>
-                            <div className="btn-list">
+                            <div className="btn-list flex-nowrap">
                               <button 
                                 className="btn btn-sm btn-primary"
                                 onClick={() => navigate(`/unallocated/${doc.id}/view`)}
