@@ -74,6 +74,9 @@ router.post('/submit', async (req, res) => {
       }
     });
     
+    // Get settings for email sending
+    const settings = await Settings.getSettings();
+    
     // Get all global admins and administrators to notify
     const admins = await User.findAll({
       where: {
