@@ -184,8 +184,8 @@ function AppRoutes() {
         <Route path="credit-notes" element={<CreditNotes />} />
         <Route path="credit-notes/:id/view" element={<CreditNoteView />} />
         
-        {/* Statements - GA only */}
-        <Route path="statements" element={<PermissionRoute permission="STATEMENTS_VIEW"><Statements /></PermissionRoute>} />
+        {/* Statements - HIDDEN until client decides on scope */}
+        {/* <Route path="statements" element={<PermissionRoute permission="STATEMENTS_VIEW"><Statements /></PermissionRoute>} /> */}
         
         {/* Unallocated - GA, Admin, Manager */}
         <Route path="unallocated" element={<PermissionRoute permission="UNALLOCATED_VIEW"><Unallocated /></PermissionRoute>} />
