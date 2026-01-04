@@ -499,6 +499,7 @@ app.use('/api/pending-registrations', require('./routes/pendingRegistrations'));
 app.use('/api/users/import', require('./routes/userImport'));
 app.use('/api/import-settings', require('./routes/importSettings'));
 app.use('/api/column-config', require('./routes/columnConfig'));
+app.use('/api/stats', require('./routes/stats'));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
