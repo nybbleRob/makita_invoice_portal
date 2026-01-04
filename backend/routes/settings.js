@@ -299,7 +299,9 @@ router.put('/', globalAdmin, async (req, res) => {
     
     // Update document status restriction setting
     if (req.body.onlyExternalUsersChangeDocumentStatus !== undefined) {
-      settings.onlyExternalUsersChangeDocumentStatus = req.body.onlyExternalUsersChangeDocumentStatus === true || req.body.onlyExternalUsersChangeDocumentStatus === 'true';
+      const newValue = req.body.onlyExternalUsersChangeDocumentStatus === true || req.body.onlyExternalUsersChangeDocumentStatus === 'true';
+      console.log(`📋 Saving onlyExternalUsersChangeDocumentStatus: ${newValue} (received: ${req.body.onlyExternalUsersChangeDocumentStatus}, type: ${typeof req.body.onlyExternalUsersChangeDocumentStatus})`);
+      settings.onlyExternalUsersChangeDocumentStatus = newValue;
     }
     
     // Update queries enabled setting

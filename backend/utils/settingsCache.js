@@ -21,7 +21,12 @@ async function getCachedSettings(getSettingsFromDb) {
     try {
       const cached = await redis.get(SETTINGS_CACHE_KEY);
       if (cached) {
-        return JSON.parse(cached);
+        const parsedSettings = JSON.parse(cached);
+        // Debug log for document status setting
+        if (parsedSettings.onlyExternalUsersChangeDocumentStatus !== undefined) {
+          console.log(`📋 Settings from cache: onlyExternalUsersChangeDocumentStatus = ${parsedSettings.onlyExternalUsersChangeDocumentStatus}`);
+        }
+        return parsedSettings;
       }
     } catch (error) {
       // Redis error, fall through to database

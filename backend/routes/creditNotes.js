@@ -466,7 +466,11 @@ router.post('/:id/view', async (req, res) => {
     
     // Only update status if setting allows all users OR user is external_user
     const settings = await Settings.getSettings();
-    const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user' || req.user.role === 'global_admin';
+    const onlyExternal = settings.onlyExternalUsersChangeDocumentStatus;
+    const userRole = req.user.role;
+    const canUpdateStatus = !onlyExternal || userRole === 'external_user' || userRole === 'global_admin';
+    
+    console.log(`📊 CN Document Status Check - onlyExternalUsersChangeDocumentStatus: ${onlyExternal}, userRole: ${userRole}, canUpdateStatus: ${canUpdateStatus}`);
     
     // Always update status when viewed (unless already downloaded)
     const wasFirstView = !creditNote.viewedAt;
