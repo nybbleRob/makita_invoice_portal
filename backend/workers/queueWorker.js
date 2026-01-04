@@ -437,6 +437,13 @@ const scheduledTasksWorker = new Worker('scheduled-tasks', async (job) => {
       console.log(`✅ Local folder scan completed: ${scanResult.queued} queued, ${scanResult.skipped} skipped, ${scanResult.errors?.length || 0} errors`);
       return scanResult;
     
+    case 'document-retention-cleanup':
+      console.log('🗑️  Running scheduled document retention cleanup...');
+      const { cleanupExpiredDocuments } = require('../jobs/documentRetentionCleanup');
+      const retentionResult = await cleanupExpiredDocuments();
+      console.log(`✅ Document retention cleanup completed: ${retentionResult.deleted} deleted, ${retentionResult.errors || 0} errors`);
+      return retentionResult;
+    
     default:
       console.warn(`⚠️  Unknown scheduled task: ${job.name}`);
       return { success: false, message: 'Unknown task' };

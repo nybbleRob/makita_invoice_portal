@@ -152,6 +152,15 @@ async function cleanupExpiredDocuments() {
       console.error('Failed to log cleanup activity:', logError.message);
     }
     
+    // Send summary notification to Administrators and Global Administrators
+    if (deletedCount > 0) {
+      try {
+        await notifyAdministrators(deletedCount, deletionLog, settings, retentionPeriod);
+      } catch (notifyError) {
+        console.error('Failed to send admin notifications:', notifyError.message);
+      }
+    }
+    
     return {
       deleted: deletedCount,
       errors: errorCount,
@@ -364,6 +373,89 @@ async function notifyCompanyUsers(company, documentTypeLabel, documentNumber, se
         console.log(`   📧 Sent deletion notification to ${user.email}`);
       } catch (emailError) {
         console.error(`   ⚠️  Error sending email to ${user.email}:`, emailError.message);
+      }
+    }
+  }
+}
+
+/**
+ * Send summary notification to Administrators and Global Administrators
+ * @param {number} deletedCount - Total documents deleted
+ * @param {Array} deletionLog - Array of deletion info objects
+ * @param {Object} settings - Settings object
+ * @param {number} retentionPeriod - Retention period in days
+ */
+async function notifyAdministrators(deletedCount, deletionLog, settings, retentionPeriod) {
+  // Find all administrators and global administrators
+  const admins = await User.findAll({
+    where: {
+      role: { [Op.in]: ['global_admin', 'administrator'] },
+      deletedAt: null
+    }
+  });
+  
+  if (admins.length === 0) {
+    console.log('ℹ️  No administrators found to notify');
+    return;
+  }
+  
+  console.log(`📧 Sending retention cleanup summary to ${admins.length} administrator(s)...`);
+  
+  // Format deletion log for email (limit to first 50 entries)
+  const formattedDeletions = deletionLog.slice(0, 50).map(item => ({
+    documentType: item.documentType === 'invoice' ? 'Invoice' : 
+                  item.documentType === 'credit_note' ? 'Credit Note' : 'Statement',
+    documentNumber: item.documentNumber,
+    companyName: item.companyName || 'Unknown',
+    deletedAt: new Date(item.deletedAt).toLocaleString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }));
+  
+  // Group by document type for summary
+  const invoiceCount = deletionLog.filter(d => d.documentType === 'invoice').length;
+  const creditNoteCount = deletionLog.filter(d => d.documentType === 'credit_note').length;
+  const statementCount = deletionLog.filter(d => d.documentType === 'statement').length;
+  
+  for (const admin of admins) {
+    if (admin.email) {
+      try {
+        await sendTemplatedEmail(
+          'retention-cleanup-summary',
+          admin.email,
+          {
+            userName: admin.name || admin.email,
+            deletedCount,
+            invoiceCount,
+            creditNoteCount,
+            statementCount,
+            retentionPeriod,
+            deletions: formattedDeletions,
+            hasMoreDeletions: deletionLog.length > 50,
+            totalDeletions: deletionLog.length,
+            cleanupDate: new Date().toLocaleString('en-GB', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            }),
+            companyName: settings.companyName || 'Makita Invoice Portal'
+          },
+          settings,
+          {
+            ipAddress: 'system',
+            userAgent: 'document-retention-cleanup',
+            userId: null
+          }
+        );
+        console.log(`   📧 Sent cleanup summary to ${admin.email}`);
+      } catch (emailError) {
+        console.error(`   ⚠️  Error sending summary to ${admin.email}:`, emailError.message);
       }
     }
   }

@@ -208,6 +208,27 @@ async function setupScheduledJobs() {
     );
     console.log('✅ File cleanup scheduled: Daily at 2:00 AM');
     
+    // Schedule document retention cleanup - hourly
+    // This deletes documents that have passed their retentionExpiryDate
+    await scheduledTasksQueue.add(
+      'document-retention-cleanup',
+      { task: 'document-retention-cleanup' },
+      {
+        repeat: {
+          pattern: '0 * * * *', // Every hour at :00
+          tz: process.env.TZ || 'UTC'
+        },
+        removeOnComplete: {
+          age: 7 * 24 * 3600, // Keep completed jobs for 7 days
+          count: 168 // Keep ~1 week of hourly runs
+        },
+        removeOnFail: {
+          age: 30 * 24 * 3600 // Keep failed jobs for 30 days
+        }
+      }
+    );
+    console.log('✅ Document retention cleanup scheduled: Hourly at :00');
+    
     // Get import frequency from settings
     let frequencyMinutes = 60; // Default: hourly
     let importEnabled = true;
