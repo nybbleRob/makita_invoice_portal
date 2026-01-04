@@ -27,6 +27,9 @@ router.get('/dashboard', async (req, res) => {
 
     // Build company filter for document access
     const companyFilter = buildCompanyFilter(req.accessibleCompanyIds);
+    
+    console.log(`📊 Dashboard Stats - User: ${req.user.email}, Role: ${userRole}, AccessibleCompanyIds: ${JSON.stringify(req.accessibleCompanyIds)}`);
+    console.log(`📊 Dashboard Stats - Company Filter: ${JSON.stringify(companyFilter)}`);
 
     // Invoices count - visible to all authenticated users
     // Scoped to user's accessible companies
@@ -36,6 +39,7 @@ router.get('/dashboard', async (req, res) => {
         deletedAt: null
       }
     });
+    console.log(`📊 Dashboard Stats - Invoice count: ${invoiceCount}`);
     stats.invoices = {
       total: invoiceCount
     };
