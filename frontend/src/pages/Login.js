@@ -16,15 +16,18 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    // Don't clear error immediately - let user see previous error while loading
     setLoading(true);
 
     try {
       const result = await login(email, password);
       
+      // Clear error only on success or redirect
       if (result.success) {
+        setError('');
         navigate('/');
       } else if (result.requires2FASetup) {
+        setError('');
         // SECURITY: Use session token instead of passing password
         // Password is only stored temporarily in state for final login after 2FA setup
         console.log('Redirecting to 2FA setup with sessionToken:', result.sessionToken ? 'Present' : 'MISSING');
@@ -36,6 +39,7 @@ const Login = () => {
           }
         });
       } else if (result.requires2FA) {
+        setError('');
         // SECURITY: Use session token instead of passing password
         // Password is only stored temporarily in state for final login after 2FA verification
         console.log('Redirecting to 2FA verify with sessionToken:', result.sessionToken ? 'Present' : 'MISSING');
@@ -47,6 +51,7 @@ const Login = () => {
           }
         });
       } else if (result.mustChangePassword) {
+        setError('');
         // First-time login or admin password reset - redirect to password change
         console.log('Redirecting to password change with sessionToken:', result.sessionToken ? 'Present' : 'MISSING');
         navigate('/change-password', {
@@ -98,7 +103,7 @@ const Login = () => {
             </div>
             <h2 className="card-title text-center mb-4">Login to your account</h2>
             {error && (
-              <div className="alert alert-danger" role="alert">
+              <div key={error} className="alert alert-danger login-alert" role="alert">
                 {error}
               </div>
             )}
