@@ -1713,7 +1713,6 @@ const UserManagement = () => {
           onApply={() => setShowCompanyAssignmentModal(false)}
         />
       )}
-      </div>
     </div>
   );
 };
