@@ -465,6 +465,110 @@ async function processFileImport(job) {
         console.log(`   File will be marked as unallocated`);
       }
       
+      // TEST MODE: If enabled and no company matched, assign to test company
+      // This ensures ALL documents trigger email notifications during testing
+      let isTestModeAllocation = false;
+      const testMode = settings?.emailProvider?.testMode;
+      const isTestModeEnabled = testMode?.enabled && testMode?.redirectEmail;
+      const testCompanyId = settings?.testModeDefaultCompanyId;
+      
+      if (!matchedCompanyId && isTestModeEnabled && testCompanyId) {
+        console.log(`🧪 TEST MODE: Assigning unallocated document to test company ${testCompanyId}`);
+        matchedCompanyId = testCompanyId;
+        isTestModeAllocation = true;
+        
+        // Now create the document record for this test-allocated file
+        const testCompany = await Company.findByPk(testCompanyId);
+        if (testCompany) {
+          console.log(`🧪 TEST MODE: Using test company: ${testCompany.name}`);
+          
+          if (fileType === 'invoice' || parsedData.documentType?.toLowerCase() === 'invoice') {
+            try {
+              const issueDate = parsedData.date ? new Date(parsedData.date) : new Date();
+              
+              document = await Invoice.create({
+                companyId: matchedCompanyId,
+                invoiceNumber: parsedData.invoiceNumber || `INV-${Date.now()}-${file.id.substring(0, 8)}`,
+                issueDate: issueDate,
+                amount: parsedData.amount || 0,
+                taxAmount: parsedData.vatAmount || 0,
+                status: 'draft',
+                fileUrl: file.filePath,
+                metadata: {
+                  source: 'ftp_import',
+                  fileId: file.id,
+                  fileName: fileName,
+                  parsedData: parsedData,
+                  processingMethod: processingMethod,
+                  testModeAllocation: true,
+                  originalAccountNumber: parsedData.accountNumber || null
+                }
+              });
+              
+              console.log(`🧪 TEST MODE: Created invoice: ${document.invoiceNumber} (test-allocated)`);
+            } catch (invoiceError) {
+              console.error(`⚠️  Failed to create test-allocated invoice:`, invoiceError.message);
+            }
+          } else if (fileType === 'credit_note' || parsedData.documentType?.toLowerCase() === 'credit_note') {
+            try {
+              const issueDate = parsedData.date ? new Date(parsedData.date) : new Date();
+              
+              document = await CreditNote.create({
+                companyId: matchedCompanyId,
+                creditNoteNumber: parsedData.creditNumber || parsedData.invoiceNumber || `CN-${Date.now()}-${file.id.substring(0, 8)}`,
+                issueDate: issueDate,
+                amount: parsedData.amount || 0,
+                status: 'draft',
+                fileUrl: file.filePath,
+                metadata: {
+                  source: 'ftp_import',
+                  fileId: file.id,
+                  fileName: fileName,
+                  parsedData: parsedData,
+                  processingMethod: processingMethod,
+                  testModeAllocation: true,
+                  originalAccountNumber: parsedData.accountNumber || null
+                }
+              });
+              
+              console.log(`🧪 TEST MODE: Created credit note: ${document.creditNoteNumber} (test-allocated)`);
+            } catch (creditNoteError) {
+              console.error(`⚠️  Failed to create test-allocated credit note:`, creditNoteError.message);
+            }
+          } else {
+            // Default to invoice if type is unclear
+            try {
+              const issueDate = parsedData.date ? new Date(parsedData.date) : new Date();
+              
+              document = await Invoice.create({
+                companyId: matchedCompanyId,
+                invoiceNumber: parsedData.invoiceNumber || `INV-${Date.now()}-${file.id.substring(0, 8)}`,
+                issueDate: issueDate,
+                amount: parsedData.amount || 0,
+                taxAmount: parsedData.vatAmount || 0,
+                status: 'draft',
+                fileUrl: file.filePath,
+                metadata: {
+                  source: 'ftp_import',
+                  fileId: file.id,
+                  fileName: fileName,
+                  parsedData: parsedData,
+                  processingMethod: processingMethod,
+                  testModeAllocation: true,
+                  originalAccountNumber: parsedData.accountNumber || null
+                }
+              });
+              
+              console.log(`🧪 TEST MODE: Created invoice (default type): ${document.invoiceNumber} (test-allocated)`);
+            } catch (invoiceError) {
+              console.error(`⚠️  Failed to create test-allocated invoice:`, invoiceError.message);
+            }
+          }
+        } else {
+          console.error(`🧪 TEST MODE ERROR: Test company ${testCompanyId} not found!`);
+        }
+      }
+      
       // Determine status based on whether company was matched
       let finalStatus = 'parsed';
       let failureReason = null;
@@ -472,6 +576,9 @@ async function processFileImport(job) {
       if (!matchedCompanyId) {
         finalStatus = 'unallocated';
         failureReason = 'no_company_match';
+      } else if (isTestModeAllocation) {
+        // Mark as parsed but with test allocation flag
+        finalStatus = 'parsed';
       }
       
       await file.update({
