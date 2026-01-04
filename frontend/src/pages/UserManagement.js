@@ -1098,7 +1098,6 @@ const UserManagement = () => {
             </div>
           </div>
         </div>
-      </div>
 
       {/* Add/Edit User Modal */}
       {showModal && (
@@ -1714,6 +1713,7 @@ const UserManagement = () => {
           onApply={() => setShowCompanyAssignmentModal(false)}
         />
       )}
+      </div>
     </div>
   );
 };
