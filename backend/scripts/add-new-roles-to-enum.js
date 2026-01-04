@@ -6,13 +6,17 @@
  * This script adds the 'credit_senior' and 'credit_controller' roles 
  * to the PostgreSQL ENUM type for the User.role column.
  * 
- * Run with: node backend/scripts/add-new-roles-to-enum.js
+ * Run with: cd /var/www/makita-invportal/backend && node scripts/add-new-roles-to-enum.js
  * 
  * Note: In PostgreSQL, you can add values to an ENUM but cannot remove them.
  * This script only adds new values if they don't already exist.
  */
 
-require('dotenv').config();
+const path = require('path');
+
+// Load .env from the backend directory
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
 const { sequelize } = require('../models');
 
 const NEW_ROLES = ['credit_senior', 'credit_controller'];
