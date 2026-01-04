@@ -492,7 +492,7 @@ app.use('/api/ftp', require('./routes/ftp'));
 app.use('/api/parsing', require('./routes/parsing'));
 app.use('/api/files', require('./routes/files'));
 app.use('/api/templates', require('./routes/templates'));
-app.use('/api/email-templates', require('./routes/emailTemplates'));
+// Email templates are now file-based in backend/templates/emails/
 app.use('/api/activity-logs', require('./routes/activityLogs'));
 app.use('/api/registration', require('./routes/registration'));
 app.use('/api/pending-registrations', require('./routes/pendingRegistrations'));

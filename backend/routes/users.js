@@ -340,58 +340,22 @@ router.post('/', canManageUsers, async (req, res) => {
     const { isEmailEnabled } = require('../utils/emailService');
     if (isEmailEnabled(settings)) {
       try {
-        const { sendEmail } = require('../utils/emailService');
-        const { renderEmailTemplate } = require('../utils/emailTemplateRenderer');
-        const { EmailTemplate } = require('../models');
-        
-        const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
-        const companyName = settings.companyName || 'Makita Invoice Portal';
-        
-        // Try to use email template, fallback to hardcoded if template not found
-        try {
-          const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
-          await sendTemplatedEmail(
-            'welcome',
-            user.email,
-            {
-              userName: user.name,
-              userEmail: user.email,
-              temporaryPassword: passwordWasGenerated ? tempPassword : null
-            },
-            settings
-          );
-        } catch (templateError) {
-          console.warn('Welcome email template not found, using Tabler template:', templateError.message);
-          // Fallback to Tabler template
-          const { sendEmail } = require('../utils/emailService');
-          const { renderTemplate } = require('../utils/tablerEmailRenderer');
-          
-          const html = renderTemplate('welcome', {
+        const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
+        await sendTemplatedEmail(
+          'welcome',
+          user.email,
+          {
             userName: user.name,
             userEmail: user.email,
-            tempPassword: passwordWasGenerated ? tempPassword : '',
-            loginUrl
-          }, settings);
-          
-          await sendEmail({
-            to: user.email,
-            subject: `Welcome to ${companyName}`,
-            html,
-            text: `
-Welcome to ${companyName}!
-
-Hello ${user.name},
-
-Your account has been created successfully. You can now access the ${companyName} portal.
-
-${passwordWasGenerated ? `Your temporary password: ${tempPassword}\nYou will be required to change this password on your first login.\n` : ''}
-Login URL: ${loginUrl}
-
-Best regards,
-${companyName} Team
-            `.trim()
-          }, settings);
-        }
+            temporaryPassword: passwordWasGenerated ? tempPassword : null
+          },
+          settings,
+          {
+            ipAddress: req.ip,
+            userAgent: req.get('user-agent'),
+            userId: req.user.userId
+          }
+        );
       } catch (emailError) {
         console.error('Error sending welcome email:', emailError);
         // Don't fail user creation if email fails
@@ -785,51 +749,26 @@ router.post('/:id/reset-password', canManageUsers, async (req, res) => {
     // Send email with temporary password
     try {
       const Settings = require('../models/Settings');
-      const { sendEmail } = require('../utils/emailService');
-      const { renderEmailTemplate } = require('../utils/emailTemplateRenderer');
-      const { EmailTemplate } = require('../models');
+      const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
       
       const settings = await Settings.getSettings();
-      const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
-      const companyName = settings.companyName || 'Makita Invoice Portal';
       
-      // Try to use email template, fallback to hardcoded if template not found
-      let emailContent;
-      try {
-        const template = await EmailTemplate.findOne({ where: { name: 'password-reset' } });
-        if (template && template.enabled) {
-          emailContent = await renderEmailTemplate('password-reset', {
-            userName: user.name,
-            tempPassword: tempPassword,
-            loginUrl: loginUrl,
-            companyName: companyName
-          }, settings);
-        } else {
-          throw new Error('Template not found or disabled');
+      await sendTemplatedEmail(
+        'password-reset',
+        user.email,
+        {
+          userName: user.name,
+          tempPassword: tempPassword,
+          resetUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`,
+          expiryTime: '24 hours'
+        },
+        settings,
+        {
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+          userId: req.user.userId
         }
-      } catch (templateError) {
-        // Fallback to hardcoded email
-        emailContent = `
-          Hello ${user.name},
-          
-          Your password has been reset by an administrator.
-          
-          Your temporary password: ${tempPassword}
-          You will be required to change this password on your next login.
-          
-          Login URL: ${loginUrl}
-          
-          Best regards,
-          ${companyName} Team
-        `;
-      }
-      
-      await sendEmail({
-        to: user.email,
-        subject: `Password Reset - ${companyName}`,
-        html: emailContent,
-        text: emailContent.replace(/<[^>]*>/g, '')
-      }, settings);
+      );
     } catch (emailError) {
       console.error('Error sending password reset email:', emailError);
       // Don't fail password reset if email fails, but log it
