@@ -75,28 +75,21 @@ const Settings = () => {
   };
 
 
-  // Fetch email templates
+  // Email templates are now HTML file-based, so we use a static list
   useEffect(() => {
-    const fetchEmailTemplates = async () => {
-      setLoadingTemplates(true);
-      try {
-        const response = await api.get('/api/email-templates');
-        const activeTemplates = response.data.filter(t => t.isActive);
-        // Add bulk email test as a special test option
-        const bulkTestOption = {
-          id: 'bulk-email-test',
-          name: 'bulk-email-test',
-          description: 'Bulk Email Test (1 email every 10s for 10 mins)',
-          isActive: true
-        };
-        setEmailTemplates([...activeTemplates, bulkTestOption]);
-      } catch (error) {
-        console.error('Error fetching email templates:', error);
-      } finally {
-        setLoadingTemplates(false);
-      }
-    };
-    fetchEmailTemplates();
+    // Static list of available email templates (HTML file-based)
+    const staticTemplates = [
+      { id: 'welcome', name: 'welcome', description: 'Welcome Email', isActive: true },
+      { id: 'password-reset', name: 'password-reset', description: 'Password Reset', isActive: true },
+      { id: 'password-changed', name: 'password-changed', description: 'Password Changed Confirmation', isActive: true },
+      { id: 'document-notification', name: 'document-notification', description: 'Document Notification', isActive: true },
+      { id: 'document-summary', name: 'document-summary', description: 'Document Summary', isActive: true },
+      { id: 'registration-request', name: 'registration-request', description: 'Registration Request (Admin)', isActive: true },
+      { id: 'registration-approved', name: 'registration-approved', description: 'Registration Approved', isActive: true },
+      { id: 'registration-rejected', name: 'registration-rejected', description: 'Registration Rejected', isActive: true },
+      { id: 'bulk-email-test', name: 'bulk-email-test', description: 'Bulk Email Test (1 email every 10s for 10 mins)', isActive: true }
+    ];
+    setEmailTemplates(staticTemplates);
   }, []);
 
   const fetchSettings = async () => {
