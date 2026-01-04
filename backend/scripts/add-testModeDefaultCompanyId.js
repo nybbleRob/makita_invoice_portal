@@ -3,6 +3,9 @@
  * This column stores the company ID to use for unallocated documents in test mode
  */
 
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+
 const { sequelize } = require('../models');
 
 async function addTestModeDefaultCompanyId() {

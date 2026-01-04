@@ -19,7 +19,7 @@ const Settings = () => {
   const [testingEmail, setTestingEmail] = useState(false);
   const [emailTemplates, setEmailTemplates] = useState([]);
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState('welcome');
-  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  // loadingTemplates no longer needed - using static template list
   
   // Admin Tools state
   const [showPurgeDocumentsModal, setShowPurgeDocumentsModal] = useState(false);
