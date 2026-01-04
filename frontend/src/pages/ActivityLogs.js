@@ -734,9 +734,8 @@ const ActivityLogs = () => {
             )}
           </div>
         </div>
-      </div>
       
-      {/* Clear Logs Modal */}
+        {/* Clear Logs Modal */}
       {showClearModal && (
         <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog modal-dialog-centered">
@@ -1098,6 +1097,7 @@ const ActivityLogs = () => {
       )}
       
       {/* Company Filter Modal */}
+      {/* Company Filter Modal */}
       {showCompanyFilterModal && (
         <HierarchicalCompanyFilter
           selectedCompanyIds={selectedCompanyIds}
@@ -1109,6 +1109,7 @@ const ActivityLogs = () => {
           onApply={() => setShowCompanyFilterModal(false)}
         />
       )}
+      </div>
     </div>
   );
 };
