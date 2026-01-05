@@ -1910,5 +1910,155 @@ router.get('/import-history-count', auth, async (req, res) => {
   }
 });
 
+/**
+ * Get email logs for terminal viewer
+ * GET /api/settings/email-logs
+ */
+router.get('/email-logs', auth, globalAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+    const status = req.query.status || null;
+    
+    const { getEmailLogs, getEmailQueueStats } = require('../utils/emailQueue');
+    const { EmailLog } = require('../models');
+    const { getActivityLogs } = require('../services/activityLogger');
+    
+    // Get email logs
+    const emailLogsResult = await getEmailLogs({
+      page: 1,
+      limit,
+      status
+    });
+    
+    // Get queue status
+    const queueStatus = await getEmailQueueStats();
+    
+    // Get recent email-related activity logs (scheduled tasks, batch notifications)
+    // Fetch email_sent and import_batch_notification separately and combine
+    const emailSentLogs = await getActivityLogs({
+      page: 1,
+      limit: 25,
+      type: 'email_sent'
+    });
+    
+    const batchNotificationLogs = await getActivityLogs({
+      page: 1,
+      limit: 25,
+      type: 'import_batch_notification'
+    });
+    
+    const activityLogs = {
+      logs: [...(emailSentLogs.logs || []), ...(batchNotificationLogs.logs || [])]
+    };
+    
+    // Format email logs for terminal display
+    const formattedLogs = emailLogsResult.logs.map(log => {
+      const logData = log.toJSON ? log.toJSON() : log;
+      const timestamp = new Date(logData.createdAt || logData.timestamp);
+      
+      // Determine status indicator
+      let statusIndicator = '[QUEUED]';
+      let color = 'yellow';
+      
+      if (logData.status === 'SENT') {
+        statusIndicator = '[SENT]';
+        color = 'green';
+      } else if (logData.status === 'SENDING') {
+        statusIndicator = '[SENDING]';
+        color = 'yellow';
+      } else if (logData.status === 'FAILED_PERMANENT') {
+        statusIndicator = '[FAILED]';
+        color = 'red';
+      } else if (logData.status === 'DEFERRED') {
+        statusIndicator = '[DEFERRED]';
+        color = 'gray';
+      }
+      
+      // Build log message
+      let message = `${statusIndicator} -> ${logData.to}`;
+      
+      if (logData.recipientCount > 1) {
+        message = `${statusIndicator} -> ${logData.recipientCount} recipients (BATCH)`;
+      }
+      
+      message += ` | Subject: "${logData.subject}"`;
+      
+      if (logData.provider) {
+        message += ` | Provider: ${logData.provider}`;
+      }
+      
+      if (logData.messageId && logData.status === 'SENT') {
+        message += ` | MessageID: ${logData.messageId}`;
+      }
+      
+      if (logData.lastError && logData.status !== 'SENT') {
+        message += ` | Error: ${logData.lastError.substring(0, 100)}`;
+      }
+      
+      if (logData.attempts > 1) {
+        message += ` | Attempts: ${logData.attempts}`;
+      }
+      
+      return {
+        id: logData.id,
+        timestamp: timestamp.toISOString(),
+        status: logData.status,
+        message,
+        color,
+        to: logData.to,
+        recipientCount: logData.recipientCount || 1,
+        subject: logData.subject,
+        provider: logData.provider,
+        messageId: logData.messageId,
+        error: logData.lastError,
+        attempts: logData.attempts,
+        isBatch: (logData.recipientCount || 1) > 1
+      };
+    });
+    
+    // Format activity logs for scheduled tasks and batch notifications
+    const scheduledTaskLogs = (activityLogs.logs || []).filter(log => {
+      const logData = log.toJSON ? log.toJSON() : log;
+      return logData.type === 'import_batch_notification' || 
+             (logData.type === 'email_sent' && logData.details?.isBatch);
+    }).map(log => {
+      const logData = log.toJSON ? log.toJSON() : log;
+      const timestamp = new Date(logData.timestamp);
+      const details = typeof logData.details === 'string' ? JSON.parse(logData.details) : (logData.details || {});
+      
+      let message = '[SCHEDULED]';
+      
+      if (logData.type === 'import_batch_notification') {
+        message += ` Batch notification triggered | Emails queued: ${details.emailCount || 'N/A'}`;
+      } else if (logData.type === 'email_sent' && details.isBatch) {
+        message += ` Batch email sent | ${details.recipientCount || 1} recipients | Subject: "${details.subject || 'N/A'}"`;
+      }
+      
+      return {
+        id: `activity_${logData.id}`,
+        timestamp: timestamp.toISOString(),
+        status: 'SCHEDULED',
+        message,
+        color: 'blue',
+        type: 'scheduled_task'
+      };
+    });
+    
+    // Combine and sort by timestamp (newest first)
+    const allLogs = [...formattedLogs, ...scheduledTaskLogs].sort((a, b) => {
+      return new Date(b.timestamp) - new Date(a.timestamp);
+    }).slice(0, limit);
+    
+    res.json({
+      logs: allLogs,
+      queueStatus,
+      count: allLogs.length
+    });
+  } catch (error) {
+    console.error('Error getting email logs:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router;
 

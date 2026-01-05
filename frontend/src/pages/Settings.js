@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
@@ -58,6 +58,12 @@ const Settings = () => {
   // Companies for test mode default company dropdown
   const [companies, setCompanies] = useState([]);
   const [loadingCompanies, setLoadingCompanies] = useState(false);
+  
+  // Email logs state
+  const [emailLogs, setEmailLogs] = useState([]);
+  const [loadingEmailLogs, setLoadingEmailLogs] = useState(false);
+  const [emailQueueStatus, setEmailQueueStatus] = useState(null);
+  const emailLogsRef = useRef(null);
 
   useEffect(() => {
     if (user?.role === 'global_admin') {
@@ -142,6 +148,28 @@ const Settings = () => {
     }
   };
 
+  // Fetch email logs for terminal viewer
+  const fetchEmailLogs = async () => {
+    setLoadingEmailLogs(true);
+    try {
+      const response = await api.get('/api/settings/email-logs?limit=100');
+      setEmailLogs(response.data.logs || []);
+      setEmailQueueStatus(response.data.queueStatus || null);
+      
+      // Auto-scroll to bottom when new logs arrive
+      setTimeout(() => {
+        if (emailLogsRef.current) {
+          emailLogsRef.current.scrollTop = emailLogsRef.current.scrollHeight;
+        }
+      }, 100);
+    } catch (error) {
+      console.error('Error fetching email logs:', error);
+      toast.error('Error fetching email logs: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setLoadingEmailLogs(false);
+    }
+  };
+
   // Auto-refresh import logs every 30 seconds when on import settings section
   useEffect(() => {
     if (activeSection === 'import-settings') {
@@ -155,6 +183,19 @@ const Settings = () => {
       }, 30000); // 30 seconds
       
       return () => clearInterval(logsInterval);
+    }
+  }, [activeSection]);
+
+  // Auto-refresh email logs every 10 seconds when on SMTP settings section
+  useEffect(() => {
+    if (activeSection === 'smtp') {
+      fetchEmailLogs();
+      
+      const emailLogsInterval = setInterval(() => {
+        fetchEmailLogs();
+      }, 10000); // 10 seconds
+      
+      return () => clearInterval(emailLogsInterval);
     }
   }, [activeSection]);
 
@@ -2860,6 +2901,101 @@ const Settings = () => {
                           >
                             {testingEmail ? 'Sending Test Email...' : 'Send Test Email'}
                           </button>
+                        </div>
+                      </div>
+
+                      {/* Email Logs Terminal Viewer */}
+                      <div className="card mt-4">
+                        <div className="card-header d-flex justify-content-between align-items-center">
+                          <h3 className="card-title mb-0">Email Activity Logs</h3>
+                          <div className="btn-list">
+                            <button
+                              className="btn btn-sm btn-outline-secondary"
+                              onClick={fetchEmailLogs}
+                              disabled={loadingEmailLogs}
+                            >
+                              {loadingEmailLogs ? (
+                                <span className="spinner-border spinner-border-sm" role="status"></span>
+                              ) : (
+                                'Refresh'
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                        
+                        {/* Queue Status */}
+                        {emailQueueStatus && (
+                          <div className="card-body border-bottom" style={{ backgroundColor: '#f8f9fa', padding: '12px' }}>
+                            <div className="row g-2 text-center">
+                              <div className="col-3">
+                                <small className="text-muted d-block">Waiting</small>
+                                <strong className="text-warning">{emailQueueStatus.waiting || 0}</strong>
+                              </div>
+                              <div className="col-3">
+                                <small className="text-muted d-block">Active</small>
+                                <strong className="text-info">{emailQueueStatus.active || 0}</strong>
+                              </div>
+                              <div className="col-3">
+                                <small className="text-muted d-block">Completed</small>
+                                <strong className="text-success">{emailQueueStatus.completed || 0}</strong>
+                              </div>
+                              <div className="col-3">
+                                <small className="text-muted d-block">Failed</small>
+                                <strong className="text-danger">{emailQueueStatus.failed || 0}</strong>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        <div 
+                          ref={emailLogsRef}
+                          className="card-body p-0"
+                          style={{
+                            backgroundColor: '#1a1a2e',
+                            fontFamily: 'Monaco, Consolas, "Courier New", monospace',
+                            fontSize: '13px',
+                            maxHeight: '500px',
+                            overflowY: 'auto'
+                          }}
+                        >
+                          {emailLogs.length === 0 ? (
+                            <div className="p-3 text-center" style={{ color: '#6c757d' }}>
+                              No email logs available. Logs will appear here when emails are sent.
+                            </div>
+                          ) : (
+                            <div className="p-2">
+                              {emailLogs.map((log, index) => {
+                                // Determine color based on status
+                                let color = '#ffffff';
+                                if (log.color === 'green') color = '#00ff88';
+                                else if (log.color === 'yellow') color = '#ffaa00';
+                                else if (log.color === 'red') color = '#ff4444';
+                                else if (log.color === 'gray') color = '#888888';
+                                else if (log.color === 'blue') color = '#00aaff';
+                                
+                                return (
+                                  <div 
+                                    key={log.id || index} 
+                                    style={{ 
+                                      color, 
+                                      padding: '2px 8px',
+                                      borderBottom: '1px solid #2a2a4e'
+                                    }}
+                                  >
+                                    <span style={{ color: '#666', marginRight: '8px' }}>
+                                      {new Date(log.timestamp).toLocaleTimeString()}
+                                    </span>
+                                    {log.message}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                        <div className="card-footer" style={{ backgroundColor: '#1a1a2e', borderTop: '1px solid #2a2a4e' }}>
+                          <small style={{ color: '#666' }}>
+                            Auto-refreshes every 10 seconds • Showing last {emailLogs.length} entries
+                          </small>
                         </div>
                       </div>
                     </>
