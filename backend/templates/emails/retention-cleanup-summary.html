@@ -1,0 +1,238 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:o="urn:schemas-microsoft-com:office:office" style="color-scheme: light dark; supported-color-schemes: light dark;">
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>Document Retention Cleanup Summary - {{companyName}}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta content="telephone=no" name="format-detection" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark only" />
+
+    <style data-premailer="ignore">
+        :root { color-scheme: light dark; supported-color-schemes: light dark; }
+        @media screen and (max-width: 600px) { u+.body { width: 100vw !important; } }
+        a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !important; }
+    </style>
+    <!--[if mso]>
+    <style type="text/css">
+        body, table, td { font-family: Arial, Helvetica, sans-serif !important; }
+        img { -ms-interpolation-mode: bicubic; }
+        .box { border-color: #eee !important; }
+    </style>
+    <![endif]-->
+    <!--[if !mso]><!-->
+    <link href="https://rsms.me/inter/inter.css" rel="stylesheet" type="text/css" data-premailer="ignore" />
+    <!--<![endif]-->
+
+    <style>
+        body { margin: 0; padding: 0; background-color: #f9fafb; font-size: 15px; line-height: 160%; color: #4b5563; width: 100%; font-family: Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+        img { display: inline-block; border: 0 none; line-height: 100%; outline: none; text-decoration: none; vertical-align: bottom; font-size: 0; }
+        a:hover { text-decoration: underline !important; }
+        .btn:hover { text-decoration: none !important; }
+        a.bg-primary:hover { filter: brightness(0.9); }
+        @media only screen and (max-width: 560px) {
+            body { font-size: 14px !important; }
+            .content { padding: 24px !important; }
+            h1 { font-size: 24px !important; }
+            .col { display: table !important; width: 100% !important; }
+            .col-spacer { display: table !important; width: 100% !important; height: 16px !important; }
+        }
+    </style>
+</head>
+
+<body class="bg-body" style="font-size: 15px; line-height: 160%; color: #4b5563; width: 100%; font-family: Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Arial, sans-serif; margin: 0; padding: 0;" bgcolor="#f9fafb">
+    <center>
+        <table class="main bg-body" width="100%" cellspacing="0" cellpadding="0" role="presentation" style="border-collapse: collapse; width: 100%;" bgcolor="#f9fafb">
+            <tr>
+                <td align="center" valign="top">
+                    <!--[if (gte mso 9)|(IE)]>
+                    <table border="0" cellspacing="0" cellpadding="0"><tr><td align="center" valign="top" width="640">
+                    <![endif]-->
+
+                    <span class="preheader" style="font-size: 0; display: none; max-height: 0; mso-hide: all; line-height: 0; color: transparent; height: 0; max-width: 0; opacity: 0; overflow: hidden; visibility: hidden; width: 0; padding: 0;">Retention cleanup completed: {{deletedCount}} documents deleted due to expired retention period.</span>
+
+                    <table class="wrap" cellspacing="0" cellpadding="0" role="presentation" style="border-collapse: collapse; width: 100%; max-width: 640px; text-align: left;">
+                        <tr>
+                            <td class="p-sm" style="padding: 8px;">
+                                <div class="main-content" style="padding-top: 24px;">
+                                    <div class="box" style="background-color: #ffffff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05); border: 1px solid #e8ebee;">
+                                        <table class="box-table" cellpadding="0" cellspacing="0" style="border-collapse: collapse; width: 100%;" bgcolor="#ffffff">
+                                            <tr>
+                                                <td>
+                                                    <table cellpadding="0" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+
+                                                        <!-- LOGO AND TITLE INSIDE BOX -->
+                                                        <tr>
+                                                            <td style="padding: 48px 48px 24px;">
+                                                                <table cellspacing="0" cellpadding="0" style="border-collapse: collapse; width: 100%;">
+                                                                    <tr>
+                                                                        <td>
+                                                                            {{#if logoUrl}}
+                                                                            <a href="{{portalUrl}}" style="color: {{primaryColor}}; text-decoration: none;">
+                                                                                <img src="{{logoUrl}}" width="150" alt="{{companyName}}" style="display: inline-block; max-width: 200px; height: auto; border: 0;" />
+                                                                            </a>
+                                                                            {{/if}}
+                                                                            {{#unless logoUrl}}
+                                                                            <span style="font-size: 24px; font-weight: 600; color: {{primaryColor}};">{{companyName}}</span>
+                                                                            {{/unless}}
+                                                                        </td>
+                                                                        <td style="text-align: right;">
+                                                                            <span style="font-size: 18px; font-weight: 600;">Retention Cleanup Summary</span><br />
+                                                                            <span style="color: #667382;">{{cleanupDate}}</span>
+                                                                        </td>
+                                                                    </tr>
+                                                                </table>
+                                                            </td>
+                                                        </tr>
+
+                                                        <tr>
+                                                            <td class="content" style="padding: 0 48px 48px;">
+                                                                <h2 style="font-weight: 600; color: #d63939; margin: 0 0 24px;">Document Retention Cleanup Complete</h2>
+
+                                                                <p style="margin: 0 0 24px;">
+                                                                    The scheduled document retention cleanup has completed. Documents that exceeded the {{retentionPeriod}}-day retention period have been permanently deleted from the system.
+                                                                </p>
+
+                                                                <!-- Stats Grid -->
+                                                                <table style="border-collapse: collapse; width: 100%; margin-bottom: 24px;">
+                                                                    <tr>
+                                                                        <td style="text-align: center; padding: 20px; background-color: #fee; border: 1px solid #d63939; border-right: none;">
+                                                                            <div style="font-size: 32px; font-weight: 600; color: #d63939;">{{deletedCount}}</div>
+                                                                            <div style="font-size: 13px; color: #667382; margin-top: 4px;">Total Deleted</div>
+                                                                        </td>
+                                                                        <td style="text-align: center; padding: 20px; background-color: #f9fafb; border: 1px solid #e8ebee; border-right: none;">
+                                                                            <div style="font-size: 32px; font-weight: 600; color: {{primaryColor}};">{{invoiceCount}}</div>
+                                                                            <div style="font-size: 13px; color: #667382; margin-top: 4px;">Invoices</div>
+                                                                        </td>
+                                                                        <td style="text-align: center; padding: 20px; background-color: #f9fafb; border: 1px solid #e8ebee; border-right: none;">
+                                                                            <div style="font-size: 32px; font-weight: 600; color: #f59f00;">{{creditNoteCount}}</div>
+                                                                            <div style="font-size: 13px; color: #667382; margin-top: 4px;">Credit Notes</div>
+                                                                        </td>
+                                                                        <td style="text-align: center; padding: 20px; background-color: #f9fafb; border: 1px solid #e8ebee;">
+                                                                            <div style="font-size: 32px; font-weight: 600; color: #667382;">{{statementCount}}</div>
+                                                                            <div style="font-size: 13px; color: #667382; margin-top: 4px;">Statements</div>
+                                                                        </td>
+                                                                    </tr>
+                                                                </table>
+
+                                                                <!-- Deleted Documents List -->
+                                                                <h4 style="font-weight: 500; color: #111827; font-size: 16px; margin: 24px 0 12px;">Deleted Documents</h4>
+                                                                <table style="border-collapse: collapse; width: 100%; font-size: 13px;">
+                                                                    <thead>
+                                                                        <tr style="background-color: #f9fafb;">
+                                                                            <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid #e8ebee; color: #667382; font-weight: 500;">Type</th>
+                                                                            <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid #e8ebee; color: #667382; font-weight: 500;">Document #</th>
+                                                                            <th style="padding: 10px 8px; text-align: left; border-bottom: 2px solid #e8ebee; color: #667382; font-weight: 500;">Company</th>
+                                                                            <th style="padding: 10px 8px; text-align: right; border-bottom: 2px solid #e8ebee; color: #667382; font-weight: 500;">Deleted At</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        {{#each deletions}}
+                                                                        <tr>
+                                                                            <td style="padding: 8px; border-bottom: 1px solid #e8ebee;">{{this.documentType}}</td>
+                                                                            <td style="padding: 8px; border-bottom: 1px solid #e8ebee; font-weight: 500;">{{this.documentNumber}}</td>
+                                                                            <td style="padding: 8px; border-bottom: 1px solid #e8ebee;">{{this.companyName}}</td>
+                                                                            <td style="padding: 8px; border-bottom: 1px solid #e8ebee; text-align: right; color: #667382;">{{this.deletedAt}}</td>
+                                                                        </tr>
+                                                                        {{/each}}
+                                                                    </tbody>
+                                                                </table>
+
+                                                                {{#if hasMoreDeletions}}
+                                                                <p style="margin: 16px 0 0; font-size: 13px; color: #667382; font-style: italic;">
+                                                                    Showing first 50 of {{totalDeletions}} deleted documents. Check the activity logs for the complete list.
+                                                                </p>
+                                                                {{/if}}
+                                                            </td>
+                                                        </tr>
+
+                                                        <tr>
+                                                            <td class="content pt-0" style="padding: 0 48px 48px;">
+                                                                <!-- BUTTON -->
+                                                                <table cellspacing="0" cellpadding="0" role="presentation" style="border-collapse: collapse; width: 100%;">
+                                                                    <tr>
+                                                                        <td align="center">
+                                                                            <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse: separate; width: 100%; color: #ffffff;" bgcolor="{{primaryColor}}">
+                                                                                <tr>
+                                                                                    <td align="center" valign="top" style="line-height: 100%;">
+                                                                                        <!--[if mso]>
+                                                                                        <v:rect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"
+                                                                                            href="{{portalUrl}}/activity" style="height:48px;v-text-anchor:middle;width:100%;"
+                                                                                            strokecolor="{{primaryColor}}" fillcolor="{{primaryColor}}">
+                                                                                            <w:anchorlock/>
+                                                                                            <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:500;">
+                                                                                                View Activity Logs
+                                                                                            </center>
+                                                                                        </v:rect>
+                                                                                        <![endif]-->
+                                                                                        <!--[if !mso]><!-->
+                                                                                        <a href="{{portalUrl}}/activity" class="btn bg-primary" style="color: #ffffff; text-decoration: none; white-space: nowrap; font-weight: 500; font-size: 14px; line-height: 125%; display: block; background-color: {{primaryColor}}; padding: 12px 32px; border: 1px solid {{primaryColor}};">
+                                                                                            View Activity Logs
+                                                                                        </a>
+                                                                                        <!--<![endif]-->
+                                                                                    </td>
+                                                                                </tr>
+                                                                            </table>
+                                                                        </td>
+                                                                    </tr>
+                                                                </table>
+                                                                <!-- /BUTTON -->
+                                                            </td>
+                                                        </tr>
+
+                                                        <!-- Retention Info -->
+                                                        <tr>
+                                                            <td class="content pt-0" style="padding: 0 48px 48px;">
+                                                                <table style="border-collapse: collapse; width: 100%; background-color: #fff3cd; border: 1px solid #ffc107;">
+                                                                    <tr>
+                                                                        <td style="padding: 12px 16px; font-size: 13px; color: #856404;">
+                                                                            <strong>Reason:</strong> File Retention Period Expired ({{retentionPeriod}} days)<br />
+                                                                            <strong>Action:</strong> Documents and associated files have been permanently removed from the system.
+                                                                        </td>
+                                                                    </tr>
+                                                                </table>
+                                                            </td>
+                                                        </tr>
+
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- FOOTER -->
+                                <table cellspacing="0" cellpadding="0" style="border-collapse: collapse; width: 100%;">
+                                    <tr>
+                                        <td class="py-xl" style="padding-top: 48px; padding-bottom: 48px;">
+                                            <table class="text-muted" cellspacing="0" cellpadding="0" style="border-collapse: collapse; width: 100%; color: #667382;">
+                                                <tr>
+                                                    <td style="padding-top: 16px;">
+                                                        This is an automated notification sent to Administrators and Global Administrators when documents are deleted due to retention policy.
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding-top: 16px;">
+                                                        Copyright &copy; {{currentYear}} {{companyName}}. All rights reserved.
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                </table>
+                                <!-- /FOOTER -->
+                            </td>
+                        </tr>
+                    </table>
+
+                    <!--[if (gte mso 9)|(IE)]>
+                    </td></tr></table>
+                    <![endif]-->
+                </td>
+            </tr>
+        </table>
+    </center>
+</body>
+</html>
