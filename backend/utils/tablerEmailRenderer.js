@@ -227,19 +227,19 @@ function generateButton(text, url, settings, options = {}) {
   return `
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
       <tr>
-        <td style="border-radius: 8px; background-color: ${primaryColor};" align="center">
+        <td style="background-color: ${primaryColor};" align="center">
           <!--[if mso]>
-          <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"
-            href="${url}" style="height:44px;v-text-anchor:middle;${widthStyle}" arcsize="18%"
+          <v:rect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"
+            href="${url}" style="height:44px;v-text-anchor:middle;${widthStyle}"
             strokecolor="${primaryColor}" fillcolor="${primaryColor}">
             <w:anchorlock/>
             <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:500;">
               ${escapeHtml(text)}
             </center>
-          </v:roundrect>
+          </v:rect>
           <![endif]-->
           <!--[if !mso]><!-->
-          <a href="${url}" style="background-color: ${primaryColor}; border-radius: 8px; color: #ffffff;
+          <a href="${url}" style="background-color: ${primaryColor}; color: #ffffff;
             display: inline-block; font-family: Inter, Arial, sans-serif; font-size: 14px; font-weight: 500;
             line-height: 44px; text-align: center; text-decoration: none; ${widthStyle}
             -webkit-text-size-adjust: none; mso-hide: all;">

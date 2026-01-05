@@ -58,14 +58,8 @@ function wrapEmailContent(content, settings) {
   
   // Logo HTML (if available) - minimal, just the logo
   const logoHtml = theme.logoUrl 
-    ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-        <tr>
-          <td align="center" style="padding-bottom: 30px;">
-            <img src="${theme.logoUrl}" alt="${theme.companyName}" style="max-width: 200px; height: auto;" />
-          </td>
-        </tr>
-      </table>`
-    : '';
+    ? `<img src="${theme.logoUrl}" alt="${theme.companyName}" style="max-width: 200px; height: auto;" />`
+    : `<span style="font-size: 24px; font-weight: 600; color: ${theme.primaryColor};">${theme.companyName}</span>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -84,11 +78,16 @@ function wrapEmailContent(content, settings) {
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f5f5f5;">
     <tr>
       <td align="center" style="padding: 40px 20px;">
-        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 4px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+          <!-- Logo inside box -->
+          <tr>
+            <td align="center" style="padding: 40px 30px 20px;">
+              ${logoHtml}
+            </td>
+          </tr>
           <!-- Content -->
           <tr>
-            <td style="padding: 40px 30px;">
-              ${logoHtml}
+            <td style="padding: 0 30px 40px;">
               ${content}
             </td>
           </tr>
@@ -125,19 +124,19 @@ function emailButton(text, url, settings) {
   return `
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 20px 0;">
       <tr>
-        <td align="center" style="border-radius: 6px; background-color: ${color};">
+        <td align="center" style="background-color: ${color};">
           <!--[if mso]>
-          <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" 
-            href="${url}" style="height:44px;v-text-anchor:middle;width:200px;" arcsize="14%" 
+          <v:rect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" 
+            href="${url}" style="height:44px;v-text-anchor:middle;width:200px;" 
             strokecolor="${color}" fillcolor="${color}">
             <w:anchorlock/>
             <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">
               ${text}
             </center>
-          </v:roundrect>
+          </v:rect>
           <![endif]-->
           <!--[if !mso]><!-->
-          <a href="${url}" style="background-color: ${color}; border-radius: 6px; color: #ffffff; display: inline-block; font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; line-height: 44px; text-align: center; text-decoration: none; width: 200px; -webkit-text-size-adjust: none; mso-hide: all;">
+          <a href="${url}" style="background-color: ${color}; color: #ffffff; display: inline-block; font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; line-height: 44px; text-align: center; text-decoration: none; width: 200px; -webkit-text-size-adjust: none; mso-hide: all;">
             ${text}
           </a>
           <!--<![endif]-->
