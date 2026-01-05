@@ -1076,6 +1076,125 @@ router.get('/retention-status', auth, globalAdmin, async (req, res) => {
   }
 });
 
+// Get scheduled job history - check if retention cleanup ran
+router.get('/scheduled-jobs/history', auth, globalAdmin, async (req, res) => {
+  try {
+    const { scheduledTasksQueue } = require('../config/queue');
+    
+    if (!scheduledTasksQueue) {
+      return res.json({
+        error: 'Scheduled tasks queue not available (Redis may be offline)'
+      });
+    }
+
+    // Get completed and failed jobs for document-retention-cleanup
+    const limit = parseInt(req.query.limit) || 30;
+    
+    const [completed, failed] = await Promise.all([
+      scheduledTasksQueue.getJobs(['completed'], 0, limit),
+      scheduledTasksQueue.getJobs(['failed'], 0, limit)
+    ]);
+
+    // Filter for document-retention-cleanup jobs
+    const retentionCompleted = completed
+      .filter(job => job.name === 'document-retention-cleanup')
+      .map(job => ({
+        id: job.id,
+        name: job.name,
+        completedAt: job.finishedOn ? new Date(job.finishedOn) : null,
+        processedAt: job.processedOn ? new Date(job.processedOn) : null,
+        result: job.returnvalue || null,
+        attemptsMade: job.attemptsMade
+      }))
+      .sort((a, b) => (b.completedAt || new Date(0)) - (a.completedAt || new Date(0)));
+
+    const retentionFailed = failed
+      .filter(job => job.name === 'document-retention-cleanup')
+      .map(job => ({
+        id: job.id,
+        name: job.name,
+        failedAt: job.finishedOn ? new Date(job.finishedOn) : null,
+        processedAt: job.processedOn ? new Date(job.processedOn) : null,
+        error: job.failedReason,
+        attemptsMade: job.attemptsMade
+      }))
+      .sort((a, b) => (b.failedAt || new Date(0)) - (a.failedAt || new Date(0)));
+
+    // Get repeatable job info to show next run time
+    const repeatableJobs = await scheduledTasksQueue.getRepeatableJobs();
+    const retentionJob = repeatableJobs.find(job => job.name === 'document-retention-cleanup');
+    
+    // Check activity logs for recent retention cleanup activity
+    const { getActivityLogs, ActivityType } = require('../services/activityLogger');
+    let recentActivityLogs = [];
+    try {
+      const activities = await getActivityLogs({
+        page: 1,
+        limit: 50,
+        type: ActivityType.DOCUMENT_DELETED
+      });
+      recentActivityLogs = (activities.logs || [])
+        .filter(activity => 
+          activity.action && 
+          activity.action.includes('File Retention Period Expired')
+        )
+        .map(activity => ({
+          timestamp: activity.timestamp ? new Date(activity.timestamp) : null,
+          action: activity.action,
+          details: activity.details
+        }))
+        .sort((a, b) => (b.timestamp || new Date(0)) - (a.timestamp || new Date(0)))
+        .slice(0, 10); // Last 10 cleanup runs
+    } catch (activityError) {
+      console.warn('Could not fetch activity logs:', activityError.message);
+    }
+
+    // Check last night's midnight (00:00 Europe/London timezone)
+    const now = new Date();
+    const londonTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+    const lastMidnight = new Date(londonTime);
+    lastMidnight.setHours(0, 0, 0, 0);
+    
+    // If it's before midnight today, check yesterday's midnight
+    if (londonTime.getHours() < 12) {
+      lastMidnight.setDate(lastMidnight.getDate() - 1);
+    }
+
+    const lastRunCompleted = retentionCompleted.find(job => {
+      if (!job.completedAt) return false;
+      const jobDate = new Date(job.completedAt);
+      return jobDate >= lastMidnight && jobDate < new Date(lastMidnight.getTime() + 24 * 60 * 60 * 1000);
+    });
+
+    res.json({
+      scheduledJob: retentionJob ? {
+        name: retentionJob.name,
+        pattern: retentionJob.pattern,
+        nextRun: retentionJob.next ? new Date(retentionJob.next).toISOString() : null,
+        timezone: 'Europe/London'
+      } : null,
+      lastNightRun: {
+        expectedTime: lastMidnight.toISOString(),
+        ran: !!lastRunCompleted,
+        completedAt: lastRunCompleted?.completedAt || null,
+        result: lastRunCompleted?.result || null
+      },
+      recentCompleted: retentionCompleted.slice(0, 10),
+      recentFailed: retentionFailed.slice(0, 10),
+      activityLogs: recentActivityLogs,
+      summary: {
+        totalCompleted: retentionCompleted.length,
+        totalFailed: retentionFailed.length,
+        lastCompleted: retentionCompleted[0]?.completedAt || null,
+        lastFailed: retentionFailed[0]?.failedAt || null
+      }
+    });
+  } catch (error) {
+    console.error('Error getting scheduled job history:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 router.post('/purge-files', auth, async (req, res) => {
   try {
     // Only global_admin and administrator can purge files
