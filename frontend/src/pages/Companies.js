@@ -1125,7 +1125,7 @@ const Companies = () => {
                               {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && (
                                 <div className="mb-3">
                                   <label className="row">
-                                    <span className="col">Send Bulk Email to Primary Contact</span>
+                                    <span className="col">Send Email to Contacts</span>
                                     <span className="col-auto">
                                       <label className="form-check form-check-single form-switch">
                                         <input
@@ -1156,7 +1156,7 @@ const Companies = () => {
                                   {!formData.primaryContactId && (
                                     <small className="form-hint text-warning">Please set a Primary Contact before enabling bulk emails</small>
                                   )}
-                                  <small className="form-hint">Send 1 email to Primary Contact with CC to other notified users</small>
+                                  <small className="form-hint">Send 1 email to Primary Contact with CC to other users who have email notifications enabled (respects individual user email preferences)</small>
                                 </div>
                               )}
                               {isEditing && (
@@ -1704,6 +1704,23 @@ const Companies = () => {
                                 );
                               })()}
                             </td>
+                            {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && (
+                              <td>
+                                <button
+                                  className="btn btn-sm btn-link p-0 text-decoration-none"
+                                  onClick={() => handleViewAssignedUsersModal(company)}
+                                  onMouseEnter={() => {
+                                    if (assignedUsersCount[company.id] === undefined) {
+                                      fetchAssignedUsersCount(company.id);
+                                    }
+                                  }}
+                                >
+                                  {assignedUsersCount[company.id] !== undefined
+                                    ? `${assignedUsersCount[company.id]} ${assignedUsersCount[company.id] === 1 ? 'User' : 'Users'}`
+                                    : '-'}
+                                </button>
+                              </td>
+                            )}
                             <td>
                               {company.edi ? (
                                 <span className="badge bg-info-lt">EDI</span>
@@ -2215,7 +2232,7 @@ const Companies = () => {
               </div>
               <div className="modal-body">
                 <div className="alert alert-info">
-                  <strong>Bulk Email Mode:</strong> This will send 1 email to the Primary Contact with CC to other notified users, instead of sending individual emails to each user.
+                  <strong>Email to Contacts Mode:</strong> This will send 1 email to the Primary Contact with CC to other users who have email notifications enabled. Only users with notifications enabled will receive emails (respects individual user email preferences).
                 </div>
                 
                 {loadingBulkEmailConfirmation ? (
@@ -2260,7 +2277,7 @@ const Companies = () => {
                         <>
                           {ccRecipients.length > 0 && (
                             <div className="mb-4">
-                              <h6 className="fw-bold mb-2">Other Users (CC recipients) - {ccRecipients.length} user{ccRecipients.length !== 1 ? 's' : ''}:</h6>
+                              <h6 className="fw-bold mb-2">Other Users (CC recipients) - {ccRecipients.length} user{ccRecipients.length !== 1 ? 's' : ''} with notifications enabled:</h6>
                               <div className="table-responsive">
                                 <table className="table table-sm">
                                   <thead>
@@ -2306,7 +2323,7 @@ const Companies = () => {
                             <div className="mb-3">
                               <h6 className="fw-bold mb-2 text-muted">Users Not Receiving Emails - {nonRecipients.length} user{nonRecipients.length !== 1 ? 's' : ''}:</h6>
                               <div className="text-muted small">
-                                These users do not have notifications enabled and will not receive emails.
+                                These users do not have email notifications enabled (sendInvoiceEmail or sendStatementEmail is disabled) and will not receive emails.
                               </div>
                             </div>
                           )}

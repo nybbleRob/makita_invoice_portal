@@ -2192,7 +2192,7 @@ router.post('/:id/notification-contact', auth, async (req, res) => {
  * Used for bulk email confirmation modal
  * GET /api/companies/:id/assigned-users
  */
-router.get('/:id/assigned-users', auth, requirePermission('COMPANIES_VIEW'), async (req, res) => {
+router.get('/:id/assigned-users', auth, async (req, res) => {
   try {
     const company = await Company.findByPk(req.params.id, {
       include: [{
@@ -2286,7 +2286,7 @@ router.get('/:id/assigned-users', auth, requirePermission('COMPANIES_VIEW'), asy
  * Used for displaying count in Companies table
  * GET /api/companies/:id/assigned-users-count
  */
-router.get('/:id/assigned-users-count', auth, requirePermission('COMPANIES_VIEW'), async (req, res) => {
+router.get('/:id/assigned-users-count', auth, async (req, res) => {
   try {
     const company = await Company.findByPk(req.params.id);
     
