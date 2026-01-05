@@ -1956,6 +1956,26 @@ router.get('/email-logs', auth, globalAdmin, async (req, res) => {
       const logData = log.toJSON ? log.toJSON() : log;
       const timestamp = new Date(logData.createdAt || logData.timestamp);
       
+      // Calculate send time (time from queued to sent)
+      let sendTimeMs = null;
+      let sendTimeDisplay = '';
+      if (logData.status === 'SENT' && logData.sentAt && logData.createdAt) {
+        const queuedAt = new Date(logData.createdAt);
+        const sentAt = new Date(logData.sentAt);
+        sendTimeMs = sentAt - queuedAt;
+        
+        // Format send time nicely
+        if (sendTimeMs < 1000) {
+          sendTimeDisplay = `${sendTimeMs}ms`;
+        } else if (sendTimeMs < 60000) {
+          sendTimeDisplay = `${(sendTimeMs / 1000).toFixed(1)}s`;
+        } else {
+          const minutes = Math.floor(sendTimeMs / 60000);
+          const seconds = Math.floor((sendTimeMs % 60000) / 1000);
+          sendTimeDisplay = `${minutes}m ${seconds}s`;
+        }
+      }
+      
       // Determine status indicator
       let statusIndicator = '[QUEUED]';
       let color = 'yellow';
@@ -1987,6 +2007,11 @@ router.get('/email-logs', auth, globalAdmin, async (req, res) => {
         message += ` | Provider: ${logData.provider}`;
       }
       
+      // Add send time for successful sends
+      if (sendTimeDisplay) {
+        message += ` | Time: ${sendTimeDisplay}`;
+      }
+      
       if (logData.messageId && logData.status === 'SENT') {
         message += ` | MessageID: ${logData.messageId}`;
       }
@@ -2012,7 +2037,9 @@ router.get('/email-logs', auth, globalAdmin, async (req, res) => {
         messageId: logData.messageId,
         error: logData.lastError,
         attempts: logData.attempts,
-        isBatch: (logData.recipientCount || 1) > 1
+        isBatch: (logData.recipientCount || 1) > 1,
+        sendTimeMs: sendTimeMs,
+        sendTimeDisplay: sendTimeDisplay
       };
     });
     
@@ -2049,10 +2076,30 @@ router.get('/email-logs', auth, globalAdmin, async (req, res) => {
       return new Date(b.timestamp) - new Date(a.timestamp);
     }).slice(0, limit);
     
+    // Calculate email performance statistics
+    const sentEmails = formattedLogs.filter(log => log.status === 'SENT' && log.sendTimeMs !== null);
+    let avgSendTime = null;
+    let minSendTime = null;
+    let maxSendTime = null;
+    
+    if (sentEmails.length > 0) {
+      const sendTimes = sentEmails.map(log => log.sendTimeMs);
+      avgSendTime = sendTimes.reduce((a, b) => a + b, 0) / sendTimes.length;
+      minSendTime = Math.min(...sendTimes);
+      maxSendTime = Math.max(...sendTimes);
+    }
+    
     res.json({
       logs: allLogs,
       queueStatus,
-      count: allLogs.length
+      count: allLogs.length,
+      performance: {
+        totalSent: sentEmails.length,
+        avgSendTimeMs: avgSendTime ? Math.round(avgSendTime) : null,
+        minSendTimeMs: minSendTime,
+        maxSendTimeMs: maxSendTime,
+        avgSendTimeDisplay: avgSendTime ? (avgSendTime < 1000 ? `${Math.round(avgSendTime)}ms` : `${(avgSendTime / 1000).toFixed(1)}s`) : null
+      }
     });
   } catch (error) {
     console.error('Error getting email logs:', error);

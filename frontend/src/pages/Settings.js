@@ -63,6 +63,7 @@ const Settings = () => {
   const [emailLogs, setEmailLogs] = useState([]);
   const [loadingEmailLogs, setLoadingEmailLogs] = useState(false);
   const [emailQueueStatus, setEmailQueueStatus] = useState(null);
+  const [emailPerformance, setEmailPerformance] = useState(null);
   const emailLogsRef = useRef(null);
 
   useEffect(() => {
@@ -155,6 +156,7 @@ const Settings = () => {
       const response = await api.get('/api/settings/email-logs?limit=100');
       setEmailLogs(response.data.logs || []);
       setEmailQueueStatus(response.data.queueStatus || null);
+      setEmailPerformance(response.data.performance || null);
       
       // Auto-scroll to bottom when new logs arrive
       setTimeout(() => {
