@@ -5,11 +5,14 @@ import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { useDebounce } from '../hooks/useDebounce';
 import HierarchicalCompanyFilter from '../components/HierarchicalCompanyFilter';
+import { getRoleLabel, getRoleBadgeClass } from '../utils/roleLabels';
+import { usePermissions } from '../context/PermissionContext';
 
 const Companies = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user: currentUser } = useAuth();
+  const { hasPermission } = usePermissions();
   const [companies, setCompanies] = useState([]);
   const [filteredCompanies, setFilteredCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +60,6 @@ const Companies = () => {
   const [selectedCompanyForAssignedUsers, setSelectedCompanyForAssignedUsers] = useState(null);
   const [assignedUsers, setAssignedUsers] = useState([]);
   const [loadingAssignedUsers, setLoadingAssignedUsers] = useState(false);
-  const [assignedUsersCount, setAssignedUsersCount] = useState({}); // Cache counts by company ID
   
   // Bulk Email Confirmation modal state
   const [showBulkEmailConfirmationModal, setShowBulkEmailConfirmationModal] = useState(false);
@@ -1004,23 +1006,7 @@ const Companies = () => {
     toast.success('Bulk email will be enabled when you save the company');
   };
   
-  // Fetch assigned users count for a company (for table display)
-  const fetchAssignedUsersCount = async (companyId) => {
-    if (assignedUsersCount[companyId] !== undefined) {
-      return assignedUsersCount[companyId]; // Return cached value
-    }
-    
-    try {
-      const response = await api.get(`/api/companies/${companyId}/assigned-users-count`);
-      const count = response.data.count || 0;
-      setAssignedUsersCount(prev => ({ ...prev, [companyId]: count }));
-      return count;
-    } catch (error) {
-      console.error('Error fetching assigned users count:', error);
-      return 0;
-    }
-  };
-
+  
   const renderModal = (type, show, onClose, formData, setFormData, onSubmit, resetForm) => {
     // When editing, use the type from formData (which can be changed), otherwise use the modal's type
     const isEditing = !!editingCompany;
@@ -1709,15 +1695,8 @@ const Companies = () => {
                                 <button
                                   className="btn btn-sm btn-link p-0 text-decoration-none"
                                   onClick={() => handleViewAssignedUsersModal(company)}
-                                  onMouseEnter={() => {
-                                    if (assignedUsersCount[company.id] === undefined) {
-                                      fetchAssignedUsersCount(company.id);
-                                    }
-                                  }}
                                 >
-                                  {assignedUsersCount[company.id] !== undefined
-                                    ? `${assignedUsersCount[company.id]} ${assignedUsersCount[company.id] === 1 ? 'User' : 'Users'}`
-                                    : '-'}
+                                  View Assigned Users
                                 </button>
                               </td>
                             )}
@@ -2161,6 +2140,7 @@ const Companies = () => {
                           <th>Role</th>
                           <th>Invoice Notifications</th>
                           <th>Statement Notifications</th>
+                          {hasPermission('USERS_VIEW') && <th>Actions</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -2169,12 +2149,14 @@ const Companies = () => {
                             <td className="fw-medium">
                               {user.name}
                               {user.isPrimaryContact && (
-                                <span className="badge bg-primary ms-2">Primary Contact</span>
+                                <span className="badge bg-primary-lt ms-2">Primary Contact</span>
                               )}
                             </td>
                             <td>{user.email}</td>
                             <td>
-                              <span className="badge bg-secondary-lt">{user.role}</span>
+                              <span className={`badge ${getRoleBadgeClass(user.role)}`}>
+                                {getRoleLabel(user.role)}
+                              </span>
                             </td>
                             <td>
                               {user.sendInvoiceEmail ? (
@@ -2190,6 +2172,16 @@ const Companies = () => {
                                 <span className="badge bg-secondary-lt">Disabled</span>
                               )}
                             </td>
+                            {hasPermission('USERS_VIEW') && (
+                              <td>
+                                <button
+                                  className="btn btn-sm btn-link p-0 text-decoration-none"
+                                  onClick={() => navigate(`/users/${user.id}`)}
+                                >
+                                  View
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>

@@ -2303,25 +2303,28 @@ router.get('/:id/assigned-users-count', auth, async (req, res) => {
       while (currentParentId && depth < maxDepth) {
         ancestorIds.push(currentParentId);
         const parentCompany = await Company.findByPk(currentParentId, { attributes: ['id', 'parentId'] });
-        currentParentId = parentCompany?.parentId;
+        if (!parentCompany) break;
+        currentParentId = parentCompany.parentId;
         depth++;
       }
     }
     
     // Count users assigned to this company or any of its ancestors
-    const count = await User.count({
-      include: [{
-        model: Company,
-        as: 'companies',
-        where: { id: { [Op.in]: ancestorIds } },
-        through: { attributes: [] }
-      }],
-      where: { isActive: true },
-      distinct: true,
-      col: 'User.id'
+    // Use raw query for better performance and reliability
+    const [results] = await sequelize.query(`
+      SELECT COUNT(DISTINCT uc."userId") as count
+      FROM user_companies uc
+      INNER JOIN users u ON u.id = uc."userId"
+      WHERE uc."companyId" = ANY(:ancestorIds)
+        AND u."isActive" = true
+        AND u."deletedAt" IS NULL
+    `, {
+      replacements: { ancestorIds: ancestorIds },
+      type: sequelize.QueryTypes.SELECT
     });
     
-    res.json({ count });
+    const count = results?.[0]?.count || 0;
+    res.json({ count: parseInt(count) });
   } catch (error) {
     console.error('Error fetching assigned users count:', error);
     res.status(500).json({ message: error.message });
