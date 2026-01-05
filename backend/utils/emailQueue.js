@@ -34,6 +34,7 @@ const { Settings, EmailLog } = require('../models');
 async function queueEmail(options) {
   const { 
     to, 
+    cc, // CC recipients (array or string)
     subject, 
     html, 
     text, 
@@ -115,9 +116,14 @@ async function queueEmail(options) {
   // Add email to queue (BullMQ format: name, data, options)
   let job;
   try {
+    // Handle CC recipients
+    const ccRecipients = cc ? (Array.isArray(cc) ? cc : [cc]) : [];
+    const totalRecipientCount = isBatch ? recipients.length : 1;
+    
     job = await emailQueue.add('send-email', {
       emailLogId: emailLog.id,
       to: isBatch ? recipients : primaryRecipient, // Pass array for batch, string for single
+      cc: ccRecipients.length > 0 ? ccRecipients : undefined, // CC recipients if provided
       subject,
       html,
       text,
@@ -126,8 +132,9 @@ async function queueEmail(options) {
       metadata: {
         ...metadata,
         emailLogId: emailLog.id,
-        recipientCount: recipients.length,
-        isBatch: isBatch
+        recipientCount: totalRecipientCount + ccRecipients.length,
+        isBatch: isBatch,
+        hasCC: ccRecipients.length > 0
       }
     }, {
       jobId, // Deterministic ID prevents duplicates

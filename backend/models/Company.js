@@ -88,6 +88,11 @@ module.exports = (sequelize) => {
       defaultValue: false,
       comment: 'Send one summary email per import instead of individual emails per document'
     },
+    sendBulkEmail: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      comment: 'Send one email to Primary Contact with CC to other notified users, instead of individual emails to each user'
+    },
     phone: {
       type: DataTypes.STRING,
       allowNull: true

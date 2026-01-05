@@ -469,6 +469,7 @@ router.post('/', auth, async (req, res) => {
       sendStatementEmail,
       sendStatementAttachment,
       sendEmailAsSummary,
+      sendBulkEmail,
       metadata
     } = req.body;
     
@@ -498,6 +499,11 @@ router.post('/', auth, async (req, res) => {
       if (!primaryContact) {
         return res.status(400).json({ message: 'Primary contact user not found' });
       }
+    }
+    
+    // Validate: Cannot enable sendBulkEmail without primary contact
+    if (sendBulkEmail && !primaryContactId) {
+      return res.status(400).json({ message: 'Cannot enable bulk email without a Primary Contact. Please set a Primary Contact first.' });
     }
     
     if (type && !['CORP', 'SUB', 'BRANCH'].includes(type)) {
@@ -536,6 +542,7 @@ router.post('/', auth, async (req, res) => {
       sendStatementEmail: sendStatementEmail !== undefined ? sendStatementEmail : false,
       sendStatementAttachment: sendStatementAttachment !== undefined ? sendStatementAttachment : false,
       sendEmailAsSummary: sendEmailAsSummary !== undefined ? sendEmailAsSummary : false,
+      sendBulkEmail: sendBulkEmail !== undefined ? sendBulkEmail : false,
       phone: phone || null,
       address: address || {},
       taxId: taxId || null,
@@ -674,6 +681,7 @@ router.put('/:id', auth, async (req, res) => {
       sendStatementEmail,
       sendStatementAttachment,
       sendEmailAsSummary,
+      sendBulkEmail,
       phone,
       address,
       taxId,
@@ -690,6 +698,11 @@ router.put('/:id', auth, async (req, res) => {
       if (!primaryContact) {
         return res.status(400).json({ message: 'Primary contact user not found' });
       }
+    }
+    
+    // Validate: Cannot enable sendBulkEmail without primary contact
+    if (sendBulkEmail !== undefined && sendBulkEmail === true && !company.primaryContactId && (!primaryContactId || primaryContactId === null)) {
+      return res.status(400).json({ message: 'Cannot enable bulk email without a Primary Contact. Please set a Primary Contact first.' });
     }
     
     // Validation
@@ -748,6 +761,7 @@ router.put('/:id', auth, async (req, res) => {
     if (sendStatementEmail !== undefined) company.sendStatementEmail = sendStatementEmail;
     if (sendStatementAttachment !== undefined) company.sendStatementAttachment = sendStatementAttachment;
     if (sendEmailAsSummary !== undefined) company.sendEmailAsSummary = sendEmailAsSummary;
+    if (sendBulkEmail !== undefined) company.sendBulkEmail = sendBulkEmail;
     if (phone !== undefined) company.phone = phone;
     if (address !== undefined) company.address = address;
     if (taxId !== undefined) company.taxId = taxId;
@@ -1058,6 +1072,7 @@ router.get('/:id/relationships', auth, async (req, res) => {
         sendStatementEmail: company.sendStatementEmail,
         sendStatementAttachment: company.sendStatementAttachment,
         sendEmailAsSummary: company.sendEmailAsSummary,
+        sendBulkEmail: company.sendBulkEmail,
         metadata: company.metadata
       },
       ancestors: ancestors.map(a => ({
@@ -2168,6 +2183,147 @@ router.post('/:id/notification-contact', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating notification contact:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+/**
+ * Get assigned users for a company (with notification preferences)
+ * Used for bulk email confirmation modal
+ * GET /api/companies/:id/assigned-users
+ */
+router.get('/:id/assigned-users', auth, requirePermission('COMPANIES_VIEW'), async (req, res) => {
+  try {
+    const company = await Company.findByPk(req.params.id, {
+      include: [{
+        model: User,
+        as: 'primaryContact',
+        required: false,
+        attributes: ['id', 'name', 'email', 'role', 'isActive', 
+          'sendInvoiceEmail', 'sendInvoiceAttachment', 
+          'sendStatementEmail', 'sendStatementAttachment', 
+          'sendEmailAsSummary']
+      }]
+    });
+    
+    if (!company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    // Get all ancestor company IDs (parents up the hierarchy)
+    // Users assigned to parent companies should also be included
+    const ancestorIds = [company.id];
+    if (company.parentId) {
+      let currentParentId = company.parentId;
+      const maxDepth = 10;
+      let depth = 0;
+      while (currentParentId && depth < maxDepth) {
+        ancestorIds.push(currentParentId);
+        const parentCompany = await Company.findByPk(currentParentId, { attributes: ['id', 'parentId'] });
+        currentParentId = parentCompany?.parentId;
+        depth++;
+      }
+    }
+    
+    // Get all users assigned to this company or any of its ancestors
+    const assignedUsers = await User.findAll({
+      include: [{
+        model: Company,
+        as: 'companies',
+        where: { id: { [Op.in]: ancestorIds } },
+        through: { attributes: [] }
+      }],
+      where: { isActive: true },
+      attributes: ['id', 'name', 'email', 'role', 'isActive',
+        'sendInvoiceEmail', 'sendInvoiceAttachment',
+        'sendStatementEmail', 'sendStatementAttachment',
+        'sendEmailAsSummary']
+    });
+    
+    // Format response
+    const primaryContactId = company.primaryContactId;
+    const users = assignedUsers.map(user => {
+      const userData = user.toJSON ? user.toJSON() : user;
+      return {
+        id: userData.id,
+        name: userData.name,
+        email: userData.email,
+        role: userData.role,
+        isActive: userData.isActive,
+        isPrimaryContact: userData.id === primaryContactId,
+        sendInvoiceEmail: userData.sendInvoiceEmail || false,
+        sendInvoiceAttachment: userData.sendInvoiceAttachment || false,
+        sendStatementEmail: userData.sendStatementEmail || false,
+        sendStatementAttachment: userData.sendStatementAttachment || false,
+        sendEmailAsSummary: userData.sendEmailAsSummary || false
+      };
+    });
+    
+    res.json({
+      company: {
+        id: company.id,
+        name: company.name,
+        primaryContactId: company.primaryContactId,
+        primaryContact: company.primaryContact ? {
+          id: company.primaryContact.id,
+          name: company.primaryContact.name,
+          email: company.primaryContact.email
+        } : null
+      },
+      users: users,
+      totalUsers: users.length,
+      usersWithInvoiceNotifications: users.filter(u => u.sendInvoiceEmail).length,
+      usersWithStatementNotifications: users.filter(u => u.sendStatementEmail).length
+    });
+  } catch (error) {
+    console.error('Error fetching assigned users:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+/**
+ * Get assigned users count for a company
+ * Used for displaying count in Companies table
+ * GET /api/companies/:id/assigned-users-count
+ */
+router.get('/:id/assigned-users-count', auth, requirePermission('COMPANIES_VIEW'), async (req, res) => {
+  try {
+    const company = await Company.findByPk(req.params.id);
+    
+    if (!company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    
+    // Get all ancestor company IDs
+    const ancestorIds = [company.id];
+    if (company.parentId) {
+      let currentParentId = company.parentId;
+      const maxDepth = 10;
+      let depth = 0;
+      while (currentParentId && depth < maxDepth) {
+        ancestorIds.push(currentParentId);
+        const parentCompany = await Company.findByPk(currentParentId, { attributes: ['id', 'parentId'] });
+        currentParentId = parentCompany?.parentId;
+        depth++;
+      }
+    }
+    
+    // Count users assigned to this company or any of its ancestors
+    const count = await User.count({
+      include: [{
+        model: Company,
+        as: 'companies',
+        where: { id: { [Op.in]: ancestorIds } },
+        through: { attributes: [] }
+      }],
+      where: { isActive: true },
+      distinct: true,
+      col: 'User.id'
+    });
+    
+    res.json({ count });
+  } catch (error) {
+    console.error('Error fetching assigned users count:', error);
     res.status(500).json({ message: error.message });
   }
 });

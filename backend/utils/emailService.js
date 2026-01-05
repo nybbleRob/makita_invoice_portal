@@ -325,7 +325,7 @@ function isEmailEnabled(settings) {
  * @returns {Promise<Object>} - Result object with success status and message
  */
 async function sendEmail(options, settings) {
-  let { to, subject, html, text, attachments = [] } = options;
+  let { to, cc, subject, html, text, attachments = [] } = options;
   
   // EMAIL TEST MODE: Redirect all emails to a single test address
   const testMode = settings?.emailProvider?.testMode;
@@ -349,7 +349,7 @@ async function sendEmail(options, settings) {
   const startTime = Date.now();
   
   // Build the final options (may have modified to/subject from test mode)
-  const finalOptions = { to, subject, html, text, attachments };
+  const finalOptions = { to, cc, subject, html, text, attachments };
 
   try {
     let result;
@@ -410,6 +410,7 @@ async function sendViaSMTP(options, smtpConfig) {
   const mailOptions = {
     from: `"${fromName}" <${fromEmail}>`,
     to: options.to,
+    cc: options.cc, // CC recipients if provided
     subject: options.subject,
     html: options.html,
     text: options.text || options.html.replace(/<[^>]*>/g, ''), // Strip HTML for text version
@@ -467,10 +468,12 @@ async function sendViaOffice365(options, config) {
 
   // Handle single recipient or array of recipients
   const recipients = Array.isArray(options.to) ? options.to : [options.to];
+  const ccRecipients = options.cc ? (Array.isArray(options.cc) ? options.cc : [options.cc]) : [];
   
-  // Office 365 limit: 500 recipients per message
-  if (recipients.length > 500) {
-    throw new Error(`Office 365 supports maximum 500 recipients per message. Received ${recipients.length} recipients.`);
+  // Office 365 limit: 500 recipients per message (TO + CC combined)
+  const totalRecipients = recipients.length + ccRecipients.length;
+  if (totalRecipients > 500) {
+    throw new Error(`Office 365 supports maximum 500 recipients per message (TO + CC). Received ${totalRecipients} recipients.`);
   }
 
   // Prepare message with multiple recipients
@@ -488,6 +491,15 @@ async function sendViaOffice365(options, config) {
       }))
     }
   };
+  
+  // Add CC recipients if provided
+  if (ccRecipients.length > 0) {
+    message.message.ccRecipients = ccRecipients.map(email => ({
+      emailAddress: {
+        address: email
+      }
+    }));
+  }
 
   // Add attachments if provided
   if (options.attachments && options.attachments.length > 0) {
@@ -677,9 +689,14 @@ async function sendViaSMTP2Go(options, config) {
     throw new Error('SMTP2Go configuration is incomplete');
   }
 
+  // Handle CC - SMTP2Go supports CC as array
+  const toEmails = Array.isArray(options.to) ? options.to : [options.to];
+  const ccEmails = options.cc ? (Array.isArray(options.cc) ? options.cc : [options.cc]) : [];
+  
   const payload = {
     api_key: config.apiKey,
-    to: [options.to],
+    to: toEmails,
+    ...(ccEmails.length > 0 && { cc: ccEmails }),
     sender: config.fromEmail || 'noreply@smtp2go.com',
     subject: options.subject,
     html_body: options.html,

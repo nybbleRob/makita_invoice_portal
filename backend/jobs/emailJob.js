@@ -197,11 +197,12 @@ function classifySmtpError(error) {
  * @returns {Promise<Object>} Email result
  */
 async function processEmailJob(job) {
-  const { emailLogId, to, subject, html, text, attachments, settings, metadata } = job.data;
+  const { emailLogId, to, cc, subject, html, text, attachments, settings, metadata } = job.data;
   
   // Handle batch recipients (array) or single recipient (string)
   const recipients = Array.isArray(to) ? to : [to];
-  const isBatch = recipients.length > 1;
+  const ccRecipients = cc ? (Array.isArray(cc) ? cc : [cc]) : [];
+  const isBatch = recipients.length > 1 || ccRecipients.length > 0;
   
   // Debug: log provider from job settings to trace email routing issues
   console.log(`[EmailJob ${job.id}] Settings provider: ${settings?.emailProvider?.provider || 'NOT SET IN JOB DATA'}`);
@@ -253,9 +254,10 @@ async function processEmailJob(job) {
     // Apply provider-specific rate limiting (only once per batch)
     await applyProviderRateLimit(provider);
     
-    // Send email (pass array for batch, string for single)
+    // Send email (pass array for batch, string for single, CC if present)
     const result = await sendEmail({
-      to: isBatch ? recipients : recipients[0],
+      to: isBatch && ccRecipients.length === 0 ? recipients : recipients[0], // If CC exists, use single TO
+      cc: ccRecipients.length > 0 ? ccRecipients : undefined, // CC recipients if provided
       subject,
       html,
       text,
@@ -272,7 +274,7 @@ async function processEmailJob(job) {
         lastError: null,
         errorCode: null,
         errorType: null,
-        recipientCount: isBatch ? recipients.length : null
+        recipientCount: isBatch ? (recipients.length + (ccRecipients.length || 0)) : (ccRecipients.length > 0 ? 1 + ccRecipients.length : null)
       }, { where: { id: emailLogId } });
     }
     
@@ -340,7 +342,7 @@ async function processEmailJob(job) {
           lastError: error.message.substring(0, 1000), // Truncate long errors
           errorCode: String(code),
           errorType: type,
-          recipientCount: isBatch ? recipients.length : null
+          recipientCount: isBatch ? (recipients.length + (ccRecipients.length || 0)) : (ccRecipients.length > 0 ? 1 + ccRecipients.length : null)
         }, { where: { id: emailLogId } });
       }
       
@@ -378,7 +380,7 @@ async function processEmailJob(job) {
         lastError: error.message.substring(0, 1000),
         errorCode: String(code),
         errorType: type,
-        recipientCount: isBatch ? recipients.length : null
+        recipientCount: isBatch ? (recipients.length + (ccRecipients.length || 0)) : (ccRecipients.length > 0 ? 1 + ccRecipients.length : null)
       }, { where: { id: emailLogId } });
     }
     

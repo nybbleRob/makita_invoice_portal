@@ -1480,7 +1480,27 @@ const Settings = () => {
                                         }}
                                       >
                                         <span style={{ color: '#666', marginRight: '8px' }}>
-                                          {new Date(log.timestamp).toLocaleTimeString()}
+                                          {(() => {
+                                            const logDate = new Date(log.timestamp);
+                                            const now = new Date();
+                                            const isToday = logDate.toDateString() === now.toDateString();
+                                            const isYesterday = logDate.toDateString() === new Date(now.getTime() - 24*60*60*1000).toDateString();
+                                            
+                                            if (isToday) {
+                                              return logDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                                            } else if (isYesterday) {
+                                              return `Yesterday ${logDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+                                            } else {
+                                              return logDate.toLocaleString('en-GB', { 
+                                                day: '2-digit', 
+                                                month: '2-digit', 
+                                                year: 'numeric',
+                                                hour: '2-digit', 
+                                                minute: '2-digit', 
+                                                second: '2-digit'
+                                              });
+                                            }
+                                          })()}
                                         </span>
                                         <span style={{ marginRight: '8px' }}>{icon}</span>
                                         {log.message}
@@ -3016,7 +3036,27 @@ const Settings = () => {
                                     }}
                                   >
                                     <span style={{ color: '#666', marginRight: '8px' }}>
-                                      {new Date(log.timestamp).toLocaleTimeString()}
+                                      {(() => {
+                                        const logDate = new Date(log.timestamp);
+                                        const now = new Date();
+                                        const isToday = logDate.toDateString() === now.toDateString();
+                                        const isYesterday = logDate.toDateString() === new Date(now.getTime() - 24*60*60*1000).toDateString();
+                                        
+                                        if (isToday) {
+                                          return logDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                                        } else if (isYesterday) {
+                                          return `Yesterday ${logDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+                                        } else {
+                                          return logDate.toLocaleString('en-GB', { 
+                                            day: '2-digit', 
+                                            month: '2-digit', 
+                                            year: 'numeric',
+                                            hour: '2-digit', 
+                                            minute: '2-digit', 
+                                            second: '2-digit'
+                                          });
+                                        }
+                                      })()}
                                     </span>
                                     {log.message}
                                   </div>
@@ -3028,6 +3068,16 @@ const Settings = () => {
                         <div className="card-footer" style={{ backgroundColor: '#1a1a2e', borderTop: '1px solid #2a2a4e' }}>
                           <small style={{ color: '#666' }}>
                             Auto-refreshes every 10 seconds • Showing last {emailLogs.length} entries
+                            {' • '}
+                            Frontend Time: {new Date().toLocaleString('en-GB', { 
+                              day: '2-digit', 
+                              month: '2-digit', 
+                              year: 'numeric',
+                              hour: '2-digit', 
+                              minute: '2-digit', 
+                              second: '2-digit',
+                              timeZoneName: 'short'
+                            })}
                           </small>
                         </div>
                       </div>
