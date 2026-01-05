@@ -112,9 +112,6 @@ async function queueEmail(options) {
     // Continue anyway - jobId update is not critical
   }
   
-  // Use first recipient for EmailLog (for single email)
-  const primaryRecipient = recipients[0];
-  
   // Add email to queue (BullMQ format: name, data, options)
   let job;
   try {
