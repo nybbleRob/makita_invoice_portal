@@ -2925,27 +2925,58 @@ const Settings = () => {
                           </div>
                         </div>
                         
-                        {/* Queue Status */}
-                        {emailQueueStatus && (
+                        {/* Queue Status & Performance */}
+                        {(emailQueueStatus || emailPerformance) && (
                           <div className="card-body border-bottom" style={{ backgroundColor: '#f8f9fa', padding: '12px' }}>
-                            <div className="row g-2 text-center">
-                              <div className="col-3">
-                                <small className="text-muted d-block">Waiting</small>
-                                <strong className="text-warning">{emailQueueStatus.waiting || 0}</strong>
+                            {emailQueueStatus && (
+                              <div className="row g-2 text-center mb-3">
+                                <div className="col-3">
+                                  <small className="text-muted d-block">Waiting</small>
+                                  <strong className="text-warning">{emailQueueStatus.waiting || 0}</strong>
+                                </div>
+                                <div className="col-3">
+                                  <small className="text-muted d-block">Active</small>
+                                  <strong className="text-info">{emailQueueStatus.active || 0}</strong>
+                                </div>
+                                <div className="col-3">
+                                  <small className="text-muted d-block">Completed</small>
+                                  <strong className="text-success">{emailQueueStatus.completed || 0}</strong>
+                                </div>
+                                <div className="col-3">
+                                  <small className="text-muted d-block">Failed</small>
+                                  <strong className="text-danger">{emailQueueStatus.failed || 0}</strong>
+                                </div>
                               </div>
-                              <div className="col-3">
-                                <small className="text-muted d-block">Active</small>
-                                <strong className="text-info">{emailQueueStatus.active || 0}</strong>
+                            )}
+                            {emailPerformance && emailPerformance.totalSent > 0 && (
+                              <div className="row g-2 text-center border-top pt-2">
+                                <div className="col-12">
+                                  <small className="text-muted d-block">Email Performance (Last 100)</small>
+                                </div>
+                                <div className="col-4">
+                                  <small className="text-muted d-block">Avg Send Time</small>
+                                  <strong className="text-primary">{emailPerformance.avgSendTimeDisplay || 'N/A'}</strong>
+                                </div>
+                                <div className="col-4">
+                                  <small className="text-muted d-block">Fastest</small>
+                                  <strong className="text-success">
+                                    {emailPerformance.minSendTimeMs < 1000 
+                                      ? `${emailPerformance.minSendTimeMs}ms`
+                                      : `${(emailPerformance.minSendTimeMs / 1000).toFixed(1)}s`}
+                                  </strong>
+                                </div>
+                                <div className="col-4">
+                                  <small className="text-muted d-block">Slowest</small>
+                                  <strong className="text-warning">
+                                    {emailPerformance.maxSendTimeMs < 1000 
+                                      ? `${emailPerformance.maxSendTimeMs}ms`
+                                      : emailPerformance.maxSendTimeMs < 60000
+                                        ? `${(emailPerformance.maxSendTimeMs / 1000).toFixed(1)}s`
+                                        : `${Math.floor(emailPerformance.maxSendTimeMs / 60000)}m ${Math.floor((emailPerformance.maxSendTimeMs % 60000) / 1000)}s`}
+                                  </strong>
+                                </div>
                               </div>
-                              <div className="col-3">
-                                <small className="text-muted d-block">Completed</small>
-                                <strong className="text-success">{emailQueueStatus.completed || 0}</strong>
-                              </div>
-                              <div className="col-3">
-                                <small className="text-muted d-block">Failed</small>
-                                <strong className="text-danger">{emailQueueStatus.failed || 0}</strong>
-                              </div>
-                            </div>
+                            )}
                           </div>
                         )}
 
