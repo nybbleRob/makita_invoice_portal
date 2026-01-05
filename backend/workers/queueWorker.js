@@ -28,7 +28,20 @@ const {
   emailQueue,
   scheduledTasksQueue,
   EMAIL_RATE_MAX,
-  EMAIL_RATE_DURATION_MS
+  EMAIL_RATE_DURATION_MS,
+  EMAIL_WORKER_CONCURRENCY_OFFICE365,
+  EMAIL_WORKER_CONCURRENCY_SMTP2GO,
+  EMAIL_WORKER_CONCURRENCY_SMTP,
+  EMAIL_WORKER_CONCURRENCY_RESEND,
+  EMAIL_WORKER_CONCURRENCY_DEFAULT,
+  EMAIL_RATE_MAX_OFFICE365,
+  EMAIL_RATE_DURATION_MS_OFFICE365,
+  EMAIL_RATE_MAX_SMTP2GO,
+  EMAIL_RATE_DURATION_MS_SMTP2GO,
+  EMAIL_RATE_MAX_SMTP,
+  EMAIL_RATE_DURATION_MS_SMTP,
+  EMAIL_RATE_MAX_RESEND,
+  EMAIL_RATE_DURATION_MS_RESEND
 } = require('../config/queue');
 
 console.log('🔧 Initializing BullMQ queue worker...');
@@ -38,8 +51,22 @@ const redisHost = process.env.REDIS_HOST || 'localhost';
 const redisPort = parseInt(process.env.REDIS_PORT) || 6379;
 const redisPassword = process.env.REDIS_PASSWORD || undefined;
 
-// Email worker configuration
-const EMAIL_WORKER_CONCURRENCY = parseInt(process.env.EMAIL_WORKER_CONCURRENCY) || 1;
+// Email worker configuration - use maximum concurrency across all providers
+// Rate limiting will be applied per-provider in the job processor
+const EMAIL_WORKER_CONCURRENCY = Math.max(
+  EMAIL_WORKER_CONCURRENCY_OFFICE365,
+  EMAIL_WORKER_CONCURRENCY_SMTP2GO,
+  EMAIL_WORKER_CONCURRENCY_SMTP,
+  EMAIL_WORKER_CONCURRENCY_RESEND,
+  EMAIL_WORKER_CONCURRENCY_DEFAULT
+);
+
+console.log(`📧 Email worker configuration:`);
+console.log(`   Concurrency: ${EMAIL_WORKER_CONCURRENCY} (max across all providers)`);
+console.log(`   Office 365: ${EMAIL_WORKER_CONCURRENCY_OFFICE365} workers, ${EMAIL_RATE_MAX_OFFICE365} per ${EMAIL_RATE_DURATION_MS_OFFICE365}ms`);
+console.log(`   SMTP2Go: ${EMAIL_WORKER_CONCURRENCY_SMTP2GO} workers, ${EMAIL_RATE_MAX_SMTP2GO} per ${EMAIL_RATE_DURATION_MS_SMTP2GO}ms`);
+console.log(`   SMTP: ${EMAIL_WORKER_CONCURRENCY_SMTP} workers, ${EMAIL_RATE_MAX_SMTP} per ${EMAIL_RATE_DURATION_MS_SMTP}ms`);
+console.log(`   Resend: ${EMAIL_WORKER_CONCURRENCY_RESEND} workers, ${EMAIL_RATE_MAX_RESEND} per ${EMAIL_RATE_DURATION_MS_RESEND}ms`);
 
 // Create shared Redis connection for all workers
 let connection = null;
@@ -364,13 +391,16 @@ invoiceImportWorker.on('stalled', (jobId) => {
 workers.push(invoiceImportWorker);
 console.log('✅ Invoice import worker initialized');
 
-// Email worker with configurable concurrency and rate limiting
+// Email worker with provider-aware concurrency and rate limiting
+// Note: BullMQ limiter is global, so we use max concurrency and apply
+// provider-specific rate limiting in the job processor
 const emailWorker = new Worker('email', async (job) => {
   // Clean log: no body content, just job ID and recipient
   return await processEmailJob(job);
 }, {
   ...commonWorkerOptions,
   concurrency: EMAIL_WORKER_CONCURRENCY,
+  // Use default rate limiter as fallback (provider-specific limits applied in processor)
   limiter: {
     max: EMAIL_RATE_MAX,
     duration: EMAIL_RATE_DURATION_MS

@@ -12,8 +12,9 @@ const { Settings, EmailLog } = require('../models');
 
 /**
  * Queue an email for sending with idempotency and tracking
+ * Supports single recipient or batch recipients (for Office 365 batching)
  * @param {Object} options - Email options
- * @param {string} options.to - Recipient email address
+ * @param {string|string[]} options.to - Recipient email address or array of recipients
  * @param {string} options.subject - Email subject
  * @param {string} options.html - HTML email body
  * @param {string} options.text - Plain text email body (optional)
@@ -27,7 +28,8 @@ const { Settings, EmailLog } = require('../models');
  *   - companyId: Related company ID
  *   - companyName: Related company name
  * @param {number} options.priority - Job priority (higher = more important, default: 0)
- * @returns {Promise<Object>} { job, emailLog }
+ * @param {boolean} options.forceBatch - Force batch mode even for single recipient (default: false)
+ * @returns {Promise<Object>} { job, emailLog } or { jobs, emailLogs } for batch
  */
 async function queueEmail(options) {
   const { 
@@ -39,18 +41,50 @@ async function queueEmail(options) {
     templateName,
     settings, 
     metadata = {}, 
-    priority = 0 
+    priority = 0,
+    forceBatch = false
   } = options;
   
   if (!to || !subject || !html) {
     throw new Error('Email queue: to, subject, and html are required');
   }
   
+  // Handle batch recipients (array)
+  const recipients = Array.isArray(to) ? to : [to];
+  const isBatch = recipients.length > 1 || forceBatch;
+  
+  // Get settings to check provider
+  let emailSettings = settings;
+  if (!emailSettings) {
+    emailSettings = await Settings.getSettings();
+  }
+  
+  const provider = emailSettings?.emailProvider?.provider;
+  
+  // For Office 365, use batch sending when multiple recipients
+  // For other providers, queue individual emails (backward compatible)
+  if (isBatch && provider === 'office365' && recipients.length > 1) {
+    return await queueBatchEmail({
+      to: recipients,
+      subject,
+      html,
+      text,
+      attachments,
+      templateName,
+      settings: emailSettings,
+      metadata,
+      priority
+    });
+  }
+  
+  // Use first recipient for EmailLog (for single email)
+  const primaryRecipient = recipients[0];
+  
   let emailLog;
   try {
     // Create EmailLog record first for tracking and idempotency
     emailLog = await EmailLog.create({
-      to,
+      to: primaryRecipient, // Store primary recipient (EmailLog.to is single email field)
       subject,
       templateName: templateName || null,
       status: 'QUEUED',
@@ -58,10 +92,11 @@ async function queueEmail(options) {
       userId: metadata.userId || null,
       userEmail: metadata.userEmail || null,
       companyId: metadata.companyId || null,
-      companyName: metadata.companyName || null
+      companyName: metadata.companyName || null,
+      recipientCount: isBatch ? recipients.length : 1
     });
   } catch (dbError) {
-    console.error(`[EmailQueue] Failed to create EmailLog for ${to}:`, dbError.message);
+    console.error(`[EmailQueue] Failed to create EmailLog for ${primaryRecipient}:`, dbError.message);
     throw dbError;
   }
   
@@ -77,18 +112,15 @@ async function queueEmail(options) {
     // Continue anyway - jobId update is not critical
   }
   
-  // Get settings if not provided
-  let emailSettings = settings;
-  if (!emailSettings) {
-    emailSettings = await Settings.getSettings();
-  }
+  // Use first recipient for EmailLog (for single email)
+  const primaryRecipient = recipients[0];
   
   // Add email to queue (BullMQ format: name, data, options)
   let job;
   try {
     job = await emailQueue.add('send-email', {
       emailLogId: emailLog.id,
-      to,
+      to: isBatch ? recipients : primaryRecipient, // Pass array for batch, string for single
       subject,
       html,
       text,
@@ -96,7 +128,9 @@ async function queueEmail(options) {
       settings: emailSettings,
       metadata: {
         ...metadata,
-        emailLogId: emailLog.id
+        emailLogId: emailLog.id,
+        recipientCount: recipients.length,
+        isBatch: isBatch
       }
     }, {
       jobId, // Deterministic ID prevents duplicates
@@ -115,13 +149,118 @@ async function queueEmail(options) {
       }
     });
   } catch (queueError) {
-    console.error(`[EmailQueue] Failed to add job to queue for ${to}:`, queueError.message);
+    console.error(`[EmailQueue] Failed to add job to queue for ${primaryRecipient}:`, queueError.message);
     // Update EmailLog to failed status
     await EmailLog.update({ status: 'FAILED_PERMANENT', lastError: queueError.message }, { where: { id: emailLog.id } });
     throw queueError;
   }
   
-  console.log(`[EmailQueue] Queued email to ${to} (job ${job.id}, emailLog ${emailLog.id})`);
+  if (isBatch) {
+    console.log(`[EmailQueue] Queued batch email to ${recipients.length} recipients (job ${job.id}, emailLog ${emailLog.id})`);
+  } else {
+    console.log(`[EmailQueue] Queued email to ${primaryRecipient} (job ${job.id}, emailLog ${emailLog.id})`);
+  }
+  
+  return { job, emailLog };
+}
+
+/**
+ * Queue a batch email (multiple recipients, same content)
+ * Used for Office 365 batching optimization
+ * @param {Object} options - Email options with to as array
+ * @returns {Promise<Object>} { job, emailLog }
+ */
+async function queueBatchEmail(options) {
+  const { 
+    to, // Array of recipients
+    subject, 
+    html, 
+    text, 
+    attachments, 
+    templateName,
+    settings, 
+    metadata = {}, 
+    priority = 0 
+  } = options;
+  
+  if (!Array.isArray(to) || to.length === 0) {
+    throw new Error('Batch email: to must be a non-empty array');
+  }
+  
+  if (!subject || !html) {
+    throw new Error('Batch email: subject and html are required');
+  }
+  
+  // Create EmailLog for batch (use first recipient as primary)
+  const primaryRecipient = to[0];
+  let emailLog;
+  try {
+    emailLog = await EmailLog.create({
+      to: primaryRecipient, // Store primary recipient
+      subject,
+      templateName: templateName || null,
+      status: 'QUEUED',
+      maxAttempts: defaultEmailOptions.attempts || 10,
+      userId: metadata.userId || null,
+      userEmail: metadata.userEmail || null,
+      companyId: metadata.companyId || null,
+      companyName: metadata.companyName || null,
+      // Store batch info in metadata field if available
+      recipientCount: to.length
+    });
+  } catch (dbError) {
+    console.error(`[EmailQueue] Failed to create EmailLog for batch:`, dbError.message);
+    throw dbError;
+  }
+  
+  const jobId = `email_batch_${emailLog.id}`;
+  
+  // Get settings if not provided
+  let emailSettings = settings;
+  if (!emailSettings) {
+    emailSettings = await Settings.getSettings();
+  }
+  
+  // Add batch email to queue
+  let job;
+  try {
+    job = await emailQueue.add('send-email', {
+      emailLogId: emailLog.id,
+      to: to, // Array of recipients for batch
+      subject,
+      html,
+      text,
+      attachments: attachments || [],
+      settings: emailSettings,
+      metadata: {
+        ...metadata,
+        emailLogId: emailLog.id,
+        recipientCount: to.length,
+        isBatch: true
+      }
+    }, {
+      jobId,
+      priority,
+      attempts: defaultEmailOptions.attempts || 10,
+      backoff: defaultEmailOptions.backoff || {
+        type: 'exponential',
+        delay: 60000
+      },
+      removeOnComplete: defaultEmailOptions.removeOnComplete || {
+        age: 7 * 24 * 3600,
+        count: 5000
+      },
+      removeOnFail: defaultEmailOptions.removeOnFail || {
+        age: 30 * 24 * 3600
+      }
+    });
+  } catch (queueError) {
+    console.error(`[EmailQueue] Failed to add batch job to queue:`, queueError.message);
+    await EmailLog.update({ status: 'FAILED_PERMANENT', lastError: queueError.message }, { where: { id: emailLog.id } });
+    throw queueError;
+  }
+  
+  console.log(`[EmailQueue] Queued batch email to ${to.length} recipients (job ${job.id}, emailLog ${emailLog.id})`);
   
   return { job, emailLog };
 }
@@ -305,6 +444,7 @@ async function getEmailLogs(options = {}) {
 
 module.exports = {
   queueEmail,
+  queueBatchEmail,
   queueEmailSimple,
   getEmailQueueStats,
   getFailedEmailJobs,

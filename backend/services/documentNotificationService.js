@@ -258,79 +258,103 @@ async function queueDocumentNotifications(options) {
   
   const queuedEmails = [];
   
+  // Group recipients by email content for batching (Office 365 optimization)
+  // Group summary recipients together
+  const summaryRecipients = [];
+  const individualEmailGroups = new Map(); // Key: documentId, Value: array of recipients
+  
   for (const [email, recipient] of allRecipients) {
+    if (recipient.sendAsSummary) {
+      summaryRecipients.push(recipient);
+    } else {
+      // Group individual emails by document
+      if (recipient.receiveInvoiceNotification) {
+        for (const invoice of invoices) {
+          const key = `invoice_${invoice.id}`;
+          if (!individualEmailGroups.has(key)) {
+            individualEmailGroups.set(key, { document: invoice, documentType: 'invoice', recipients: [] });
+          }
+          individualEmailGroups.get(key).recipients.push(recipient);
+        }
+        for (const creditNote of creditNotes) {
+          const key = `creditnote_${creditNote.id}`;
+          if (!individualEmailGroups.has(key)) {
+            individualEmailGroups.set(key, { document: creditNote, documentType: 'credit_note', recipients: [] });
+          }
+          individualEmailGroups.get(key).recipients.push(recipient);
+        }
+      }
+      if (recipient.receiveStatementNotification) {
+        for (const statement of statements) {
+          const key = `statement_${statement.id}`;
+          if (!individualEmailGroups.has(key)) {
+            individualEmailGroups.set(key, { document: statement, documentType: 'statement', recipients: [] });
+          }
+          individualEmailGroups.get(key).recipients.push(recipient);
+        }
+      }
+    }
+  }
+  
+  // Queue batch summary email if recipients exist
+  if (summaryRecipients.length > 0) {
     try {
-      if (recipient.sendAsSummary) {
-        // Queue summary email
-        const summaryEmail = await queueSummaryEmail({
-          recipient,
+      const summaryEmail = await queueBatchSummaryEmail({
+        recipients: summaryRecipients,
+        companyName,
+        companyId,
+        importId,
+        invoices,
+        creditNotes,
+        statements,
+        portalName,
+        portalUrl,
+        triggeredByUserId,
+        triggeredByEmail
+      });
+      queuedEmails.push(summaryEmail);
+    } catch (error) {
+      console.error(`[NotificationService] Error queuing batch summary email:`, error.message);
+    }
+  }
+  
+  // Queue individual emails (batch when possible for Office 365)
+  for (const [key, group] of individualEmailGroups) {
+    try {
+      if (group.recipients.length > 1) {
+        // Batch recipients for same document (Office 365 optimization)
+        const batchEmail = await queueBatchIndividualEmail({
+          recipients: group.recipients,
+          document: group.document,
+          documentType: group.documentType,
           companyName,
           companyId,
-          importId,
-          invoices: recipient.receiveInvoiceNotification ? invoices : [],
-          creditNotes: recipient.receiveInvoiceNotification ? creditNotes : [],
-          statements: recipient.receiveStatementNotification ? statements : [],
           portalName,
           portalUrl,
           triggeredByUserId,
           triggeredByEmail
         });
-        queuedEmails.push(summaryEmail);
+        queuedEmails.push(batchEmail);
       } else {
-        // Queue individual emails
-        if (recipient.receiveInvoiceNotification) {
-          for (const invoice of invoices) {
-            const emailResult = await queueIndividualEmail({
-              recipient,
-              document: invoice,
-              documentType: 'invoice',
-              companyName,
-              companyId,
-              portalName,
-              portalUrl,
-              triggeredByUserId,
-              triggeredByEmail
-            });
-            queuedEmails.push(emailResult);
-          }
-          
-          for (const creditNote of creditNotes) {
-            const emailResult = await queueIndividualEmail({
-              recipient,
-              document: creditNote,
-              documentType: 'credit_note',
-              companyName,
-              companyId,
-              portalName,
-              portalUrl,
-              triggeredByUserId,
-              triggeredByEmail
-            });
-            queuedEmails.push(emailResult);
-          }
-        }
-        
-        if (recipient.receiveStatementNotification) {
-          for (const statement of statements) {
-            const emailResult = await queueIndividualEmail({
-              recipient,
-              document: statement,
-              documentType: 'statement',
-              companyName,
-              companyId,
-              portalName,
-              portalUrl,
-              triggeredByUserId,
-              triggeredByEmail
-            });
-            queuedEmails.push(emailResult);
-          }
-        }
+        // Single recipient - use existing individual email function
+        const emailResult = await queueIndividualEmail({
+          recipient: group.recipients[0],
+          document: group.document,
+          documentType: group.documentType,
+          companyName,
+          companyId,
+          portalName,
+          portalUrl,
+          triggeredByUserId,
+          triggeredByEmail
+        });
+        queuedEmails.push(emailResult);
       }
     } catch (error) {
-      console.error(`[NotificationService] Error queuing email for ${email}:`, error.message);
+      console.error(`[NotificationService] Error queuing email for ${key}:`, error.message);
     }
   }
+  
   
   console.log(`[NotificationService] Queued ${queuedEmails.length} notification emails`);
   
@@ -339,6 +363,157 @@ async function queueDocumentNotifications(options) {
     emailsQueued: queuedEmails.length,
     emails: queuedEmails
   };
+}
+
+/**
+ * Queue a batch summary email for multiple recipients (Office 365 optimization)
+ * @param {Object} options - Batch summary email options
+ * @returns {Promise<Object>} Queue result
+ */
+async function queueBatchSummaryEmail(options) {
+  const {
+    recipients,
+    companyName,
+    companyId,
+    importId,
+    invoices,
+    creditNotes,
+    statements,
+    portalName,
+    portalUrl,
+    triggeredByUserId,
+    triggeredByEmail
+  } = options;
+  
+  if (!recipients || recipients.length === 0) {
+    return null;
+  }
+  
+  const totalDocuments = invoices.length + creditNotes.length + statements.length;
+  
+  if (totalDocuments === 0) {
+    return null;
+  }
+  
+  // Get settings for template
+  const settings = await Settings.getSettings();
+  const retentionDays = settings?.documentRetentionPeriod || 30;
+  
+  // Render template (use first recipient's name for template, but send to all)
+  const html = renderTemplate('document-summary', {
+    userName: 'Valued Customer', // Generic greeting for batch
+    totalDocuments: totalDocuments.toString(),
+    invoiceCount: invoices.length > 0 ? invoices.length.toString() : '',
+    creditNoteCount: creditNotes.length > 0 ? creditNotes.length.toString() : '',
+    statementCount: statements.length > 0 ? statements.length.toString() : '',
+    retentionPeriod: retentionDays.toString()
+  }, settings);
+  
+  const subject = `Document Summary - ${totalDocuments} new document${totalDocuments > 1 ? 's' : ''} available`;
+  
+  // Get recipient emails
+  const recipientEmails = recipients.map(r => r.email);
+  
+  const result = await queueEmail({
+    to: recipientEmails, // Array for batch
+    subject,
+    html,
+    templateName: 'document_upload_summary',
+    metadata: {
+      userId: triggeredByUserId || null,
+      userEmail: triggeredByEmail || 'system',
+      companyId,
+      companyName,
+      importId,
+      notificationType: 'summary_batch',
+      documentCounts: {
+        invoices: invoices.length,
+        creditNotes: creditNotes.length,
+        statements: statements.length
+      },
+      recipientCount: recipients.length
+    }
+  });
+  
+  console.log(`[NotificationService] Queued batch summary email to ${recipients.length} recipients`);
+  
+  return { type: 'summary_batch', recipientCount: recipients.length, jobId: result.job?.id };
+}
+
+/**
+ * Queue a batch individual email for multiple recipients (Office 365 optimization)
+ * @param {Object} options - Batch individual email options
+ * @returns {Promise<Object>} Queue result
+ */
+async function queueBatchIndividualEmail(options) {
+  const {
+    recipients,
+    document,
+    documentType,
+    companyName,
+    companyId,
+    portalName,
+    portalUrl,
+    triggeredByUserId,
+    triggeredByEmail
+  } = options;
+  
+  if (!recipients || recipients.length === 0 || !document) {
+    return null;
+  }
+  
+  // Get settings for template
+  const settings = await Settings.getSettings();
+  const retentionDays = settings?.documentRetentionPeriod || 30;
+  
+  // Determine document type name
+  const documentTypeName = documentType === 'credit_note' ? 'Credit Note' : 
+                          documentType === 'statement' ? 'Statement' : 'Invoice';
+  
+  // Build document URL
+  const documentUrl = documentType === 'credit_note' 
+    ? `${portalUrl}/credit-notes/${document.id}/view`
+    : documentType === 'statement'
+    ? `${portalUrl}/statements/${document.id}/view`
+    : `${portalUrl}/invoices/${document.id}/view`;
+  
+  // Render template (generic greeting for batch)
+  const html = renderTemplate('document-notification', {
+    userName: 'Valued Customer', // Generic for batch
+    documentTypeName,
+    documentNumber: document.invoiceNumber || document.creditNoteNumber || document.statementNumber || 'N/A',
+    documentDate: formatDate(document.issueDate || document.createdAt),
+    documentAmount: formatCurrency(document.amount || 0),
+    supplierName: companyName,
+    documentUrl,
+    retentionPeriod: retentionDays.toString()
+  }, settings);
+  
+  const subject = `New ${documentTypeName} - ${document.invoiceNumber || document.creditNoteNumber || document.statementNumber || 'Document'}`;
+  
+  // Get recipient emails
+  const recipientEmails = recipients.map(r => r.email);
+  
+  const result = await queueEmail({
+    to: recipientEmails, // Array for batch
+    subject,
+    html,
+    templateName: `document_${documentType}_notification`,
+    metadata: {
+      userId: triggeredByUserId || null,
+      userEmail: triggeredByEmail || 'system',
+      companyId,
+      companyName,
+      documentId: document.id,
+      documentType,
+      notificationType: 'individual_batch',
+      recipientCount: recipients.length
+    }
+  });
+  
+  console.log(`[NotificationService] Queued batch individual email for ${documentTypeName} to ${recipients.length} recipients`);
+  
+  return { type: 'individual_batch', documentType, recipientCount: recipients.length, jobId: result.job?.id };
 }
 
 /**
@@ -503,5 +678,7 @@ module.exports = {
   getNotificationRecipients,
   queueDocumentNotifications,
   queueSummaryEmail,
-  queueIndividualEmail
+  queueBatchSummaryEmail,
+  queueIndividualEmail,
+  queueBatchIndividualEmail
 };

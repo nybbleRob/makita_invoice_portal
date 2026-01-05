@@ -11,6 +11,82 @@ const { UnrecoverableError } = require('bullmq');
 const { sendEmail } = require('../utils/emailService');
 const { Settings, EmailLog } = require('../models');
 const { logActivity, ActivityType } = require('../services/activityLogger');
+const {
+  EMAIL_RATE_MAX_OFFICE365,
+  EMAIL_RATE_DURATION_MS_OFFICE365,
+  EMAIL_RATE_MAX_SMTP2GO,
+  EMAIL_RATE_DURATION_MS_SMTP2GO,
+  EMAIL_RATE_MAX_SMTP,
+  EMAIL_RATE_DURATION_MS_SMTP,
+  EMAIL_RATE_MAX_RESEND,
+  EMAIL_RATE_DURATION_MS_RESEND
+} = require('../config/queue');
+
+// Provider-specific rate limiters (simple token bucket)
+// Initialize with max tokens available
+const rateLimiters = {
+  office365: { 
+    maxTokens: EMAIL_RATE_MAX_OFFICE365,
+    tokens: EMAIL_RATE_MAX_OFFICE365, 
+    lastRefill: Date.now(), 
+    window: EMAIL_RATE_DURATION_MS_OFFICE365 
+  },
+  smtp2go: { 
+    maxTokens: EMAIL_RATE_MAX_SMTP2GO,
+    tokens: EMAIL_RATE_MAX_SMTP2GO, 
+    lastRefill: Date.now(), 
+    window: EMAIL_RATE_DURATION_MS_SMTP2GO 
+  },
+  smtp: { 
+    maxTokens: EMAIL_RATE_MAX_SMTP,
+    tokens: EMAIL_RATE_MAX_SMTP, 
+    lastRefill: Date.now(), 
+    window: EMAIL_RATE_DURATION_MS_SMTP 
+  },
+  resend: { 
+    maxTokens: EMAIL_RATE_MAX_RESEND,
+    tokens: EMAIL_RATE_MAX_RESEND, 
+    lastRefill: Date.now(), 
+    window: EMAIL_RATE_DURATION_MS_RESEND 
+  },
+  mailtrap: { 
+    maxTokens: EMAIL_RATE_MAX_SMTP,
+    tokens: EMAIL_RATE_MAX_SMTP, 
+    lastRefill: Date.now(), 
+    window: EMAIL_RATE_DURATION_MS_SMTP 
+  }
+};
+
+/**
+ * Apply provider-specific rate limiting
+ * @param {string} provider - Email provider name
+ * @returns {Promise<void>} Resolves when rate limit allows sending
+ */
+async function applyProviderRateLimit(provider) {
+  const limiter = rateLimiters[provider] || rateLimiters.smtp;
+  const now = Date.now();
+  
+  // Refill tokens if window has passed
+  if (now - limiter.lastRefill >= limiter.window) {
+    limiter.tokens = limiter.maxTokens;
+    limiter.lastRefill = now;
+  }
+  
+  // Wait if no tokens available
+  if (limiter.tokens <= 0) {
+    const waitTime = limiter.window - (now - limiter.lastRefill);
+    if (waitTime > 0) {
+      console.log(`[EmailJob] Rate limit: waiting ${waitTime}ms for ${provider}`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      // Refill after wait
+      limiter.tokens = limiter.maxTokens;
+      limiter.lastRefill = Date.now();
+    }
+  }
+  
+  // Consume token
+  limiter.tokens--;
+}
 
 /**
  * Extract SMTP response code from error message
@@ -123,11 +199,19 @@ function classifySmtpError(error) {
 async function processEmailJob(job) {
   const { emailLogId, to, subject, html, text, attachments, settings, metadata } = job.data;
   
+  // Handle batch recipients (array) or single recipient (string)
+  const recipients = Array.isArray(to) ? to : [to];
+  const isBatch = recipients.length > 1;
+  
   // Debug: log provider from job settings to trace email routing issues
   console.log(`[EmailJob ${job.id}] Settings provider: ${settings?.emailProvider?.provider || 'NOT SET IN JOB DATA'}`);
   
   // Log start (no body content)
-  console.log(`[EmailJob ${job.id}] Processing email to=${to} subject="${subject}"`);
+  if (isBatch) {
+    console.log(`[EmailJob ${job.id}] Processing batch email to ${recipients.length} recipients subject="${subject}"`);
+  } else {
+    console.log(`[EmailJob ${job.id}] Processing email to=${recipients[0]} subject="${subject}"`);
+  }
   
   // If we have an emailLogId, check for idempotency
   let emailLog = null;
@@ -163,9 +247,15 @@ async function processEmailJob(job) {
       };
     }
     
-    // Send email
+    // Get provider for rate limiting
+    const provider = emailSettings?.emailProvider?.provider || 'smtp';
+    
+    // Apply provider-specific rate limiting (only once per batch)
+    await applyProviderRateLimit(provider);
+    
+    // Send email (pass array for batch, string for single)
     const result = await sendEmail({
-      to,
+      to: isBatch ? recipients : recipients[0],
       subject,
       html,
       text,
@@ -181,48 +271,66 @@ async function processEmailJob(job) {
         provider: result.provider,
         lastError: null,
         errorCode: null,
-        errorType: null
+        errorType: null,
+        recipientCount: isBatch ? recipients.length : null
       }, { where: { id: emailLogId } });
     }
     
     // Log to Activity Logs (visible at /activity-logs)
+    const recipientDisplay = isBatch ? `${recipients.length} recipients` : recipients[0];
     await logActivity({
       type: ActivityType.EMAIL_SENT,
       userId: metadata?.userId || null,
       userEmail: metadata?.userEmail || 'system',
       userRole: metadata?.userRole || null,
-      action: `Email sent to ${to}: "${subject}"`,
+      action: `Email sent to ${recipientDisplay}: "${subject}"`,
       details: {
         emailLogId: emailLogId || null,
-        to,
+        to: isBatch ? recipients : recipients[0],
+        recipientCount: isBatch ? recipients.length : 1,
         subject,
         messageId: result.messageId,
         provider: result.provider,
         jobId: job.id,
-        attempts: job.attemptsMade + 1
+        attempts: job.attemptsMade + 1,
+        isBatch: isBatch
       },
       companyId: metadata?.companyId || null,
       companyName: metadata?.companyName || null
     });
     
     // Clean log (no body)
-    console.log(`✅ [${job.id}] SENT to=${to} messageId=${result.messageId}`);
+    if (isBatch) {
+      console.log(`✅ [${job.id}] SENT batch to ${recipients.length} recipients messageId=${result.messageId} provider=${result.provider}`);
+    } else {
+      console.log(`✅ [${job.id}] SENT to=${recipients[0]} messageId=${result.messageId} provider=${result.provider}`);
+    }
+    
+    // Log batch statistics for monitoring
+    if (isBatch && result.recipientCount) {
+      console.log(`📊 [${job.id}] Batch email stats: ${result.recipientCount} recipients, provider=${result.provider}`);
+    }
     
     return {
       success: true,
       messageId: result.messageId,
-      to,
+      to: isBatch ? recipients : recipients[0],
+      recipientCount: isBatch ? recipients.length : 1,
       subject,
       provider: result.provider,
-      emailLogId
+      emailLogId,
+      isBatch: isBatch
     };
     
   } catch (error) {
     // Classify the error
     const { type, code } = classifySmtpError(error);
     
+    // Define recipient display for error logging
+    const recipientDisplay = isBatch ? `${recipients.length} recipients` : recipients[0];
+    
     // Clean log (no body, just classification)
-    console.error(`❌ [${job.id}] FAILED to=${to} code=${code} type=${type} msg="${error.message}"`);
+    console.error(`❌ [${job.id}] FAILED to=${recipientDisplay} code=${code} type=${type} msg="${error.message}"`);
     
     if (type === 'PERMANENT') {
       // Update EmailLog for permanent failure
@@ -231,7 +339,8 @@ async function processEmailJob(job) {
           status: 'FAILED_PERMANENT',
           lastError: error.message.substring(0, 1000), // Truncate long errors
           errorCode: String(code),
-          errorType: type
+          errorType: type,
+          recipientCount: isBatch ? recipients.length : null
         }, { where: { id: emailLogId } });
       }
       
@@ -241,16 +350,18 @@ async function processEmailJob(job) {
         userId: metadata?.userId || null,
         userEmail: metadata?.userEmail || 'system',
         userRole: metadata?.userRole || null,
-        action: `Email permanently failed to ${to}: "${subject}"`,
+        action: `Email permanently failed to ${recipientDisplay}: "${subject}"`,
         details: {
           emailLogId: emailLogId || null,
-          to,
+          to: isBatch ? recipients : recipients[0],
+          recipientCount: isBatch ? recipients.length : 1,
           subject,
           errorCode: code,
           errorType: type,
           errorMessage: error.message.substring(0, 500),
           jobId: job.id,
-          attempts: job.attemptsMade + 1
+          attempts: job.attemptsMade + 1,
+          isBatch: isBatch
         },
         companyId: metadata?.companyId || null,
         companyName: metadata?.companyName || null
@@ -266,7 +377,8 @@ async function processEmailJob(job) {
         status: 'DEFERRED',
         lastError: error.message.substring(0, 1000),
         errorCode: String(code),
-        errorType: type
+        errorType: type,
+        recipientCount: isBatch ? recipients.length : null
       }, { where: { id: emailLogId } });
     }
     

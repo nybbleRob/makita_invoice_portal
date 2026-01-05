@@ -4,7 +4,172 @@ const axios = require('axios');
 /**
  * Unified Email Service
  * Supports multiple email providers: SMTP, Office 365 (Microsoft Graph), Resend, SMTP2Go
+ * 
+ * Features:
+ * - Connection pooling for SMTP providers (reuses connections)
+ * - Provider-specific transporter caching
+ * - Automatic connection health checks and reconnection
  */
+
+// Transporter pool cache - stores transporters by provider config key
+const transporterPool = new Map();
+
+// Configuration for connection pooling
+const POOL_CONFIG = {
+  maxConnections: parseInt(process.env.EMAIL_SMTP_POOL_SIZE) || 10,
+  maxMessages: parseInt(process.env.EMAIL_SMTP_MAX_MESSAGES_PER_CONNECTION) || 100,
+  pool: true,
+  rateDelta: 1000, // 1 second between messages on same connection
+  rateLimit: 14 // Max messages per rateDelta
+};
+
+/**
+ * Generate a unique key for transporter caching based on SMTP config
+ * @param {Object} smtpConfig - SMTP configuration
+ * @returns {string} Cache key
+ */
+function getTransporterKey(smtpConfig) {
+  const host = smtpConfig.host || '';
+  const port = smtpConfig.port || 587;
+  const user = smtpConfig.auth?.user || smtpConfig.user || '';
+  return `smtp:${host}:${port}:${user}`;
+}
+
+/**
+ * Get or create a pooled transporter for SMTP
+ * @param {Object} smtpConfig - SMTP configuration
+ * @returns {Object} Nodemailer transporter instance
+ */
+function getPooledTransporter(smtpConfig) {
+  const key = getTransporterKey(smtpConfig);
+  
+  // Check if transporter exists in pool
+  if (transporterPool.has(key)) {
+    const cached = transporterPool.get(key);
+    // Verify transporter is still valid
+    if (cached.transporter && cached.transporter.verify) {
+      return cached.transporter;
+    }
+    // Remove invalid transporter
+    transporterPool.delete(key);
+  }
+  
+  // Normalize localhost to 127.0.0.1 to avoid IPv6 resolution issues on Windows
+  let host = smtpConfig.host;
+  if (host.toLowerCase() === 'localhost') {
+    host = '127.0.0.1';
+  }
+  
+  // For MailHog and local SMTP servers, don't require auth if username/password are empty
+  const authConfig = {};
+  const username = smtpConfig.auth?.user || smtpConfig.user || '';
+  const password = smtpConfig.auth?.password || smtpConfig.password || '';
+  
+  // Only add auth if username and password are provided
+  if (username && password) {
+    authConfig.auth = {
+      user: username,
+      pass: password
+    };
+  }
+  
+  // For localhost/MailHog, disable TLS certificate validation
+  const isLocalhost = host === '127.0.0.1' || host === 'localhost';
+  
+  // Create pooled transporter
+  const transporter = nodemailer.createTransport({
+    host: host,
+    port: smtpConfig.port || 587,
+    secure: smtpConfig.secure || false, // true for 465, false for other ports
+    ...authConfig,
+    tls: {
+      rejectUnauthorized: isLocalhost ? false : (smtpConfig.rejectUnauthorized !== false)
+    },
+    connectionTimeout: 10000, // 10 second timeout
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+    // Connection pooling configuration
+    pool: POOL_CONFIG.pool,
+    maxConnections: POOL_CONFIG.maxConnections,
+    maxMessages: POOL_CONFIG.maxMessages,
+    rateDelta: POOL_CONFIG.rateDelta,
+    rateLimit: POOL_CONFIG.rateLimit
+  });
+  
+  // Store in pool with metadata
+  transporterPool.set(key, {
+    transporter,
+    config: smtpConfig,
+    createdAt: Date.now(),
+    lastUsed: Date.now(),
+    messageCount: 0,
+    connectionCount: 0
+  });
+  
+  // Handle transporter errors and cleanup
+  transporter.on('error', (error) => {
+    console.error(`[EmailService] Transporter error for ${key}:`, error.message);
+    // Remove from pool on error - will be recreated on next use
+    transporterPool.delete(key);
+  });
+  
+  // Track connection events
+  transporter.on('token', (token) => {
+    const cached = transporterPool.get(key);
+    if (cached) {
+      cached.connectionCount++;
+    }
+  });
+  
+  console.log(`[EmailService] Created pooled transporter for ${key} (pool: ${POOL_CONFIG.maxConnections} connections, ${POOL_CONFIG.maxMessages} messages/connection)`);
+  
+  return transporter;
+}
+
+/**
+ * Cleanup idle transporters from pool (called periodically)
+ */
+function cleanupTransporterPool() {
+  const now = Date.now();
+  const maxIdleTime = 5 * 60 * 1000; // 5 minutes
+  
+  for (const [key, cached] of transporterPool.entries()) {
+    if (now - cached.lastUsed > maxIdleTime) {
+      // Close transporter and remove from pool
+      if (cached.transporter && cached.transporter.close) {
+        cached.transporter.close();
+      }
+      console.log(`[EmailService] Cleaned up idle transporter: ${key} (${cached.messageCount || 0} messages sent)`);
+      transporterPool.delete(key);
+    }
+  }
+}
+
+/**
+ * Get transporter pool statistics for monitoring
+ * @returns {Object} Pool statistics
+ */
+function getTransporterPoolStats() {
+  const stats = {
+    totalTransporters: transporterPool.size,
+    transporters: []
+  };
+  
+  for (const [key, cached] of transporterPool.entries()) {
+    stats.transporters.push({
+      key,
+      messageCount: cached.messageCount || 0,
+      connectionCount: cached.connectionCount || 0,
+      lastUsed: new Date(cached.lastUsed).toISOString(),
+      age: Date.now() - cached.createdAt
+    });
+  }
+  
+  return stats;
+}
+
+// Cleanup idle transporters every 5 minutes
+setInterval(cleanupTransporterPool, 5 * 60 * 1000);
 
 /**
  * Get email provider configuration from settings or environment variables
@@ -193,7 +358,12 @@ async function sendEmail(options, settings) {
         result = await sendViaSMTP(finalOptions, providerConfig.smtp);
         break;
       case 'office365':
-        result = await sendViaOffice365(finalOptions, providerConfig.office365);
+        // Office 365 supports batch recipients (array of emails)
+        if (Array.isArray(finalOptions.to) && finalOptions.to.length > 1) {
+          result = await sendBatchViaOffice365(finalOptions, providerConfig.office365);
+        } else {
+          result = await sendViaOffice365(finalOptions, providerConfig.office365);
+        }
         break;
       case 'resend':
         result = await sendViaResend(finalOptions, providerConfig.resend);
@@ -216,47 +386,23 @@ async function sendEmail(options, settings) {
 }
 
 /**
- * Send email via standard SMTP
+ * Send email via standard SMTP (with connection pooling)
  */
 async function sendViaSMTP(options, smtpConfig) {
   if (!smtpConfig || !smtpConfig.host) {
     throw new Error('SMTP configuration is incomplete');
   }
 
-  // Normalize localhost to 127.0.0.1 to avoid IPv6 resolution issues on Windows
-  let host = smtpConfig.host;
-  if (host.toLowerCase() === 'localhost') {
-    host = '127.0.0.1';
-  }
-
-  // For MailHog and local SMTP servers, don't require auth if username/password are empty
-  const authConfig = {};
-  const username = smtpConfig.auth?.user || smtpConfig.user || '';
-  const password = smtpConfig.auth?.password || smtpConfig.password || '';
+  // Get pooled transporter (reuses connections)
+  const transporter = getPooledTransporter(smtpConfig);
   
-  // Only add auth if username and password are provided
-  if (username && password) {
-    authConfig.auth = {
-      user: username,
-      pass: password
-    };
+  // Update last used time and message count
+  const key = getTransporterKey(smtpConfig);
+  if (transporterPool.has(key)) {
+    const cached = transporterPool.get(key);
+    cached.lastUsed = Date.now();
+    cached.messageCount = (cached.messageCount || 0) + 1;
   }
-
-  // For localhost/MailHog, disable TLS certificate validation
-  const isLocalhost = host === '127.0.0.1' || host === 'localhost';
-  
-  const transporter = nodemailer.createTransport({
-    host: host,
-    port: smtpConfig.port || 587,
-    secure: smtpConfig.secure || false, // true for 465, false for other ports
-    ...authConfig,
-    tls: {
-      rejectUnauthorized: isLocalhost ? false : (smtpConfig.rejectUnauthorized !== false)
-    },
-    connectionTimeout: 10000, // 10 second timeout
-    greetingTimeout: 10000,
-    socketTimeout: 10000
-  });
 
   const fromEmail = smtpConfig.fromEmail || smtpConfig.from;
   const fromName = smtpConfig.fromName || 'Invoice Portal';
@@ -286,7 +432,17 @@ async function sendViaSMTP(options, smtpConfig) {
 
 /**
  * Send email via Office 365 (Microsoft Graph API)
+ * Supports single recipient or batch recipients (up to 500 per message)
  * Reference: https://learn.microsoft.com/en-us/graph/outlook-mail-concept-overview
+ * 
+ * @param {Object} options - Email options
+ * @param {string|string[]} options.to - Single recipient email or array of recipients (max 500)
+ * @param {string} options.subject - Email subject
+ * @param {string} options.html - HTML email body
+ * @param {string} options.text - Plain text email body (optional)
+ * @param {Array} options.attachments - Array of attachment objects (optional)
+ * @param {Object} config - Office 365 configuration
+ * @returns {Promise<Object>} Result object
  */
 async function sendViaOffice365(options, config) {
   if (!config || !config.clientId || !config.clientSecret || !config.tenantId) {
@@ -309,7 +465,15 @@ async function sendViaOffice365(options, config) {
 
   const accessToken = tokenResponse.data.access_token;
 
-  // Prepare message
+  // Handle single recipient or array of recipients
+  const recipients = Array.isArray(options.to) ? options.to : [options.to];
+  
+  // Office 365 limit: 500 recipients per message
+  if (recipients.length > 500) {
+    throw new Error(`Office 365 supports maximum 500 recipients per message. Received ${recipients.length} recipients.`);
+  }
+
+  // Prepare message with multiple recipients
   const message = {
     message: {
       subject: options.subject,
@@ -317,11 +481,11 @@ async function sendViaOffice365(options, config) {
         contentType: 'HTML',
         content: options.html
       },
-      toRecipients: [{
+      toRecipients: recipients.map(email => ({
         emailAddress: {
-          address: options.to
+          address: email
         }
-      }]
+      }))
     }
   };
 
@@ -380,7 +544,59 @@ async function sendViaOffice365(options, config) {
     messageId: response.headers['x-request-id'] || 'unknown',
     provider: 'office365',
     response: response.data,
-    fromEmail: userEmail
+    fromEmail: userEmail,
+    recipientCount: recipients.length
+  };
+}
+
+/**
+ * Send batch emails via Office 365 (splits large batches into chunks of 500)
+ * @param {Object} options - Email options
+ * @param {string[]} options.to - Array of recipient emails
+ * @param {string} options.subject - Email subject
+ * @param {string} options.html - HTML email body
+ * @param {string} options.text - Plain text email body (optional)
+ * @param {Array} options.attachments - Array of attachment objects (optional)
+ * @param {Object} config - Office 365 configuration
+ * @returns {Promise<Object>} Result object with batch details
+ */
+async function sendBatchViaOffice365(options, config) {
+  const recipients = Array.isArray(options.to) ? options.to : [options.to];
+  const maxRecipientsPerMessage = 500;
+  
+  if (recipients.length === 0) {
+    throw new Error('No recipients provided');
+  }
+  
+  // If within limit, send as single message
+  if (recipients.length <= maxRecipientsPerMessage) {
+    return await sendViaOffice365(options, config);
+  }
+  
+  // Split into batches of 500
+  const batches = [];
+  for (let i = 0; i < recipients.length; i += maxRecipientsPerMessage) {
+    batches.push(recipients.slice(i, i + maxRecipientsPerMessage));
+  }
+  
+  console.log(`[EmailService] Office 365 batch: ${recipients.length} recipients split into ${batches.length} messages`);
+  
+  // Send each batch
+  const results = await Promise.all(
+    batches.map((batch, index) => 
+      sendViaOffice365({
+        ...options,
+        to: batch
+      }, config)
+    )
+  );
+  
+  return {
+    success: true,
+    provider: 'office365',
+    totalRecipients: recipients.length,
+    messagesSent: batches.length,
+    results: results
   };
 }
 
@@ -584,8 +800,12 @@ module.exports = {
   testEmailProvider,
   sendViaSMTP,
   sendViaOffice365,
+  sendBatchViaOffice365,
   sendViaResend,
   sendViaSMTP2Go,
-  isEmailEnabled
+  isEmailEnabled,
+  getPooledTransporter,
+  cleanupTransporterPool,
+  getTransporterPoolStats
 };
 

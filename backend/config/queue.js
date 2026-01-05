@@ -17,6 +17,30 @@ const redisPassword = process.env.REDIS_PASSWORD || undefined;
 const EMAIL_RATE_MAX = parseInt(process.env.EMAIL_RATE_MAX) || 10;
 const EMAIL_RATE_DURATION_MS = parseInt(process.env.EMAIL_RATE_DURATION_MS) || 10000;
 
+// Provider-specific worker concurrency
+const EMAIL_WORKER_CONCURRENCY_OFFICE365 = parseInt(process.env.EMAIL_WORKER_CONCURRENCY_OFFICE365) || 10;
+const EMAIL_WORKER_CONCURRENCY_SMTP2GO = parseInt(process.env.EMAIL_WORKER_CONCURRENCY_SMTP2GO) || 20;
+const EMAIL_WORKER_CONCURRENCY_SMTP = parseInt(process.env.EMAIL_WORKER_CONCURRENCY_SMTP) || 10;
+const EMAIL_WORKER_CONCURRENCY_RESEND = parseInt(process.env.EMAIL_WORKER_CONCURRENCY_RESEND) || 10;
+const EMAIL_WORKER_CONCURRENCY_DEFAULT = parseInt(process.env.EMAIL_WORKER_CONCURRENCY) || 1;
+
+// Provider-specific rate limiters
+// Office 365: 30 messages/min = 2 per 4 seconds (conservative)
+const EMAIL_RATE_MAX_OFFICE365 = parseInt(process.env.EMAIL_RATE_MAX_OFFICE365) || 2;
+const EMAIL_RATE_DURATION_MS_OFFICE365 = parseInt(process.env.EMAIL_RATE_DURATION_MS_OFFICE365) || 4000;
+
+// SMTP2Go: Higher limits (40 concurrent connections)
+const EMAIL_RATE_MAX_SMTP2GO = parseInt(process.env.EMAIL_RATE_MAX_SMTP2GO) || 40;
+const EMAIL_RATE_DURATION_MS_SMTP2GO = parseInt(process.env.EMAIL_RATE_DURATION_MS_SMTP2GO) || 1000;
+
+// Generic SMTP: Configurable
+const EMAIL_RATE_MAX_SMTP = parseInt(process.env.EMAIL_RATE_MAX_SMTP) || 10;
+const EMAIL_RATE_DURATION_MS_SMTP = parseInt(process.env.EMAIL_RATE_DURATION_MS_SMTP) || 10000;
+
+// Resend: API-based, moderate limits
+const EMAIL_RATE_MAX_RESEND = parseInt(process.env.EMAIL_RATE_MAX_RESEND) || 10;
+const EMAIL_RATE_DURATION_MS_RESEND = parseInt(process.env.EMAIL_RATE_DURATION_MS_RESEND) || 1000;
+
 // Create shared Redis connection for all queues
 let connection = null;
 let redisAvailable = false;
@@ -289,5 +313,20 @@ module.exports = {
   defaultNestedSetOptions,
   // Export email rate limiting config for worker
   EMAIL_RATE_MAX,
-  EMAIL_RATE_DURATION_MS
+  EMAIL_RATE_DURATION_MS,
+  // Export provider-specific concurrency
+  EMAIL_WORKER_CONCURRENCY_OFFICE365,
+  EMAIL_WORKER_CONCURRENCY_SMTP2GO,
+  EMAIL_WORKER_CONCURRENCY_SMTP,
+  EMAIL_WORKER_CONCURRENCY_RESEND,
+  EMAIL_WORKER_CONCURRENCY_DEFAULT,
+  // Export provider-specific rate limiters
+  EMAIL_RATE_MAX_OFFICE365,
+  EMAIL_RATE_DURATION_MS_OFFICE365,
+  EMAIL_RATE_MAX_SMTP2GO,
+  EMAIL_RATE_DURATION_MS_SMTP2GO,
+  EMAIL_RATE_MAX_SMTP,
+  EMAIL_RATE_DURATION_MS_SMTP,
+  EMAIL_RATE_MAX_RESEND,
+  EMAIL_RATE_DURATION_MS_RESEND
 };

@@ -123,6 +123,14 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(50),
       allowNull: true,
       comment: 'Email provider used (smtp, sendgrid, etc.)'
+    },
+    
+    // Batch email tracking
+    recipientCount: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 1,
+      comment: 'Number of recipients (1 for single, >1 for batch emails)'
     }
   }, {
     tableName: 'email_logs',
