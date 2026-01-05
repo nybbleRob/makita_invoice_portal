@@ -91,12 +91,16 @@ const Settings = () => {
       { id: 'welcome', name: 'welcome', description: 'Welcome Email', isActive: true },
       { id: 'password-reset', name: 'password-reset', description: 'Password Reset', isActive: true },
       { id: 'password-changed', name: 'password-changed', description: 'Password Changed Confirmation', isActive: true },
-      { id: 'document-notification', name: 'document-notification', description: 'Document Notification', isActive: true },
-      { id: 'document-summary', name: 'document-summary', description: 'Document Summary', isActive: true },
+      { id: 'document-notification', name: 'document-notification', description: 'Document Notification (Individual)', isActive: true },
+      { id: 'document-summary', name: 'document-summary', description: 'Document Summary (Batch)', isActive: true },
+      { id: 'import-summary', name: 'import-summary', description: 'Import Summary (Admin)', isActive: true },
+      { id: 'query-notification', name: 'query-notification', description: 'Query Notification', isActive: true },
+      { id: 'document-deleted', name: 'document-deleted', description: 'Document Deleted (Retention)', isActive: true },
+      { id: 'retention-cleanup-summary', name: 'retention-cleanup-summary', description: 'Retention Cleanup Summary (Admin)', isActive: true },
       { id: 'registration-request', name: 'registration-request', description: 'Registration Request (Admin)', isActive: true },
       { id: 'registration-approved', name: 'registration-approved', description: 'Registration Approved', isActive: true },
       { id: 'registration-rejected', name: 'registration-rejected', description: 'Registration Rejected', isActive: true },
-      { id: 'bulk-email-test', name: 'bulk-email-test', description: 'Bulk Email Test (1 email every 10s for 10 mins)', isActive: true }
+      { id: 'bulk-email-test', name: 'bulk-email-test', description: 'Bulk Email Test (60 emails over 10 mins)', isActive: true }
     ];
     setEmailTemplates(staticTemplates);
   }, []);
@@ -309,7 +313,7 @@ const Settings = () => {
           return;
         }
 
-        const response = await api.post('/api/email-templates/bulk-test', {
+        const response = await api.post('/api/settings/email-templates/bulk-test', {
           testEmail
         });
 
@@ -348,7 +352,7 @@ const Settings = () => {
         // No additional data needed for password-changed template
       }
 
-      const response = await api.post(`/api/email-templates/${selectedEmailTemplate}/test`, {
+        const response = await api.post(`/api/settings/email-templates/${selectedEmailTemplate}/test`, {
         testEmail,
         data: testData
       });

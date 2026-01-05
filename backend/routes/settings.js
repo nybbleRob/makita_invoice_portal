@@ -681,6 +681,250 @@ router.post('/test-email', auth, globalAdmin, async (req, res) => {
   }
 });
 
+// Test a specific email template
+router.post('/email-templates/:templateName/test', auth, globalAdmin, async (req, res) => {
+  try {
+    const { templateName } = req.params;
+    const { testEmail, data } = req.body;
+    const { Settings } = require('../models');
+    const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
+    
+    // List of valid templates
+    const validTemplates = [
+      'welcome',
+      'password-reset',
+      'password-changed',
+      'document-notification',
+      'document-summary',
+      'import-summary',
+      'query-notification',
+      'document-deleted',
+      'retention-cleanup-summary',
+      'registration-request',
+      'registration-approved',
+      'registration-rejected'
+    ];
+    
+    if (!validTemplates.includes(templateName)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid template name. Valid templates: ${validTemplates.join(', ')}`
+      });
+    }
+    
+    const settings = await Settings.getSettings();
+    
+    // Get test email from request or settings
+    const recipientEmail = testEmail || settings.emailProvider?.testMode?.redirectEmail || settings.emailProvider?.testEmail || settings.systemEmail;
+    
+    if (!recipientEmail) {
+      return res.status(400).json({
+        success: false,
+        message: 'No test email address provided'
+      });
+    }
+    
+    // Build template-specific test data
+    const testData = {
+      userName: req.user?.name || 'Test User',
+      userEmail: recipientEmail,
+      companyName: settings.companyName || 'Makita Invoice Portal',
+      ...data
+    };
+    
+    // Add template-specific test data
+    switch (templateName) {
+      case 'welcome':
+        testData.tempPassword = testData.temporaryPassword || 'TempPass123!';
+        testData.loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/login`;
+        break;
+      case 'password-reset':
+        testData.resetUrl = testData.resetUrl || `${process.env.FRONTEND_URL || 'http://localhost:3001'}/reset-password?token=test-token-123`;
+        testData.expiryTime = '1 hour';
+        break;
+      case 'password-changed':
+        // No additional data needed
+        break;
+      case 'document-notification':
+        testData.documentTypeName = 'Invoice';
+        testData.documentNumber = 'INV-TEST-001';
+        testData.documentDate = new Date().toLocaleDateString('en-GB');
+        testData.documentAmount = '£1,234.56';
+        testData.supplierName = 'Test Company Ltd';
+        testData.documentUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/invoices/test-id`;
+        testData.retentionPeriod = settings.documentRetentionPeriod || 90;
+        break;
+      case 'document-summary':
+        testData.totalDocuments = 15;
+        testData.invoiceCount = 10;
+        testData.creditNoteCount = 3;
+        testData.statementCount = 2;
+        testData.retentionPeriod = settings.documentRetentionPeriod || 90;
+        break;
+      case 'import-summary':
+        testData.totalFiles = 50;
+        testData.successfulCount = 48;
+        testData.allocatedCount = 45;
+        testData.unallocatedCount = 3;
+        testData.failedCount = 2;
+        testData.duplicateCount = 5;
+        testData.importSource = 'FTP Import';
+        testData.startTime = new Date(Date.now() - 300000).toLocaleString('en-GB');
+        testData.endTime = new Date().toLocaleString('en-GB');
+        testData.processingTime = '5 minutes';
+        testData.importDate = new Date().toLocaleDateString('en-GB');
+        testData.retentionPeriod = settings.documentRetentionPeriod || 90;
+        break;
+      case 'query-notification':
+        testData.emailTitle = 'New Query on Invoice';
+        testData.preheaderText = 'You have a new message regarding Invoice #INV-TEST-001';
+        testData.greeting = `Hi ${testData.userName},`;
+        testData.introText = 'A new query has been raised on a document in your account.';
+        testData.documentTypeName = 'Invoice';
+        testData.documentNumber = 'INV-TEST-001';
+        testData.querySubject = 'Missing Information';
+        testData.queryStatus = 'Open';
+        testData.statusColor = '#fef3cd';
+        testData.statusTextColor = '#856404';
+        testData.messageContent = 'This is a test query message to verify the email template is working correctly.';
+        testData.senderName = 'Admin User';
+        testData.queryUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/invoices/test-id`;
+        testData.buttonText = 'View Query';
+        testData.iconColor = settings.primaryColor || '#066FD1';
+        break;
+      case 'document-deleted':
+        testData.documentType = 'Invoice';
+        testData.documentNumber = 'INV-TEST-001';
+        testData.deletionDate = new Date().toLocaleDateString('en-GB');
+        testData.retentionPeriod = settings.documentRetentionPeriod || 90;
+        break;
+      case 'retention-cleanup-summary':
+        testData.deletedCount = 25;
+        testData.invoiceCount = 20;
+        testData.creditNoteCount = 3;
+        testData.statementCount = 2;
+        testData.cleanupDate = new Date().toLocaleDateString('en-GB');
+        testData.retentionPeriod = settings.documentRetentionPeriod || 90;
+        testData.deletions = [
+          { documentType: 'Invoice', documentNumber: 'INV-001', companyName: 'Test Co', deletedAt: new Date().toLocaleString('en-GB') },
+          { documentType: 'Credit Note', documentNumber: 'CN-001', companyName: 'Test Co', deletedAt: new Date().toLocaleString('en-GB') }
+        ];
+        testData.hasMoreDeletions = true;
+        testData.totalDeletions = 25;
+        break;
+      case 'registration-request':
+        testData.applicantFirstName = 'John';
+        testData.applicantLastName = 'Doe';
+        testData.applicantEmail = 'john.doe@example.com';
+        testData.applicantCompanyName = 'Acme Corporation';
+        testData.accountNumber = 'ACC-12345';
+        testData.reviewUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/users?tab=pending`;
+        testData.applicantName = 'John Doe';
+        break;
+      case 'registration-approved':
+        testData.loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/login`;
+        break;
+      case 'registration-rejected':
+        testData.rejectionReason = 'Unable to verify account details. Please contact support for more information.';
+        break;
+    }
+    
+    // Pass request context for logging
+    const requestContext = {
+      ipAddress: req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'],
+      userAgent: req.headers['user-agent'],
+      requestId: req.requestId,
+      userId: req.user?.userId || null
+    };
+    
+    // Send the test email
+    const result = await sendTemplatedEmail(templateName, recipientEmail, testData, settings, requestContext);
+    
+    res.json({
+      success: true,
+      message: `Test email (${templateName}) sent to ${recipientEmail}`,
+      result
+    });
+  } catch (error) {
+    console.error('Error testing email template:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to send test email'
+    });
+  }
+});
+
+// Bulk email test - sends 60 emails over 10 minutes (1 every 10 seconds)
+router.post('/email-templates/bulk-test', auth, globalAdmin, async (req, res) => {
+  try {
+    const { testEmail } = req.body;
+    const { Settings } = require('../models');
+    const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
+    
+    const settings = await Settings.getSettings();
+    
+    const recipientEmail = testEmail || settings.emailProvider?.testMode?.redirectEmail || settings.emailProvider?.testEmail || settings.systemEmail;
+    
+    if (!recipientEmail) {
+      return res.status(400).json({
+        success: false,
+        message: 'No test email address provided'
+      });
+    }
+    
+    // Queue 60 emails to be sent over 10 minutes
+    const totalEmails = 60;
+    const intervalSeconds = 10;
+    
+    console.log(`📧 Starting bulk email test: ${totalEmails} emails to ${recipientEmail} (1 every ${intervalSeconds}s)`);
+    
+    // Send first email immediately
+    let sentCount = 0;
+    
+    const sendTestEmail = async (index) => {
+      try {
+        const testData = {
+          userName: 'Bulk Test User',
+          userEmail: recipientEmail,
+          documentTypeName: 'Invoice',
+          documentNumber: `BULK-TEST-${String(index).padStart(3, '0')}`,
+          documentDate: new Date().toLocaleDateString('en-GB'),
+          documentAmount: `£${(Math.random() * 10000).toFixed(2)}`,
+          supplierName: 'Bulk Test Company',
+          documentUrl: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/invoices/bulk-test-${index}`,
+          retentionPeriod: settings.documentRetentionPeriod || 90
+        };
+        
+        await sendTemplatedEmail('document-notification', recipientEmail, testData, settings, {});
+        sentCount++;
+        console.log(`📧 Bulk test: Sent email ${sentCount}/${totalEmails}`);
+      } catch (error) {
+        console.error(`❌ Bulk test: Failed to send email ${index}:`, error.message);
+      }
+    };
+    
+    // Send first email immediately
+    await sendTestEmail(1);
+    
+    // Schedule remaining emails
+    for (let i = 2; i <= totalEmails; i++) {
+      const delay = (i - 1) * intervalSeconds * 1000;
+      setTimeout(() => sendTestEmail(i), delay);
+    }
+    
+    res.json({
+      success: true,
+      message: `Bulk email test started: ${totalEmails} emails will be sent to ${recipientEmail} over ${Math.round(totalEmails * intervalSeconds / 60)} minutes (1 every ${intervalSeconds} seconds).`
+    });
+  } catch (error) {
+    console.error('Error starting bulk email test:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to start bulk email test'
+    });
+  }
+});
+
 // Purge all documents (invoices, credit notes, statements) - Only Global Admins and Administrators
 // 
 // IMPORTANT: This ONLY deletes files in:
