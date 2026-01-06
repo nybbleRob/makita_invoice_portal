@@ -2234,5 +2234,33 @@ router.get('/email-logs', auth, globalAdmin, async (req, res) => {
   }
 });
 
+/**
+ * Clear all email logs
+ * DELETE /api/settings/email-logs
+ */
+router.delete('/email-logs', auth, globalAdmin, async (req, res) => {
+  try {
+    const { EmailLog } = require('../models');
+    
+    // Delete all email logs
+    const deletedCount = await EmailLog.destroy({
+      where: {},
+      truncate: true // Faster than delete for clearing all records
+    });
+    
+    res.json({
+      success: true,
+      message: `Cleared ${deletedCount} email log entries`,
+      deletedCount
+    });
+  } catch (error) {
+    console.error('Error clearing email logs:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message || 'Failed to clear email logs' 
+    });
+  }
+});
+
 module.exports = router;
 

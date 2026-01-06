@@ -64,6 +64,7 @@ const Settings = () => {
   const [loadingEmailLogs, setLoadingEmailLogs] = useState(false);
   const [emailQueueStatus, setEmailQueueStatus] = useState(null);
   const [emailPerformance, setEmailPerformance] = useState(null);
+  const [clearingLogs, setClearingLogs] = useState(false);
   const emailLogsRef = useRef(null);
 
   useEffect(() => {
@@ -154,21 +155,39 @@ const Settings = () => {
     setLoadingEmailLogs(true);
     try {
       const response = await api.get('/api/settings/email-logs?limit=100');
-      setEmailLogs(response.data.logs || []);
+      // Sort newest first (by timestamp descending)
+      const logs = (response.data.logs || []).sort((a, b) => {
+        const timeA = new Date(a.timestamp || a.createdAt || 0).getTime();
+        const timeB = new Date(b.timestamp || b.createdAt || 0).getTime();
+        return timeB - timeA; // Newest first
+      });
+      setEmailLogs(logs);
       setEmailQueueStatus(response.data.queueStatus || null);
       setEmailPerformance(response.data.performance || null);
-      
-      // Auto-scroll to bottom when new logs arrive
-      setTimeout(() => {
-        if (emailLogsRef.current) {
-          emailLogsRef.current.scrollTop = emailLogsRef.current.scrollHeight;
-        }
-      }, 100);
     } catch (error) {
       console.error('Error fetching email logs:', error);
       toast.error('Error fetching email logs: ' + (error.response?.data?.message || error.message));
     } finally {
       setLoadingEmailLogs(false);
+    }
+  };
+
+  // Clear email logs
+  const handleClearEmailLogs = async () => {
+    if (!window.confirm('Are you sure you want to clear all email logs? This action cannot be undone.')) {
+      return;
+    }
+    
+    setClearingLogs(true);
+    try {
+      await api.delete('/api/settings/email-logs');
+      toast.success('Email logs cleared successfully');
+      setEmailLogs([]);
+    } catch (error) {
+      console.error('Error clearing email logs:', error);
+      toast.error('Error clearing email logs: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setClearingLogs(false);
     }
   };
 
@@ -2926,11 +2945,25 @@ const Settings = () => {
                         </div>
                       </div>
 
-                      {/* Email Logs Terminal Viewer */}
+                      {/* Email Logs Table */}
                       <div className="card mt-4">
                         <div className="card-header d-flex justify-content-between align-items-center">
                           <h3 className="card-title mb-0">Email Activity Logs</h3>
                           <div className="btn-list">
+                            <button
+                              className="btn btn-sm btn-outline-danger"
+                              onClick={handleClearEmailLogs}
+                              disabled={clearingLogs || emailLogs.length === 0}
+                            >
+                              {clearingLogs ? (
+                                <>
+                                  <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                                  Clearing...
+                                </>
+                              ) : (
+                                'Clear Logs'
+                              )}
+                            </button>
                             <button
                               className="btn btn-sm btn-outline-secondary"
                               onClick={fetchEmailLogs}
@@ -2947,7 +2980,7 @@ const Settings = () => {
                         
                         {/* Queue Status & Performance */}
                         {(emailQueueStatus || emailPerformance) && (
-                          <div className="card-body border-bottom" style={{ backgroundColor: '#f8f9fa', padding: '12px' }}>
+                          <div className="card-body border-bottom bg-light">
                             {emailQueueStatus && (
                               <div className="row g-2 text-center mb-3">
                                 <div className="col-3">
@@ -3000,76 +3033,110 @@ const Settings = () => {
                           </div>
                         )}
 
-                        <div 
-                          ref={emailLogsRef}
-                          className="card-body p-0"
-                          style={{
-                            backgroundColor: '#1a1a2e',
-                            fontFamily: 'Monaco, Consolas, "Courier New", monospace',
-                            fontSize: '13px',
-                            maxHeight: '500px',
-                            overflowY: 'auto'
-                          }}
-                        >
-                          {emailLogs.length === 0 ? (
-                            <div className="p-3 text-center" style={{ color: '#6c757d' }}>
-                              No email logs available. Logs will appear here when emails are sent.
-                            </div>
-                          ) : (
-                            <div className="p-2">
-                              {emailLogs.map((log, index) => {
-                                // Determine color based on status
-                                let color = '#ffffff';
-                                if (log.color === 'green') color = '#00ff88';
-                                else if (log.color === 'yellow') color = '#ffaa00';
-                                else if (log.color === 'red') color = '#ff4444';
-                                else if (log.color === 'gray') color = '#888888';
-                                else if (log.color === 'blue') color = '#00aaff';
-                                
-                                return (
-                                  <div 
-                                    key={log.id || index} 
-                                    style={{ 
-                                      color, 
-                                      padding: '2px 8px',
-                                      borderBottom: '1px solid #2a2a4e'
-                                    }}
-                                  >
-                                    <span style={{ color: '#666', marginRight: '8px' }}>
-                                      {(() => {
-                                        const logDate = new Date(log.timestamp);
-                                        const now = new Date();
-                                        const isToday = logDate.toDateString() === now.toDateString();
-                                        const isYesterday = logDate.toDateString() === new Date(now.getTime() - 24*60*60*1000).toDateString();
-                                        
-                                        if (isToday) {
-                                          return logDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                                        } else if (isYesterday) {
-                                          return `Yesterday ${logDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
-                                        } else {
-                                          return logDate.toLocaleString('en-GB', { 
-                                            day: '2-digit', 
-                                            month: '2-digit', 
-                                            year: 'numeric',
-                                            hour: '2-digit', 
-                                            minute: '2-digit', 
-                                            second: '2-digit'
-                                          });
-                                        }
-                                      })()}
-                                    </span>
-                                    {log.message}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
+                        <div className="table-responsive" style={{ maxHeight: '600px', overflowY: 'auto' }}>
+                          <table className="table table-vcenter card-table">
+                            <thead className="sticky-top bg-white">
+                              <tr>
+                                <th>Date & Time</th>
+                                <th>Status</th>
+                                <th>Recipient</th>
+                                <th>Subject</th>
+                                <th>Provider</th>
+                                <th>Time</th>
+                                <th>Message ID</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {emailLogs.length === 0 ? (
+                                <tr>
+                                  <td colSpan="7" className="text-center text-muted py-4">
+                                    No email logs available. Logs will appear here when emails are sent.
+                                  </td>
+                                </tr>
+                              ) : (
+                                emailLogs.map((log) => {
+                                  const logDate = new Date(log.timestamp || log.createdAt);
+                                  const dateTimeStr = logDate.toLocaleString('en-GB', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit'
+                                  });
+
+                                  // Status badge color
+                                  let statusBadgeClass = 'bg-yellow';
+                                  let statusText = log.status || 'QUEUED';
+                                  if (log.status === 'SENT') {
+                                    statusBadgeClass = 'bg-success';
+                                  } else if (log.status === 'SENDING') {
+                                    statusBadgeClass = 'bg-info';
+                                  } else if (log.status === 'FAILED_PERMANENT') {
+                                    statusBadgeClass = 'bg-danger';
+                                  } else if (log.status === 'DEFERRED') {
+                                    statusBadgeClass = 'bg-secondary';
+                                  }
+
+                                  return (
+                                    <tr key={log.id}>
+                                      <td>
+                                        <div className="text-muted" style={{ fontSize: '0.875rem' }}>
+                                          {dateTimeStr}
+                                        </div>
+                                      </td>
+                                      <td>
+                                        <span className={`badge ${statusBadgeClass}`}>
+                                          {statusText}
+                                        </span>
+                                      </td>
+                                      <td>
+                                        <div className="text-truncate" style={{ maxWidth: '200px' }} title={log.to}>
+                                          {log.isBatch ? (
+                                            <span className="badge bg-primary-lt">{log.recipientCount || 1} recipients</span>
+                                          ) : (
+                                            log.to || 'N/A'
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td>
+                                        <div className="text-truncate" style={{ maxWidth: '300px' }} title={log.subject}>
+                                          {log.subject || 'N/A'}
+                                        </div>
+                                      </td>
+                                      <td>
+                                        <span className="badge bg-secondary-lt">{log.provider || 'N/A'}</span>
+                                      </td>
+                                      <td>
+                                        {log.sendTimeDisplay ? (
+                                          <span className="text-muted">{log.sendTimeDisplay}</span>
+                                        ) : (
+                                          <span className="text-muted">-</span>
+                                        )}
+                                      </td>
+                                      <td>
+                                        {log.messageId ? (
+                                          <code className="text-muted" style={{ fontSize: '0.75rem' }}>
+                                            {log.messageId.length > 20 
+                                              ? `${log.messageId.substring(0, 20)}...` 
+                                              : log.messageId}
+                                          </code>
+                                        ) : (
+                                          <span className="text-muted">-</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
                         </div>
-                        <div className="card-footer" style={{ backgroundColor: '#1a1a2e', borderTop: '1px solid #2a2a4e' }}>
-                          <small style={{ color: '#666' }}>
-                            Auto-refreshes every 10 seconds • Showing last {emailLogs.length} entries
+                        <div className="card-footer">
+                          <small className="text-muted">
+                            Auto-refreshes every 10 seconds • Showing {emailLogs.length} entries (newest first)
                             {' • '}
-                            Frontend Time: {new Date().toLocaleString('en-GB', { 
+                            Current Time: {new Date().toLocaleString('en-GB', { 
                               day: '2-digit', 
                               month: '2-digit', 
                               year: 'numeric',
