@@ -20,6 +20,68 @@ const router = express.Router();
 const VALID_FREQUENCIES = [15, 30, 60, 120, 240, 360, 720, 1440];
 
 /**
+ * Calculate the next scheduled run time based on frequency
+ * @param {number} frequencyMinutes - Frequency in minutes
+ * @param {Date} [now] - Current time (defaults to now)
+ * @returns {Date|null} - Next scheduled run time or null if disabled
+ */
+function calculateNextRunTime(frequencyMinutes, now = new Date()) {
+  if (!frequencyMinutes || frequencyMinutes <= 0) {
+    return null;
+  }
+
+  const nextRun = new Date(now);
+  nextRun.setSeconds(0);
+  nextRun.setMilliseconds(0);
+
+  if (frequencyMinutes < 60) {
+    // Every X minutes - round up to next interval
+    const currentMinute = nextRun.getMinutes();
+    const interval = frequencyMinutes;
+    const remainder = currentMinute % interval;
+    
+    if (remainder === 0) {
+      // Already at an interval boundary, add one interval
+      nextRun.setMinutes(currentMinute + interval);
+    } else {
+      // Round up to next interval
+      nextRun.setMinutes(currentMinute + (interval - remainder));
+    }
+    
+    // If we've gone past the hour, move to next hour
+    if (nextRun.getMinutes() >= 60) {
+      nextRun.setHours(nextRun.getHours() + 1);
+      nextRun.setMinutes(0);
+    }
+  } else if (frequencyMinutes === 60) {
+    // Every hour at minute 0
+    nextRun.setMinutes(0);
+    nextRun.setHours(nextRun.getHours() + 1);
+  } else if (frequencyMinutes < 1440) {
+    // Every X hours at minute 0
+    const hours = frequencyMinutes / 60;
+    nextRun.setMinutes(0);
+    const currentHour = nextRun.getHours();
+    const remainder = currentHour % hours;
+    
+    if (remainder === 0) {
+      // Already at an interval boundary, add one interval
+      nextRun.setHours(currentHour + hours);
+    } else {
+      // Round up to next interval
+      nextRun.setHours(currentHour + (hours - remainder));
+    }
+  } else {
+    // Daily at midnight
+    nextRun.setHours(0);
+    nextRun.setMinutes(0);
+    nextRun.setDate(nextRun.getDate() + 1);
+  }
+
+  return nextRun;
+}
+
+/**
  * Get import settings
  */
 router.get('/', auth, globalAdmin, async (req, res) => {
@@ -43,9 +105,12 @@ router.get('/', auth, globalAdmin, async (req, res) => {
       scheduledTasksQueue.getRepeatableJobs().catch(() => [])
     ]);
 
-    // Find the local-folder-scan job to get next run time
-    const scanJob = scheduledJobs.find(job => job.name === 'local-folder-scan');
-    const nextRun = scanJob?.next ? new Date(scanJob.next).toISOString() : null;
+    // Calculate next run time based on frequency (more accurate than BullMQ's next property)
+    let nextRun = null;
+    if (importSettings.enabled !== false && importSettings.frequency) {
+      const nextRunDate = calculateNextRunTime(importSettings.frequency);
+      nextRun = nextRunDate ? nextRunDate.toISOString() : null;
+    }
 
     res.json({
       ...importSettings,
