@@ -11,7 +11,7 @@
  */
 
 // Load environment variables first
-require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
+require('dotenv').config();
 
 const { File, Invoice, CreditNote, Statement, Company, EmailLog, sequelize } = require('../models');
 const { Op } = require('sequelize');
