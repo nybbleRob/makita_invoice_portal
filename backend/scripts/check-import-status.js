@@ -11,7 +11,17 @@
  */
 
 // Load environment variables first
-require('dotenv').config();
+// Try root .env first, then backend/.env
+const path = require('path');
+const rootEnv = path.join(__dirname, '..', '..', '.env');
+const backendEnv = path.join(__dirname, '..', '.env');
+if (require('fs').existsSync(rootEnv)) {
+  require('dotenv').config({ path: rootEnv });
+} else if (require('fs').existsSync(backendEnv)) {
+  require('dotenv').config({ path: backendEnv });
+} else {
+  require('dotenv').config(); // Fallback to default behavior
+}
 
 const { File, Invoice, CreditNote, Statement, Company, EmailLog, sequelize } = require('../models');
 const { Op } = require('sequelize');
