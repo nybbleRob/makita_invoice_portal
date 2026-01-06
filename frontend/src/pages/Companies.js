@@ -62,11 +62,6 @@ const Companies = () => {
   const [loadingAssignedUsers, setLoadingAssignedUsers] = useState(false);
   
   // Bulk Email Confirmation modal state
-  const [showBulkEmailConfirmationModal, setShowBulkEmailConfirmationModal] = useState(false);
-  const [companyForBulkEmailConfirmation, setCompanyForBulkEmailConfirmation] = useState(null);
-  const [bulkEmailConfirmationUsers, setBulkEmailConfirmationUsers] = useState([]);
-  const [loadingBulkEmailConfirmation, setLoadingBulkEmailConfirmation] = useState(false);
-  
   // Confirmation modal states
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
@@ -86,7 +81,6 @@ const Companies = () => {
     sendStatementEmail: false,
     sendStatementAttachment: false,
     sendEmailAsSummary: false,
-    sendBulkEmail: false,
     isActive: true,
     address: {
       line1: '',
@@ -684,7 +678,6 @@ const Companies = () => {
       sendStatementEmail: company.sendStatementEmail || false,
       sendStatementAttachment: company.sendStatementAttachment || false,
       sendEmailAsSummary: company.sendEmailAsSummary || false,
-      sendBulkEmail: company.sendBulkEmail || false,
       parentId: company.parentId || null,
       isActive: company.isActive !== undefined ? company.isActive : true,
       address: company.address || {
@@ -736,7 +729,6 @@ const Companies = () => {
         sendStatementEmail: corporateFormData.sendStatementEmail || false,
         sendStatementAttachment: corporateFormData.sendStatementAttachment || false,
         sendEmailAsSummary: corporateFormData.sendEmailAsSummary || false,
-        sendBulkEmail: corporateFormData.sendBulkEmail || false,
         isActive: editingCompany ? corporateFormData.isActive : true,
         address: corporateFormData.address
       };
@@ -790,7 +782,6 @@ const Companies = () => {
         sendStatementEmail: branchFormData.sendStatementEmail || false,
         sendStatementAttachment: branchFormData.sendStatementAttachment || false,
         sendEmailAsSummary: branchFormData.sendEmailAsSummary || false,
-        sendBulkEmail: branchFormData.sendBulkEmail || false,
         isActive: editingCompany ? branchFormData.isActive : true,
         address: branchFormData.address
       };
@@ -846,7 +837,6 @@ const Companies = () => {
         sendStatementEmail: subsidiaryFormData.sendStatementEmail || false,
         sendStatementAttachment: subsidiaryFormData.sendStatementAttachment || false,
         sendEmailAsSummary: subsidiaryFormData.sendEmailAsSummary || false,
-        sendBulkEmail: subsidiaryFormData.sendBulkEmail || false,
         isActive: editingCompany ? subsidiaryFormData.isActive : true,
         address: subsidiaryFormData.address
       };
@@ -955,58 +945,6 @@ const Companies = () => {
     }
   };
   
-  // Handler for bulk email toggle click (opens confirmation modal)
-  const handleBulkEmailToggleClick = async (company) => {
-    if (!company.primaryContactId && !company.primaryContact) {
-      toast.error('Please set a Primary Contact before enabling bulk emails');
-      return;
-    }
-    
-    setCompanyForBulkEmailConfirmation(company);
-    setShowBulkEmailConfirmationModal(true);
-    setLoadingBulkEmailConfirmation(true);
-    
-    try {
-      const response = await api.get(`/api/companies/${company.id}/assigned-users`);
-      setBulkEmailConfirmationUsers(response.data.users || []);
-    } catch (error) {
-      toast.error('Error loading assigned users: ' + (error.response?.data?.message || error.message));
-      setBulkEmailConfirmationUsers([]);
-    } finally {
-      setLoadingBulkEmailConfirmation(false);
-    }
-  };
-  
-  // Handler for confirming bulk email enable
-  const handleConfirmBulkEmail = () => {
-    // Update form data to enable bulk email based on which modal/form is open
-    const company = companyForBulkEmailConfirmation;
-    if (editingCompany) {
-      // Editing mode - update the appropriate form data
-      if (editingCompany.type === 'CORP') {
-        setCorporateFormData(prev => ({ ...prev, sendBulkEmail: true }));
-      } else if (editingCompany.type === 'BRANCH') {
-        setBranchFormData(prev => ({ ...prev, sendBulkEmail: true }));
-      } else {
-        setSubsidiaryFormData(prev => ({ ...prev, sendBulkEmail: true }));
-      }
-    } else {
-      // Creating mode - update based on which modal is open
-      if (showCorporateModal) {
-        setCorporateFormData(prev => ({ ...prev, sendBulkEmail: true }));
-      } else if (showBranchModal) {
-        setBranchFormData(prev => ({ ...prev, sendBulkEmail: true }));
-      } else if (showSubsidiaryModal) {
-        setSubsidiaryFormData(prev => ({ ...prev, sendBulkEmail: true }));
-      }
-    }
-    
-    setShowBulkEmailConfirmationModal(false);
-    setCompanyForBulkEmailConfirmation(null);
-    toast.success('Bulk email will be enabled when you save the company');
-  };
-  
-  
   const renderModal = (type, show, onClose, formData, setFormData, onSubmit, resetForm) => {
     // When editing, use the type from formData (which can be changed), otherwise use the modal's type
     const isEditing = !!editingCompany;
@@ -1108,43 +1046,6 @@ const Companies = () => {
                                   </span>
                                 </label>
                               </div>
-                              {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && (
-                                <div className="mb-3">
-                                  <label className="row">
-                                    <span className="col">Send Email to Contacts</span>
-                                    <span className="col-auto">
-                                      <label className="form-check form-check-single form-switch">
-                                        <input
-                                          type="checkbox"
-                                          className="form-check-input"
-                                          checked={formData.sendBulkEmail}
-                                          disabled={!formData.primaryContactId}
-                                          onChange={(e) => {
-                                            if (!e.target.checked) {
-                                              // Disable directly if unchecking
-                                              setFormData(prev => ({ ...prev, sendBulkEmail: false }));
-                                              return;
-                                            }
-                                            
-                                            if (!formData.primaryContactId) {
-                                              toast.error('Please set a Primary Contact before enabling bulk emails');
-                                              return;
-                                            }
-                                            
-                                            // Open confirmation modal if enabling
-                                            const companyData = editingCompany || { ...formData, id: formData.id || null, name: formData.name || 'New Company', primaryContactId: formData.primaryContactId, primaryContact: formData.primaryContact };
-                                            handleBulkEmailToggleClick(companyData);
-                                          }}
-                                        />
-                                      </label>
-                                    </span>
-                                  </label>
-                                  {!formData.primaryContactId && (
-                                    <small className="form-hint text-warning">Please set a Primary Contact before enabling bulk emails</small>
-                                  )}
-                                  <small className="form-hint">Send 1 email to Primary Contact with CC to other users who have email notifications enabled (respects individual user email preferences)</small>
-                                </div>
-                              )}
                               {isEditing && (
                                 <>
                                   <div className="mb-3">
@@ -2206,149 +2107,6 @@ const Companies = () => {
         </div>
       )}
 
-      {/* Bulk Email Confirmation Modal */}
-      {showBulkEmailConfirmationModal && companyForBulkEmailConfirmation && (
-        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
-          <div className="modal-dialog modal-dialog-centered modal-xl">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Confirm Bulk Email for {companyForBulkEmailConfirmation.name}</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => {
-                    setShowBulkEmailConfirmationModal(false);
-                    setCompanyForBulkEmailConfirmation(null);
-                  }}
-                ></button>
-              </div>
-              <div className="modal-body">
-                <div className="alert alert-info">
-                  <strong>Email to Contacts Mode:</strong> This will send 1 email to the Primary Contact with CC to other users who have email notifications enabled. Only users with notifications enabled will receive emails (respects individual user email preferences).
-                </div>
-                
-                {loadingBulkEmailConfirmation ? (
-                  <div className="text-center py-4">
-                    <div className="spinner-border" role="status">
-                      <span className="visually-hidden">Loading...</span>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {/* Primary Contact Section */}
-                    <div className="mb-4">
-                      <h6 className="fw-bold mb-2">Primary Contact (TO recipient):</h6>
-                      {companyForBulkEmailConfirmation.primaryContact ? (
-                        <div className="card">
-                          <div className="card-body">
-                            <div className="row">
-                              <div className="col-md-4">
-                                <strong>Name:</strong> {companyForBulkEmailConfirmation.primaryContact.name}
-                              </div>
-                              <div className="col-md-4">
-                                <strong>Email:</strong> {companyForBulkEmailConfirmation.primaryContact.email}
-                              </div>
-                              <div className="col-md-4">
-                                <strong>Role:</strong> {companyForBulkEmailConfirmation.primaryContact.role}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-muted">No primary contact set</div>
-                      )}
-                    </div>
-
-                    {/* CC Recipients Section */}
-                    {(() => {
-                      const primaryContactId = companyForBulkEmailConfirmation.primaryContactId || companyForBulkEmailConfirmation.primaryContact?.id;
-                      const ccRecipients = bulkEmailConfirmationUsers.filter(u => u.id !== primaryContactId && (u.sendInvoiceEmail || u.sendStatementEmail));
-                      const nonRecipients = bulkEmailConfirmationUsers.filter(u => u.id !== primaryContactId && !u.sendInvoiceEmail && !u.sendStatementEmail);
-                      
-                      return (
-                        <>
-                          {ccRecipients.length > 0 && (
-                            <div className="mb-4">
-                              <h6 className="fw-bold mb-2">Other Users (CC recipients) - {ccRecipients.length} user{ccRecipients.length !== 1 ? 's' : ''} with notifications enabled:</h6>
-                              <div className="table-responsive">
-                                <table className="table table-sm">
-                                  <thead>
-                                    <tr>
-                                      <th>Name</th>
-                                      <th>Email</th>
-                                      <th>Role</th>
-                                      <th>Invoice Notifications</th>
-                                      <th>Statement Notifications</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {ccRecipients.map((user) => (
-                                      <tr key={user.id}>
-                                        <td>{user.name}</td>
-                                        <td>{user.email}</td>
-                                        <td>
-                                          <span className="badge bg-secondary-lt">{user.role}</span>
-                                        </td>
-                                        <td>
-                                          {user.sendInvoiceEmail ? (
-                                            <span className="badge bg-success-lt">Yes</span>
-                                          ) : (
-                                            <span className="badge bg-secondary-lt">No</span>
-                                          )}
-                                        </td>
-                                        <td>
-                                          {user.sendStatementEmail ? (
-                                            <span className="badge bg-success-lt">Yes</span>
-                                          ) : (
-                                            <span className="badge bg-secondary-lt">No</span>
-                                          )}
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-                          )}
-                          
-                          {nonRecipients.length > 0 && (
-                            <div className="mb-3">
-                              <h6 className="fw-bold mb-2 text-muted">Users Not Receiving Emails - {nonRecipients.length} user{nonRecipients.length !== 1 ? 's' : ''}:</h6>
-                              <div className="text-muted small">
-                                These users do not have email notifications enabled (sendInvoiceEmail or sendStatementEmail is disabled) and will not receive emails.
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </>
-                )}
-              </div>
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setShowBulkEmailConfirmationModal(false);
-                    setCompanyForBulkEmailConfirmation(null);
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={handleConfirmBulkEmail}
-                  disabled={loadingBulkEmailConfirmation || !companyForBulkEmailConfirmation.primaryContactId}
-                >
-                  Confirm & Enable
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Parent/Company Filter Modal - Hierarchical */}
       {showParentFilterModal && (

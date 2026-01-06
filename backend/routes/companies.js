@@ -469,7 +469,6 @@ router.post('/', auth, async (req, res) => {
       sendStatementEmail,
       sendStatementAttachment,
       sendEmailAsSummary,
-      sendBulkEmail,
       metadata
     } = req.body;
     
@@ -501,10 +500,6 @@ router.post('/', auth, async (req, res) => {
       }
     }
     
-    // Validate: Cannot enable sendBulkEmail without primary contact
-    if (sendBulkEmail && !primaryContactId) {
-      return res.status(400).json({ message: 'Cannot enable bulk email without a Primary Contact. Please set a Primary Contact first.' });
-    }
     
     if (type && !['CORP', 'SUB', 'BRANCH'].includes(type)) {
       return res.status(400).json({ message: 'Type must be CORP, SUB, or BRANCH' });
@@ -542,7 +537,6 @@ router.post('/', auth, async (req, res) => {
       sendStatementEmail: sendStatementEmail !== undefined ? sendStatementEmail : false,
       sendStatementAttachment: sendStatementAttachment !== undefined ? sendStatementAttachment : false,
       sendEmailAsSummary: sendEmailAsSummary !== undefined ? sendEmailAsSummary : false,
-      sendBulkEmail: sendBulkEmail !== undefined ? sendBulkEmail : false,
       phone: phone || null,
       address: address || {},
       taxId: taxId || null,
@@ -681,7 +675,6 @@ router.put('/:id', auth, async (req, res) => {
       sendStatementEmail,
       sendStatementAttachment,
       sendEmailAsSummary,
-      sendBulkEmail,
       phone,
       address,
       taxId,
@@ -700,10 +693,6 @@ router.put('/:id', auth, async (req, res) => {
       }
     }
     
-    // Validate: Cannot enable sendBulkEmail without primary contact
-    if (sendBulkEmail !== undefined && sendBulkEmail === true && !company.primaryContactId && (!primaryContactId || primaryContactId === null)) {
-      return res.status(400).json({ message: 'Cannot enable bulk email without a Primary Contact. Please set a Primary Contact first.' });
-    }
     
     // Validation
     if (type && !['CORP', 'SUB', 'BRANCH'].includes(type)) {
@@ -761,7 +750,6 @@ router.put('/:id', auth, async (req, res) => {
     if (sendStatementEmail !== undefined) company.sendStatementEmail = sendStatementEmail;
     if (sendStatementAttachment !== undefined) company.sendStatementAttachment = sendStatementAttachment;
     if (sendEmailAsSummary !== undefined) company.sendEmailAsSummary = sendEmailAsSummary;
-    if (sendBulkEmail !== undefined) company.sendBulkEmail = sendBulkEmail;
     if (phone !== undefined) company.phone = phone;
     if (address !== undefined) company.address = address;
     if (taxId !== undefined) company.taxId = taxId;
@@ -1072,7 +1060,6 @@ router.get('/:id/relationships', auth, async (req, res) => {
         sendStatementEmail: company.sendStatementEmail,
         sendStatementAttachment: company.sendStatementAttachment,
         sendEmailAsSummary: company.sendEmailAsSummary,
-        sendBulkEmail: company.sendBulkEmail,
         metadata: company.metadata
       },
       ancestors: ancestors.map(a => ({
