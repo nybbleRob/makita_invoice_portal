@@ -2077,7 +2077,7 @@ const Companies = () => {
                               <td>
                                 <button
                                   className="btn btn-sm btn-link p-0 text-decoration-none"
-                                  onClick={() => navigate(`/users/${user.id}`)}
+                                  onClick={() => navigate(`/users/${user.id}/view`)}
                                 >
                                   View
                                 </button>
