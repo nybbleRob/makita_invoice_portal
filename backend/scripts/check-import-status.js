@@ -131,9 +131,25 @@ async function checkImportStatus() {
     // Get company info from documents created from these files
     // Documents store fileId in metadata JSONB field
     const fileIds = files.map(f => f.id);
-    const fileIdConditions = fileIds.length > 0 ? fileIds.map(fileId => 
+    
+    // Create fileId conditions for each model with table-qualified column names
+    const invoiceFileIdConditions = fileIds.length > 0 ? fileIds.map(fileId => 
       sequelize.where(
-        sequelize.cast(sequelize.col('metadata'), 'text'),
+        sequelize.cast(sequelize.col('Invoice.metadata'), 'text'),
+        { [Op.like]: `%"fileId":"${fileId}"%` }
+      )
+    ) : [];
+    
+    const creditNoteFileIdConditions = fileIds.length > 0 ? fileIds.map(fileId => 
+      sequelize.where(
+        sequelize.cast(sequelize.col('CreditNote.metadata'), 'text'),
+        { [Op.like]: `%"fileId":"${fileId}"%` }
+      )
+    ) : [];
+    
+    const statementFileIdConditions = fileIds.length > 0 ? fileIds.map(fileId => 
+      sequelize.where(
+        sequelize.cast(sequelize.col('Statement.metadata'), 'text'),
         { [Op.like]: `%"fileId":"${fileId}"%` }
       )
     ) : [];
@@ -141,7 +157,7 @@ async function checkImportStatus() {
     const [invoicesFromFiles, creditNotesFromFiles, statementsFromFiles] = await Promise.all([
       fileIds.length > 0 ? Invoice.findAll({
         where: {
-          [Op.or]: fileIdConditions,
+          [Op.or]: invoiceFileIdConditions,
           deletedAt: null
         },
         include: [{
@@ -154,7 +170,7 @@ async function checkImportStatus() {
       }) : [],
       fileIds.length > 0 ? CreditNote.findAll({
         where: {
-          [Op.or]: fileIdConditions
+          [Op.or]: creditNoteFileIdConditions
         },
         include: [{
           model: Company,
@@ -166,7 +182,7 @@ async function checkImportStatus() {
       }) : [],
       fileIds.length > 0 ? Statement.findAll({
         where: {
-          [Op.or]: fileIdConditions
+          [Op.or]: statementFileIdConditions
         },
         include: [{
           model: Company,
