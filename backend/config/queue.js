@@ -18,10 +18,10 @@ const EMAIL_RATE_MAX = parseInt(process.env.EMAIL_RATE_MAX) || 10;
 const EMAIL_RATE_DURATION_MS = parseInt(process.env.EMAIL_RATE_DURATION_MS) || 10000;
 
 // Provider-specific worker concurrency
-// SMTP: concurrency 1 to avoid overwhelming server and causing 450 4.7.1 errors
+// SMTP: concurrency 10 (Bottleneck reservoir handles rate limiting)
 const EMAIL_WORKER_CONCURRENCY_OFFICE365 = parseInt(process.env.EMAIL_WORKER_CONCURRENCY_OFFICE365) || 10;
 const EMAIL_WORKER_CONCURRENCY_SMTP2GO = parseInt(process.env.EMAIL_WORKER_CONCURRENCY_SMTP2GO) || 20;
-const EMAIL_WORKER_CONCURRENCY_SMTP = parseInt(process.env.EMAIL_WORKER_CONCURRENCY_SMTP) || 1;
+const EMAIL_WORKER_CONCURRENCY_SMTP = parseInt(process.env.EMAIL_WORKER_CONCURRENCY_SMTP) || 10;
 const EMAIL_WORKER_CONCURRENCY_RESEND = parseInt(process.env.EMAIL_WORKER_CONCURRENCY_RESEND) || 10;
 const EMAIL_WORKER_CONCURRENCY_DEFAULT = parseInt(process.env.EMAIL_WORKER_CONCURRENCY) || 1;
 
@@ -35,11 +35,11 @@ const EMAIL_RATE_MAX_SMTP2GO = parseInt(process.env.EMAIL_RATE_MAX_SMTP2GO) || 4
 const EMAIL_RATE_DURATION_MS_SMTP2GO = parseInt(process.env.EMAIL_RATE_DURATION_MS_SMTP2GO) || 1000;
 
 // Generic SMTP: Configurable
-// Safe rate limit: 3-4 emails per minute to avoid 450 4.7.1 throttle errors
+// Using Bottleneck reservoir: 5 per 4 seconds = smooth throughput (no minute clumps)
 // 450 4.7.1 = temporary failure (defer), not permanent reject
 // "all recipients were rejected" = rate limit throttle, not invalid addresses
-const EMAIL_RATE_MAX_SMTP = parseInt(process.env.EMAIL_RATE_MAX_SMTP) || 4;
-const EMAIL_RATE_DURATION_MS_SMTP = parseInt(process.env.EMAIL_RATE_DURATION_MS_SMTP) || 60000;
+const EMAIL_RATE_MAX_SMTP = parseInt(process.env.EMAIL_RATE_MAX_SMTP) || 5;
+const EMAIL_RATE_DURATION_MS_SMTP = parseInt(process.env.EMAIL_RATE_DURATION_MS_SMTP) || 4000;
 
 // Resend: API-based, moderate limits
 const EMAIL_RATE_MAX_RESEND = parseInt(process.env.EMAIL_RATE_MAX_RESEND) || 10;
@@ -122,10 +122,10 @@ const defaultInvoiceImportOptions = {
 };
 
 const defaultEmailOptions = {
-  attempts: 10, // 10 attempts with exponential backoff for reliable delivery
+  attempts: 8, // 8 attempts with exponential backoff for reliable delivery
   backoff: {
     type: 'exponential',
-    delay: 300000 // Start with 5 minutes, then 15m, 30m, 60m (for 450 4.7.1 throttle errors)
+    delay: 60000 // Start with 60s, then 120s (2m), 240s (4m), 480s (8m), 960s (16m) - covers 5-15m range for 450 4.7.1 throttle errors
   },
   removeOnComplete: {
     age: 7 * 24 * 3600, // Keep completed jobs for 7 days

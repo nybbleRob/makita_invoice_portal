@@ -8,6 +8,7 @@
  */
 
 const { UnrecoverableError } = require('bullmq');
+const Bottleneck = require('bottleneck');
 const { sendEmail } = require('../utils/emailService');
 const { Settings, EmailLog } = require('../models');
 const { logActivity, ActivityType } = require('../services/activityLogger');
@@ -19,73 +20,61 @@ const {
   EMAIL_RATE_MAX_SMTP,
   EMAIL_RATE_DURATION_MS_SMTP,
   EMAIL_RATE_MAX_RESEND,
-  EMAIL_RATE_DURATION_MS_RESEND
+  EMAIL_RATE_DURATION_MS_RESEND,
+  EMAIL_WORKER_CONCURRENCY_SMTP
 } = require('../config/queue');
 
-// Provider-specific rate limiters (simple token bucket)
-// Initialize with max tokens available
+// Provider-specific rate limiters using Bottleneck reservoir
+// Reservoir refresh pattern prevents minute-boundary batching (smooth distribution)
 const rateLimiters = {
-  office365: { 
-    maxTokens: EMAIL_RATE_MAX_OFFICE365,
-    tokens: EMAIL_RATE_MAX_OFFICE365, 
-    lastRefill: Date.now(), 
-    window: EMAIL_RATE_DURATION_MS_OFFICE365 
-  },
-  smtp2go: { 
-    maxTokens: EMAIL_RATE_MAX_SMTP2GO,
-    tokens: EMAIL_RATE_MAX_SMTP2GO, 
-    lastRefill: Date.now(), 
-    window: EMAIL_RATE_DURATION_MS_SMTP2GO 
-  },
-  smtp: { 
-    maxTokens: EMAIL_RATE_MAX_SMTP,
-    tokens: EMAIL_RATE_MAX_SMTP, 
-    lastRefill: Date.now(), 
-    window: EMAIL_RATE_DURATION_MS_SMTP 
-  },
-  resend: { 
-    maxTokens: EMAIL_RATE_MAX_RESEND,
-    tokens: EMAIL_RATE_MAX_RESEND, 
-    lastRefill: Date.now(), 
-    window: EMAIL_RATE_DURATION_MS_RESEND 
-  },
-  mailtrap: { 
-    maxTokens: EMAIL_RATE_MAX_SMTP,
-    tokens: EMAIL_RATE_MAX_SMTP, 
-    lastRefill: Date.now(), 
-    window: EMAIL_RATE_DURATION_MS_SMTP 
-  }
+  office365: new Bottleneck({
+    reservoir: EMAIL_RATE_MAX_OFFICE365,
+    reservoirRefreshAmount: EMAIL_RATE_MAX_OFFICE365,
+    reservoirRefreshInterval: EMAIL_RATE_DURATION_MS_OFFICE365,
+    maxConcurrent: 10,
+    minTime: 0 // Reservoir handles pacing
+  }),
+  smtp2go: new Bottleneck({
+    reservoir: EMAIL_RATE_MAX_SMTP2GO,
+    reservoirRefreshAmount: EMAIL_RATE_MAX_SMTP2GO,
+    reservoirRefreshInterval: EMAIL_RATE_DURATION_MS_SMTP2GO,
+    maxConcurrent: 20,
+    minTime: 0
+  }),
+  smtp: new Bottleneck({
+    reservoir: EMAIL_RATE_MAX_SMTP,
+    reservoirRefreshAmount: EMAIL_RATE_MAX_SMTP,
+    reservoirRefreshInterval: EMAIL_RATE_DURATION_MS_SMTP,
+    maxConcurrent: EMAIL_WORKER_CONCURRENCY_SMTP || 10,
+    minTime: 0 // Smooth 5 per 4 seconds = no minute clumps
+  }),
+  resend: new Bottleneck({
+    reservoir: EMAIL_RATE_MAX_RESEND,
+    reservoirRefreshAmount: EMAIL_RATE_MAX_RESEND,
+    reservoirRefreshInterval: EMAIL_RATE_DURATION_MS_RESEND,
+    maxConcurrent: 10,
+    minTime: 0
+  }),
+  mailtrap: new Bottleneck({
+    reservoir: EMAIL_RATE_MAX_SMTP,
+    reservoirRefreshAmount: EMAIL_RATE_MAX_SMTP,
+    reservoirRefreshInterval: EMAIL_RATE_DURATION_MS_SMTP,
+    maxConcurrent: EMAIL_WORKER_CONCURRENCY_SMTP || 10,
+    minTime: 0
+  })
 };
 
 /**
- * Apply provider-specific rate limiting
+ * Apply provider-specific rate limiting using Bottleneck
  * @param {string} provider - Email provider name
  * @returns {Promise<void>} Resolves when rate limit allows sending
  */
 async function applyProviderRateLimit(provider) {
   const limiter = rateLimiters[provider] || rateLimiters.smtp;
-  const now = Date.now();
-  
-  // Refill tokens if window has passed
-  if (now - limiter.lastRefill >= limiter.window) {
-    limiter.tokens = limiter.maxTokens;
-    limiter.lastRefill = now;
-  }
-  
-  // Wait if no tokens available
-  if (limiter.tokens <= 0) {
-    const waitTime = limiter.window - (now - limiter.lastRefill);
-    if (waitTime > 0) {
-      console.log(`[EmailJob] Rate limit: waiting ${waitTime}ms for ${provider}`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-      // Refill after wait
-      limiter.tokens = limiter.maxTokens;
-      limiter.lastRefill = Date.now();
-    }
-  }
-  
-  // Consume token
-  limiter.tokens--;
+  // Bottleneck handles waiting automatically - just wrap the send operation
+  // This will be called before sendEmail, so we return a no-op here
+  // The actual rate limiting happens when we wrap sendEmail with limiter.schedule()
+  return Promise.resolve();
 }
 
 /**
@@ -114,6 +103,8 @@ function classifySmtpError(error) {
   
   // Check for rate limiting patterns first (special handling)
   // Covers: Mailtrap, SendGrid, Mailgun, generic SMTP, Resend
+  // 450 4.7.1 = temporary failure (defer), not permanent reject
+  // "all recipients were rejected" = rate limit throttle, not invalid addresses
   const rateLimitPatterns = [
     /exceeded/i,
     /rate.?limit/i,
@@ -124,12 +115,19 @@ function classifySmtpError(error) {
     /sending.?limit/i,
     /throttl/i,
     /429/,  // HTTP 429 Too Many Requests (API-based providers)
-    /daily.?limit/i
+    /daily.?limit/i,
+    /4\.7\.1/i,  // SMTP 450 4.7.1 throttle error
+    /450.*4\.7\.1/i  // Explicit 450 4.7.1 pattern
   ];
   for (const pattern of rateLimitPatterns) {
     if (pattern.test(error.message)) {
-      return { type: 'RATE_LIMITED', code: responseCode || 429 };
+      return { type: 'RATE_LIMITED', code: responseCode || 450 };
     }
+  }
+  
+  // Also check for 450 response code with "exceeded" or "rate" in message
+  if (responseCode === 450 && (errorMessage.includes('exceeded') || errorMessage.includes('rate'))) {
+    return { type: 'RATE_LIMITED', code: 450 };
   }
   
   // PERMANENT failures (5xx) - do not retry
@@ -250,19 +248,18 @@ async function processEmailJob(job) {
     
     // Get provider for rate limiting
     const provider = emailSettings?.emailProvider?.provider || 'smtp';
+    const limiter = rateLimiters[provider] || rateLimiters.smtp;
     
-    // Apply provider-specific rate limiting (only once per batch)
-    await applyProviderRateLimit(provider);
-    
-    // Send email (pass array for batch, string for single, CC if present)
-    const result = await sendEmail({
+    // Send email with Bottleneck rate limiting (smooth reservoir refresh, no minute clumps)
+    // Bottleneck handles waiting automatically based on reservoir refresh
+    const result = await limiter.schedule(() => sendEmail({
       to: isBatch && ccRecipients.length === 0 ? recipients : recipients[0], // If CC exists, use single TO
       cc: ccRecipients.length > 0 ? ccRecipients : undefined, // CC recipients if provided
       subject,
       html,
       text,
       attachments
-    }, emailSettings);
+    }, emailSettings));
     
     // Update EmailLog on success
     if (emailLogId) {
