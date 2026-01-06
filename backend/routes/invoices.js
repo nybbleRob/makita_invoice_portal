@@ -481,7 +481,11 @@ router.get('/:id', async (req, res) => {
     const settings = await Settings.getSettings();
     const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user';
     
-    if (canUpdateStatus && invoice.documentStatus !== 'downloaded') {
+    // Skip auto-mark-as-viewed for admins/GA (they can manually set status)
+    const isAdmin = req.user.role === 'global_admin' || req.user.role === 'administrator';
+    const shouldAutoMarkAsViewed = canUpdateStatus && !isAdmin && invoice.documentStatus !== 'downloaded';
+    
+    if (shouldAutoMarkAsViewed) {
       const wasFirstView = !invoice.viewedAt;
       const now = new Date();
       

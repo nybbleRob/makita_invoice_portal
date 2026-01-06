@@ -184,8 +184,12 @@ router.get('/:id', async (req, res) => {
     const settings = await Settings.getSettings();
     const canUpdateStatus = !settings.onlyExternalUsersChangeDocumentStatus || req.user.role === 'external_user';
     
+    // Skip auto-mark-as-viewed for admins/GA (they can manually set status)
+    const isAdmin = req.user.role === 'global_admin' || req.user.role === 'administrator';
+    const shouldAutoMarkAsViewed = canUpdateStatus && !isAdmin && creditNote.documentStatus !== 'downloaded';
+    
     // Mark as viewed when fetching (if not already downloaded)
-    if (canUpdateStatus && creditNote.documentStatus !== 'downloaded') {
+    if (shouldAutoMarkAsViewed) {
       const wasFirstView = !creditNote.viewedAt;
       const now = new Date();
       
