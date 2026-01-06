@@ -639,39 +639,47 @@ router.delete('/upload/:type', globalAdmin, async (req, res) => {
 router.post('/test-email', auth, globalAdmin, async (req, res) => {
   try {
     const { Settings } = require('../models');
-    const { testEmailProvider } = require('../utils/emailService');
+    const { queueEmail } = require('../utils/emailQueue');
+    const { isEmailEnabled } = require('../utils/emailService');
     
     const settings = await Settings.getSettings();
     
-    // Override test email if provided
-    if (req.body.testEmail) {
-      settings.emailProvider = {
-        ...settings.emailProvider,
-        testEmail: req.body.testEmail
-      };
-    }
-    
-    // Pass request context for logging
-    const requestContext = {
-      ipAddress: req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'],
-      userAgent: req.headers['user-agent'],
-      requestId: req.requestId,
-      userId: req.user?.userId || null
-    };
-    
-    const result = await testEmailProvider(settings, requestContext);
-    
-    if (result.success) {
-      res.json({
-        success: true,
-        message: result.message
-      });
-    } else {
-      res.status(400).json({
+    // Check if email is enabled
+    if (!isEmailEnabled(settings)) {
+      return res.status(400).json({
         success: false,
-        message: result.message
+        message: 'Email provider is not configured or enabled'
       });
     }
+    
+    // Get test email address
+    const testEmail = req.body.testEmail || settings.emailProvider?.testEmail || settings.systemEmail || process.env.TEST_EMAIL;
+    if (!testEmail) {
+      return res.status(400).json({
+        success: false,
+        message: 'Test email address is required. Set it in Settings or TEST_EMAIL environment variable.'
+      });
+    }
+    
+    // Queue the test email (this will create EmailLog entry and show in logs)
+    await queueEmail({
+      to: testEmail,
+      subject: 'Test Email from Makita Invoice Portal',
+      html: '<p>This is a test email to verify your email provider configuration.</p><p>If you received this, your email settings are working correctly!</p>',
+      text: 'This is a test email to verify your email provider configuration. If you received this, your email settings are working correctly!',
+      metadata: {
+        userId: req.user?.userId || null,
+        userEmail: req.user?.email || 'system',
+        userRole: req.user?.role || null,
+        isTestEmail: true,
+        requestId: req.requestId
+      }
+    }, settings);
+    
+    res.json({
+      success: true,
+      message: `Test email queued successfully. It will be sent to ${testEmail} and appear in the email logs.`
+    });
   } catch (error) {
     console.error('Error testing email provider:', error);
     res.status(500).json({
