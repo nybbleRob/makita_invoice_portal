@@ -392,19 +392,15 @@ workers.push(invoiceImportWorker);
 console.log('✅ Invoice import worker initialized');
 
 // Email worker with provider-aware concurrency and rate limiting
-// Note: BullMQ limiter is global, so we use max concurrency and apply
-// provider-specific rate limiting in the job processor
+// Note: Provider-specific rate limiting is applied in the job processor
+// No global BullMQ limiter to avoid double rate limiting bottleneck
 const emailWorker = new Worker('email', async (job) => {
   // Clean log: no body content, just job ID and recipient
   return await processEmailJob(job);
 }, {
   ...commonWorkerOptions,
   concurrency: EMAIL_WORKER_CONCURRENCY,
-  // Use default rate limiter as fallback (provider-specific limits applied in processor)
-  limiter: {
-    max: EMAIL_RATE_MAX,
-    duration: EMAIL_RATE_DURATION_MS
-  }
+  // Rate limiting handled by provider-specific token bucket limiters in emailJob.js
 });
 
 emailWorker.on('completed', (job, result) => {
