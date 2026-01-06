@@ -2946,11 +2946,11 @@ const Settings = () => {
 
                       {/* Email Logs Table */}
                       <div className="card mt-4">
-                        <div className="card-header d-flex justify-content-between align-items-center">
-                          <h3 className="card-title mb-0">Email Activity Logs</h3>
-                          <div className="btn-list">
+                        <div className="card-header">
+                          <h3 className="card-title">Email Activity Logs</h3>
+                          <div className="card-actions">
                             <button
-                              className="btn btn-sm btn-outline-danger"
+                              className="btn btn-outline-danger btn-sm"
                               onClick={handleClearEmailLogs}
                               disabled={clearingLogs || emailLogs.length === 0}
                             >
@@ -2964,7 +2964,7 @@ const Settings = () => {
                               )}
                             </button>
                             <button
-                              className="btn btn-sm btn-outline-secondary"
+                              className="btn btn-outline-secondary btn-sm"
                               onClick={fetchEmailLogs}
                               disabled={loadingEmailLogs}
                             >
@@ -2979,74 +2979,82 @@ const Settings = () => {
                         
                         {/* Queue Status & Performance */}
                         {(emailQueueStatus || emailPerformance) && (
-                          <div className="card-body border-bottom bg-light">
+                          <div className="card-body border-bottom">
                             {emailQueueStatus && (
-                              <div className="row g-2 text-center mb-3">
+                              <div className="row g-2 mb-3">
                                 <div className="col-3">
-                                  <small className="text-muted d-block">Waiting</small>
-                                  <strong className="text-warning">{emailQueueStatus.waiting || 0}</strong>
+                                  <div className="text-muted small">Waiting</div>
+                                  <div className="h3 mb-0 text-warning">{emailQueueStatus.waiting || 0}</div>
                                 </div>
                                 <div className="col-3">
-                                  <small className="text-muted d-block">Active</small>
-                                  <strong className="text-info">{emailQueueStatus.active || 0}</strong>
+                                  <div className="text-muted small">Active</div>
+                                  <div className="h3 mb-0 text-info">{emailQueueStatus.active || 0}</div>
                                 </div>
                                 <div className="col-3">
-                                  <small className="text-muted d-block">Completed</small>
-                                  <strong className="text-success">{emailQueueStatus.completed || 0}</strong>
+                                  <div className="text-muted small">Completed</div>
+                                  <div className="h3 mb-0 text-success">{emailQueueStatus.completed || 0}</div>
                                 </div>
                                 <div className="col-3">
-                                  <small className="text-muted d-block">Failed</small>
-                                  <strong className="text-danger">{emailQueueStatus.failed || 0}</strong>
+                                  <div className="text-muted small">Failed</div>
+                                  <div className="h3 mb-0 text-danger">{emailQueueStatus.failed || 0}</div>
                                 </div>
                               </div>
                             )}
                             {emailPerformance && emailPerformance.totalSent > 0 && (
-                              <div className="row g-2 text-center border-top pt-2">
+                              <div className="row g-2 border-top pt-3">
                                 <div className="col-12">
-                                  <small className="text-muted d-block">Email Performance (Last 100)</small>
+                                  <div className="text-muted small mb-2">Email Performance (Last 100)</div>
                                 </div>
                                 <div className="col-4">
-                                  <small className="text-muted d-block">Avg Send Time</small>
-                                  <strong className="text-primary">{emailPerformance.avgSendTimeDisplay || 'N/A'}</strong>
+                                  <div className="text-muted small">Avg Send Time</div>
+                                  <div className="h4 mb-0 text-primary">{emailPerformance.avgSendTimeDisplay || 'N/A'}</div>
                                 </div>
                                 <div className="col-4">
-                                  <small className="text-muted d-block">Fastest</small>
-                                  <strong className="text-success">
+                                  <div className="text-muted small">Fastest</div>
+                                  <div className="h4 mb-0 text-success">
                                     {emailPerformance.minSendTimeMs < 1000 
                                       ? `${emailPerformance.minSendTimeMs}ms`
                                       : `${(emailPerformance.minSendTimeMs / 1000).toFixed(1)}s`}
-                                  </strong>
+                                  </div>
                                 </div>
                                 <div className="col-4">
-                                  <small className="text-muted d-block">Slowest</small>
-                                  <strong className="text-warning">
+                                  <div className="text-muted small">Slowest</div>
+                                  <div className="h4 mb-0 text-warning">
                                     {emailPerformance.maxSendTimeMs < 1000 
                                       ? `${emailPerformance.maxSendTimeMs}ms`
                                       : emailPerformance.maxSendTimeMs < 60000
                                         ? `${(emailPerformance.maxSendTimeMs / 1000).toFixed(1)}s`
                                         : `${Math.floor(emailPerformance.maxSendTimeMs / 60000)}m ${Math.floor((emailPerformance.maxSendTimeMs % 60000) / 1000)}s`}
-                                  </strong>
+                                  </div>
                                 </div>
                               </div>
                             )}
                           </div>
                         )}
 
-                        <div className="table-responsive" style={{ maxHeight: '600px', overflowY: 'auto' }}>
+                        <div className="table-responsive">
                           <table className="table table-vcenter card-table">
-                            <thead className="sticky-top bg-white">
+                            <thead>
                               <tr>
                                 <th>Date & Time</th>
                                 <th>Status</th>
                                 <th>Recipient</th>
                                 <th>Subject</th>
                                 <th>Provider</th>
-                                <th>Time</th>
+                                <th>Send Time</th>
                                 <th>Message ID</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {emailLogs.length === 0 ? (
+                              {loadingEmailLogs ? (
+                                <tr>
+                                  <td colSpan="7" className="text-center py-4">
+                                    <div className="spinner-border spinner-border-sm" role="status">
+                                      <span className="visually-hidden">Loading...</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ) : emailLogs.length === 0 ? (
                                 <tr>
                                   <td colSpan="7" className="text-center text-muted py-4">
                                     No email logs available. Logs will appear here when emails are sent.
@@ -3065,24 +3073,22 @@ const Settings = () => {
                                   });
 
                                   // Status badge color
-                                  let statusBadgeClass = 'bg-yellow';
+                                  let statusBadgeClass = 'bg-yellow-lt';
                                   let statusText = log.status || 'QUEUED';
                                   if (log.status === 'SENT') {
-                                    statusBadgeClass = 'bg-success';
+                                    statusBadgeClass = 'bg-success-lt';
                                   } else if (log.status === 'SENDING') {
-                                    statusBadgeClass = 'bg-info';
+                                    statusBadgeClass = 'bg-info-lt';
                                   } else if (log.status === 'FAILED_PERMANENT') {
-                                    statusBadgeClass = 'bg-danger';
+                                    statusBadgeClass = 'bg-danger-lt';
                                   } else if (log.status === 'DEFERRED') {
-                                    statusBadgeClass = 'bg-secondary';
+                                    statusBadgeClass = 'bg-secondary-lt';
                                   }
 
                                   return (
                                     <tr key={log.id}>
                                       <td>
-                                        <div className="text-muted" style={{ fontSize: '0.875rem' }}>
-                                          {dateTimeStr}
-                                        </div>
+                                        <div className="text-secondary">{dateTimeStr}</div>
                                       </td>
                                       <td>
                                         <span className={`badge ${statusBadgeClass}`}>
@@ -3094,13 +3100,13 @@ const Settings = () => {
                                           {log.isBatch ? (
                                             <span className="badge bg-primary-lt">{log.recipientCount || 1} recipients</span>
                                           ) : (
-                                            log.to || 'N/A'
+                                            <span className="text-secondary">{log.to || 'N/A'}</span>
                                           )}
                                         </div>
                                       </td>
                                       <td>
                                         <div className="text-truncate" style={{ maxWidth: '300px' }} title={log.subject}>
-                                          {log.subject || 'N/A'}
+                                          <span className="text-secondary">{log.subject || 'N/A'}</span>
                                         </div>
                                       </td>
                                       <td>
@@ -3108,7 +3114,7 @@ const Settings = () => {
                                       </td>
                                       <td>
                                         {log.sendTimeDisplay ? (
-                                          <span className="text-muted">{log.sendTimeDisplay}</span>
+                                          <span className="text-secondary">{log.sendTimeDisplay}</span>
                                         ) : (
                                           <span className="text-muted">-</span>
                                         )}
@@ -3116,8 +3122,8 @@ const Settings = () => {
                                       <td>
                                         {log.messageId ? (
                                           <code className="text-muted" style={{ fontSize: '0.75rem' }}>
-                                            {log.messageId.length > 20 
-                                              ? `${log.messageId.substring(0, 20)}...` 
+                                            {log.messageId.length > 25 
+                                              ? `${log.messageId.substring(0, 25)}...` 
                                               : log.messageId}
                                           </code>
                                         ) : (
@@ -3132,7 +3138,7 @@ const Settings = () => {
                           </table>
                         </div>
                         <div className="card-footer">
-                          <small className="text-muted">
+                          <div className="text-muted small">
                             Auto-refreshes every 10 seconds • Showing {emailLogs.length} entries (newest first)
                             {' • '}
                             Current Time: {new Date().toLocaleString('en-GB', { 
@@ -3144,7 +3150,7 @@ const Settings = () => {
                               second: '2-digit',
                               timeZoneName: 'short'
                             })}
-                          </small>
+                          </div>
                         </div>
                       </div>
                     </>
