@@ -67,14 +67,6 @@ async function checkImportStatus() {
         },
         deletedAt: null
       },
-      include: [
-        {
-          model: Company,
-          as: 'company',
-          attributes: ['id', 'name', 'referenceNo'],
-          required: false
-        }
-      ],
       order: [['uploadedAt', 'ASC']]
     });
 
@@ -82,11 +74,11 @@ async function checkImportStatus() {
     
     // Group by status
     const statusCounts = {};
-    const companyCounts = {};
+    const customerIdCounts = {};
     files.forEach(file => {
       statusCounts[file.status] = (statusCounts[file.status] || 0) + 1;
-      if (file.companyId) {
-        companyCounts[file.companyId] = (companyCounts[file.companyId] || 0) + 1;
+      if (file.customerId) {
+        customerIdCounts[file.customerId] = (customerIdCounts[file.customerId] || 0) + 1;
       }
     });
 
@@ -95,15 +87,68 @@ async function checkImportStatus() {
       console.log(`  ${status}: ${count}`);
     });
 
-    console.log(`\nFiles assigned to companies: ${Object.keys(companyCounts).length} companies`);
+    // Get company info from documents created from these files
+    // Documents store fileId in metadata JSONB field
+    const fileIds = files.map(f => f.id);
+    const fileIdConditions = fileIds.map(fileId => ({
+      'metadata.fileId': fileId
+    }));
+    
+    const [invoicesFromFiles, creditNotesFromFiles, statementsFromFiles] = await Promise.all([
+      fileIds.length > 0 ? Invoice.findAll({
+        where: {
+          [Op.or]: fileIdConditions,
+          deletedAt: null
+        },
+        include: [{
+          model: Company,
+          as: 'company',
+          attributes: ['id', 'name', 'referenceNo'],
+          required: false
+        }]
+      }) : [],
+      fileIds.length > 0 ? CreditNote.findAll({
+        where: {
+          [Op.or]: fileIdConditions
+        },
+        include: [{
+          model: Company,
+          as: 'company',
+          attributes: ['id', 'name', 'referenceNo'],
+          required: false
+        }]
+      }) : [],
+      fileIds.length > 0 ? Statement.findAll({
+        where: {
+          [Op.or]: fileIdConditions
+        },
+        include: [{
+          model: Company,
+          as: 'company',
+          attributes: ['id', 'name', 'referenceNo'],
+          required: false
+        }]
+      }) : []
+    ]);
+
+    const allDocuments = [...invoicesFromFiles, ...creditNotesFromFiles, ...statementsFromFiles];
+    const companyCounts = {};
+    allDocuments.forEach(doc => {
+      if (doc.companyId && doc.company) {
+        const companyId = doc.companyId;
+        companyCounts[companyId] = companyCounts[companyId] || { count: 0, name: doc.company.name, referenceNo: doc.company.referenceNo };
+        companyCounts[companyId].count++;
+      }
+    });
+
+    console.log(`\nFiles assigned to companies (via documents): ${Object.keys(companyCounts).length} companies`);
     if (Object.keys(companyCounts).length > 0) {
-      console.log('Top companies by file count:');
+      console.log('Top companies by document count:');
       const sortedCompanies = Object.entries(companyCounts)
-        .sort((a, b) => b[1] - a[1])
+        .sort((a, b) => b[1].count - a[1].count)
         .slice(0, 10);
-      for (const [companyId, count] of sortedCompanies) {
-        const company = files.find(f => f.companyId === companyId)?.company;
-        console.log(`  ${company?.name || companyId}: ${count} files`);
+      for (const [companyId, data] of sortedCompanies) {
+        console.log(`  ${data.name} (${data.referenceNo}): ${data.count} documents`);
       }
     }
 
