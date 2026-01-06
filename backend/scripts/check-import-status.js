@@ -10,6 +10,9 @@
  *   node backend/scripts/check-import-status.js --date 2025-01-11 --start 12:00 --end 12:30 --timezone UTC
  */
 
+// Load environment variables first
+require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
+
 const { File, Invoice, CreditNote, Statement, Company, EmailLog, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const { getActivityLogs, ActivityType } = require('../services/activityLogger');
