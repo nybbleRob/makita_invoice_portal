@@ -34,8 +34,9 @@ const EMAIL_RATE_MAX_SMTP2GO = parseInt(process.env.EMAIL_RATE_MAX_SMTP2GO) || 4
 const EMAIL_RATE_DURATION_MS_SMTP2GO = parseInt(process.env.EMAIL_RATE_DURATION_MS_SMTP2GO) || 1000;
 
 // Generic SMTP: Configurable
-// Using Office 365 pattern: 5 per 4 seconds = 75 per minute (more generous than Office 365's 30/min)
-const EMAIL_RATE_MAX_SMTP = parseInt(process.env.EMAIL_RATE_MAX_SMTP) || 5;
+// Using Office 365 pattern: 3 per 4 seconds = 45 per minute (conservative to avoid bounceback errors)
+// More conservative than Office 365's 2 per 4 seconds (30/min) but safer than 5 per 4 seconds
+const EMAIL_RATE_MAX_SMTP = parseInt(process.env.EMAIL_RATE_MAX_SMTP) || 3;
 const EMAIL_RATE_DURATION_MS_SMTP = parseInt(process.env.EMAIL_RATE_DURATION_MS_SMTP) || 4000;
 
 // Resend: API-based, moderate limits
