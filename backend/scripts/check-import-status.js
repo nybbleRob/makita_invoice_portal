@@ -90,10 +90,19 @@ async function checkImportStatus() {
     // Group by status
     const statusCounts = {};
     const customerIdCounts = {};
+    const parsedDataSamples = [];
     files.forEach(file => {
       statusCounts[file.status] = (statusCounts[file.status] || 0) + 1;
       if (file.customerId) {
         customerIdCounts[file.customerId] = (customerIdCounts[file.customerId] || 0) + 1;
+      }
+      // Collect parsed data samples (first 10)
+      if (file.parsedData && parsedDataSamples.length < 10) {
+        parsedDataSamples.push({
+          fileName: file.fileName,
+          status: file.status,
+          parsedData: file.parsedData
+        });
       }
     });
 
@@ -102,12 +111,32 @@ async function checkImportStatus() {
       console.log(`  ${status}: ${count}`);
     });
 
+    // Show parsed data samples
+    if (parsedDataSamples.length > 0) {
+      console.log('\nParsed Data Samples (first 10 files with parsed data):');
+      parsedDataSamples.forEach((sample, idx) => {
+        console.log(`\n  ${idx + 1}. ${sample.fileName} (${sample.status}):`);
+        if (sample.parsedData) {
+          const pd = sample.parsedData;
+          console.log(`     Account Number: ${pd.accountNumber || 'N/A'}`);
+          console.log(`     Invoice Number: ${pd.invoiceNumber || 'N/A'}`);
+          console.log(`     Amount: ${pd.amount || 'N/A'}`);
+          console.log(`     Date: ${pd.date || pd.issueDate || 'N/A'}`);
+          console.log(`     Document Type: ${pd.documentType || sample.status}`);
+          if (pd.companyName) console.log(`     Company Name: ${pd.companyName}`);
+        }
+      });
+    }
+
     // Get company info from documents created from these files
     // Documents store fileId in metadata JSONB field
     const fileIds = files.map(f => f.id);
-    const fileIdConditions = fileIds.map(fileId => ({
-      'metadata.fileId': fileId
-    }));
+    const fileIdConditions = fileIds.length > 0 ? fileIds.map(fileId => 
+      sequelize.where(
+        sequelize.cast(sequelize.col('metadata'), 'text'),
+        { [Op.like]: `%"fileId":"${fileId}"%` }
+      )
+    ) : [];
     
     const [invoicesFromFiles, creditNotesFromFiles, statementsFromFiles] = await Promise.all([
       fileIds.length > 0 ? Invoice.findAll({
@@ -120,7 +149,8 @@ async function checkImportStatus() {
           as: 'company',
           attributes: ['id', 'name', 'referenceNo'],
           required: false
-        }]
+        }],
+        limit: 50 // Limit for performance
       }) : [],
       fileIds.length > 0 ? CreditNote.findAll({
         where: {
@@ -131,7 +161,8 @@ async function checkImportStatus() {
           as: 'company',
           attributes: ['id', 'name', 'referenceNo'],
           required: false
-        }]
+        }],
+        limit: 50
       }) : [],
       fileIds.length > 0 ? Statement.findAll({
         where: {
@@ -142,7 +173,8 @@ async function checkImportStatus() {
           as: 'company',
           attributes: ['id', 'name', 'referenceNo'],
           required: false
-        }]
+        }],
+        limit: 50
       }) : []
     ]);
 
@@ -298,11 +330,30 @@ async function checkImportStatus() {
         console.log(`  Total recipients in batch emails: ${totalRecipients}`);
       }
 
-      // Show first few emails
-      console.log('\n  First 10 emails:');
-      emailLogs.slice(0, 10).forEach(email => {
+      // Show detailed email information
+      console.log('\n  Email Delivery Details (first 20):');
+      emailLogs.slice(0, 20).forEach((email, idx) => {
         const sentAt = email.sentAt ? new Date(email.sentAt).toISOString() : 'Not sent';
-        console.log(`    ${sentAt} - ${email.recipientEmail || email.recipient} - ${email.status} (${email.recipientCount || 1} recipient(s))`);
+        const recipient = email.to || email.recipientEmail || email.recipient || 'Unknown';
+        console.log(`\n    ${idx + 1}. ${sentAt}`);
+        console.log(`       To: ${recipient}`);
+        console.log(`       Subject: ${email.subject || 'N/A'}`);
+        console.log(`       Status: ${email.status}`);
+        console.log(`       Recipients: ${email.recipientCount || 1}`);
+        if (email.companyName) console.log(`       Company: ${email.companyName}`);
+        if (email.messageId) console.log(`       Message ID: ${email.messageId}`);
+        if (email.lastError) console.log(`       Error: ${email.lastError}`);
+        if (email.attempts > 0) console.log(`       Attempts: ${email.attempts}/${email.maxAttempts || 10}`);
+      });
+
+      // Email status breakdown
+      console.log('\n  Email Status Breakdown:');
+      const statusBreakdown = {};
+      emailLogs.forEach(email => {
+        statusBreakdown[email.status] = (statusBreakdown[email.status] || 0) + 1;
+      });
+      Object.entries(statusBreakdown).forEach(([status, count]) => {
+        console.log(`    ${status}: ${count}`);
       });
     } else {
       console.log('  No emails found in time window');
