@@ -65,7 +65,6 @@ const Settings = () => {
   const [emailQueueStatus, setEmailQueueStatus] = useState(null);
   const [emailPerformance, setEmailPerformance] = useState(null);
   const [clearingLogs, setClearingLogs] = useState(false);
-  const emailLogsRef = useRef(null);
 
   useEffect(() => {
     if (user?.role === 'global_admin') {
