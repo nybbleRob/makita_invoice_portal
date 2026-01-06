@@ -14,6 +14,7 @@ require('dotenv').config();
 
 const IORedis = require('ioredis');
 const { scheduledTasksQueue } = require('../config/queue');
+const { getRedisStatus } = require('../config/redis');
 
 console.log('🔧 Initializing BullMQ scheduler worker...');
 

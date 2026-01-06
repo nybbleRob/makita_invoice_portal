@@ -120,6 +120,24 @@ const testConnection = async () => {
   }
 };
 
+// Get Redis connection status
+const getRedisStatus = () => {
+  if (!redis) {
+    return {
+      configured: false,
+      connected: false,
+      status: 'not_configured'
+    };
+  }
+  
+  return {
+    configured: true,
+    connected: connectionState === 'ready',
+    status: connectionState,
+    reconnectAttempts
+  };
+};
+
 // Graceful shutdown
 const closeConnection = async () => {
   if (!redis) {
@@ -137,6 +155,7 @@ const closeConnection = async () => {
 module.exports = {
   redis,
   testConnection,
-  closeConnection
+  closeConnection,
+  getRedisStatus
 };
 
