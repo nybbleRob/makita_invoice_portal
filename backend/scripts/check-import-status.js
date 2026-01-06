@@ -276,13 +276,15 @@ async function checkImportStatus() {
     console.log(`Total emails sent: ${emailLogs.length}`);
     
     if (emailLogs.length > 0) {
-      const successful = emailLogs.filter(e => e.status === 'sent').length;
-      const failed = emailLogs.filter(e => e.status === 'failed').length;
-      const queued = emailLogs.filter(e => e.status === 'queued').length;
+      const successful = emailLogs.filter(e => e.status === 'SENT').length;
+      const failed = emailLogs.filter(e => e.status === 'FAILED_PERMANENT').length;
+      const queued = emailLogs.filter(e => e.status === 'QUEUED' || e.status === 'SENDING').length;
+      const deferred = emailLogs.filter(e => e.status === 'DEFERRED').length;
       
-      console.log(`  Successful: ${successful}`);
-      console.log(`  Failed: ${failed}`);
-      console.log(`  Queued: ${queued}`);
+      console.log(`  Successful (SENT): ${successful}`);
+      console.log(`  Failed (FAILED_PERMANENT): ${failed}`);
+      console.log(`  Queued/Sending (QUEUED/SENDING): ${queued}`);
+      console.log(`  Deferred (DEFERRED): ${deferred}`);
 
       // Group by recipient count (batch emails)
       const batchEmails = emailLogs.filter(e => e.recipientCount > 1);
@@ -315,7 +317,7 @@ async function checkImportStatus() {
     console.log(`  - Failed: ${statusCounts['failed'] || 0}`);
     console.log(`  - Pending: ${statusCounts['pending'] || 0}`);
     console.log(`Documents created: ${invoices + creditNotes + statements}`);
-    console.log(`Emails sent: ${emailLogs.filter(e => e.status === 'sent').length}`);
+    console.log(`Emails sent: ${emailLogs.filter(e => e.status === 'SENT').length}`);
 
     // Check for discrepancies
     console.log('\n6. DISCREPANCIES CHECK');
