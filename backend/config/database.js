@@ -1,5 +1,16 @@
 const { Sequelize } = require('sequelize');
-require('dotenv').config();
+// Load .env file - check both root and backend directories
+const fs = require('fs');
+const path = require('path');
+const rootEnv = path.join(__dirname, '..', '..', '.env');
+const backendEnv = path.join(__dirname, '..', '.env');
+if (fs.existsSync(rootEnv)) {
+  require('dotenv').config({ path: rootEnv });
+} else if (fs.existsSync(backendEnv)) {
+  require('dotenv').config({ path: backendEnv });
+} else {
+  require('dotenv').config(); // Fallback to default behavior
+}
 
 // PostgreSQL connection
 const sequelize = new Sequelize(
