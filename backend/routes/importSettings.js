@@ -463,14 +463,32 @@ async function rescheduleImportJob(frequencyMinutes, enabled) {
       cronPattern = '0 0 * * *';
     }
 
-    // Add new scheduled job
+    // Calculate next run time
+    const nextRunDate = calculateNextRunTime(frequencyMinutes);
+    const now = new Date();
+    const msUntilNextRun = nextRunDate.getTime() - now.getTime();
+    
+    // If next scheduled run is soon (within 2 minutes), trigger immediate scan
+    // This ensures the scan happens right away when frequency changes
+    if (msUntilNextRun > 0 && msUntilNextRun < 120000) {
+      console.log(`⏰ Next scheduled run is soon (${Math.round(msUntilNextRun/1000)}s), triggering immediate scan`);
+      // Trigger immediate one-time scan (don't await - let it run in background)
+      scheduledTasksQueue.add(
+        'local-folder-scan',
+        { task: 'local-folder-scan' },
+        { removeOnComplete: true, removeOnFail: false }
+      ).catch(err => console.error('Error triggering immediate scan:', err));
+    }
+    
+    // Schedule the repeatable job with startDate to ensure it runs at the calculated time
     await scheduledTasksQueue.add(
       'local-folder-scan',
       { task: 'local-folder-scan' },
       {
         repeat: {
           pattern: cronPattern,
-          tz: process.env.TZ || 'UTC'
+          tz: process.env.TZ || 'UTC',
+          startDate: nextRunDate.getTime() // Set start date to next calculated run time
         },
         removeOnComplete: {
           age: 24 * 3600,
