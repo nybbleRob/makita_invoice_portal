@@ -31,6 +31,13 @@ import Unallocated from './pages/Unallocated';
 import UnallocatedView from './pages/UnallocatedView';
 import ActivityLogs from './pages/ActivityLogs';
 import ImportData from './pages/ImportData';
+import Suppliers from './pages/Suppliers';
+import SupplierView from './pages/SupplierView';
+import AddSupplier from './pages/AddSupplier';
+import EditSupplier from './pages/EditSupplier';
+import SupplierTemplates from './pages/SupplierTemplates';
+import SupplierDocuments from './pages/SupplierDocuments';
+import SupplierDocumentView from './pages/SupplierDocumentView';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
 import { PermissionProvider, usePermissions } from './context/PermissionContext';
@@ -193,6 +200,15 @@ function AppRoutes() {
         
         {/* Activity Logs - GA, Admin */}
         <Route path="activity-logs" element={<PermissionRoute permission="ACTIVITY_LOGS_VIEW"><ActivityLogs /></PermissionRoute>} />
+        
+        {/* Suppliers - Staff roles (only if module enabled) */}
+        <Route path="suppliers" element={<Suppliers />} />
+        <Route path="suppliers/new" element={<AdminRoute><AddSupplier /></AdminRoute>} />
+        <Route path="suppliers/:id" element={<SupplierView />} />
+        <Route path="suppliers/:id/edit" element={<AdminRoute><EditSupplier /></AdminRoute>} />
+        <Route path="supplier-templates" element={<AdminRoute><SupplierTemplates /></AdminRoute>} />
+        <Route path="supplier-documents" element={<SupplierDocuments />} />
+        <Route path="supplier-documents/:id" element={<SupplierDocumentView />} />
       </Route>
     </Routes>
   );

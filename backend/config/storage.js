@@ -32,12 +32,14 @@ const FTP_UPLOAD_PATH = process.env.FTP_UPLOAD_PATH || path.join(DATA_DRIVE, 'in
 const UNPROCESSED_BASE = process.env.UNPROCESSED_PATH || path.join(DATA_DRIVE, 'unprocessed');
 const UNPROCESSED_DUPLICATES = path.join(UNPROCESSED_BASE, 'duplicates');
 const UNPROCESSED_FAILED = path.join(UNPROCESSED_BASE, 'failed');
+const UNPROCESSED_SUPPLIER_FAILED = path.join(UNPROCESSED_BASE, 'supplier-failed');
 
 // Processed files paths
 const PROCESSED_BASE = process.env.PROCESSED_PATH || path.join(DATA_DRIVE, 'processed');
 const PROCESSED_INVOICES = path.join(PROCESSED_BASE, 'invoices');
 const PROCESSED_CREDITNOTES = path.join(PROCESSED_BASE, 'creditnotes');
 const PROCESSED_STATEMENTS = path.join(PROCESSED_BASE, 'statements');
+const PROCESSED_SUPPLIER_DOCUMENTS = path.join(PROCESSED_BASE, 'supplier-documents');
 
 // Legacy storage base (for templates, avatars, branding - stays in backend/uploads)
 // These do NOT go on the data drive - they stay local to the application
@@ -58,7 +60,8 @@ const STORAGE_PATHS = {
   unprocessed: {
     base: UNPROCESSED_BASE,
     duplicates: UNPROCESSED_DUPLICATES,
-    failed: UNPROCESSED_FAILED
+    failed: UNPROCESSED_FAILED,
+    supplierFailed: UNPROCESSED_SUPPLIER_FAILED
   },
   
   // Processed folders
@@ -66,7 +69,13 @@ const STORAGE_PATHS = {
     base: PROCESSED_BASE,
     invoices: PROCESSED_INVOICES,
     creditnotes: PROCESSED_CREDITNOTES,
-    statements: PROCESSED_STATEMENTS
+    statements: PROCESSED_STATEMENTS,
+    supplierDocuments: PROCESSED_SUPPLIER_DOCUMENTS
+  },
+  
+  // Unprocessed supplier folders
+  unprocessedSupplier: {
+    failed: UNPROCESSED_SUPPLIER_FAILED
   },
   
   // Legacy paths (for branding, templates, etc.)
@@ -192,9 +201,11 @@ function ensureStorageDirs() {
     FTP_UPLOAD_PATH,
     UNPROCESSED_DUPLICATES,
     UNPROCESSED_FAILED,
+    UNPROCESSED_SUPPLIER_FAILED,
     PROCESSED_INVOICES,
     PROCESSED_CREDITNOTES,
     PROCESSED_STATEMENTS,
+    PROCESSED_SUPPLIER_DOCUMENTS,
     STORAGE_DIRS.templates,
     STORAGE_DIRS.avatars,
     STORAGE_DIRS.temp
@@ -271,10 +282,12 @@ module.exports = {
   UNPROCESSED_BASE,
   UNPROCESSED_DUPLICATES,
   UNPROCESSED_FAILED,
+  UNPROCESSED_SUPPLIER_FAILED,
   PROCESSED_BASE,
   PROCESSED_INVOICES,
   PROCESSED_CREDITNOTES,
   PROCESSED_STATEMENTS,
+  PROCESSED_SUPPLIER_DOCUMENTS,
   
   // Legacy exports for backward compatibility
   STORAGE_BASE,

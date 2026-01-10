@@ -19,6 +19,10 @@ const PendingRegistration = require('./PendingRegistration')(sequelize, Sequeliz
 const ImportTransaction = require('./ImportTransaction')(sequelize, Sequelize.DataTypes);
 const ColumnConfiguration = require('./ColumnConfiguration')(sequelize, Sequelize.DataTypes);
 const EmailLog = require('./EmailLog')(sequelize, Sequelize.DataTypes);
+const Supplier = require('./Supplier')(sequelize);
+const SupplierTemplate = require('./SupplierTemplateSupplier')(sequelize);
+const SupplierDocument = require('./SupplierDocument')(sequelize);
+const SupplierFile = require('./SupplierFile')(sequelize);
 
 // Define associations
 // User associations
@@ -133,6 +137,45 @@ PendingRegistration.belongsTo(User, { foreignKey: 'createdUserId', as: 'createdU
 User.hasMany(ImportTransaction, { foreignKey: 'userId', as: 'importTransactions' });
 ImportTransaction.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
+// Supplier associations
+User.hasMany(Supplier, { foreignKey: 'createdById', as: 'createdSuppliers' });
+Supplier.belongsTo(User, { foreignKey: 'createdById', as: 'createdBy' });
+
+// Supplier has many templates
+Supplier.hasMany(SupplierTemplate, { foreignKey: 'supplierId', as: 'templates' });
+SupplierTemplate.belongsTo(Supplier, { foreignKey: 'supplierId', as: 'supplier' });
+
+// Supplier has many documents
+Supplier.hasMany(SupplierDocument, { foreignKey: 'supplierId', as: 'documents' });
+SupplierDocument.belongsTo(Supplier, { foreignKey: 'supplierId', as: 'supplier' });
+
+// Supplier template can have many documents
+SupplierTemplate.hasMany(SupplierDocument, { foreignKey: 'templateId', as: 'documents' });
+SupplierDocument.belongsTo(SupplierTemplate, { foreignKey: 'templateId', as: 'template' });
+
+// Supplier document associations with users
+User.hasMany(SupplierDocument, { foreignKey: 'parsedBy', as: 'parsedSupplierDocuments' });
+SupplierDocument.belongsTo(User, { foreignKey: 'parsedBy', as: 'parsedByUser' });
+
+User.hasMany(SupplierDocument, { foreignKey: 'viewedBy', as: 'viewedSupplierDocuments' });
+SupplierDocument.belongsTo(User, { foreignKey: 'viewedBy', as: 'viewedByUser' });
+
+User.hasMany(SupplierDocument, { foreignKey: 'queriedBy', as: 'queriedSupplierDocuments' });
+SupplierDocument.belongsTo(User, { foreignKey: 'queriedBy', as: 'queriedByUser' });
+
+User.hasMany(SupplierDocument, { foreignKey: 'createdById', as: 'createdSupplierDocuments' });
+SupplierDocument.belongsTo(User, { foreignKey: 'createdById', as: 'createdBy' });
+
+// Supplier file associations
+Supplier.hasMany(SupplierFile, { foreignKey: 'supplierId', as: 'files' });
+SupplierFile.belongsTo(Supplier, { foreignKey: 'supplierId', as: 'supplier' });
+
+SupplierTemplate.hasMany(SupplierFile, { foreignKey: 'templateId', as: 'files' });
+SupplierFile.belongsTo(SupplierTemplate, { foreignKey: 'templateId', as: 'template' });
+
+SupplierDocument.hasOne(SupplierFile, { foreignKey: 'supplierDocumentId', as: 'file' });
+SupplierFile.belongsTo(SupplierDocument, { foreignKey: 'supplierDocumentId', as: 'supplierDocument' });
+
 
 module.exports = {
   sequelize,
@@ -154,6 +197,10 @@ module.exports = {
   ImportTransaction,
   ColumnConfiguration,
   EmailLog,
-  SupplierTemplate: Template // Backward compatibility alias
+  SupplierTemplate: Template, // Backward compatibility alias for customer templates
+  Supplier,
+  SupplierTemplateSupplier: SupplierTemplate, // Supplier templates (different from customer Template)
+  SupplierDocument,
+  SupplierFile
 };
 

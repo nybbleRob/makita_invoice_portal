@@ -493,6 +493,9 @@ app.use('/api/parsing', require('./routes/parsing'));
 app.use('/api/files', require('./routes/files'));
 app.use('/api/templates', require('./routes/templates'));
 // Email templates are now file-based in backend/templates/emails/
+app.use('/api/suppliers', require('./routes/suppliers'));
+app.use('/api/supplier-templates', require('./routes/supplierTemplates'));
+app.use('/api/supplier-documents', require('./routes/supplierDocuments'));
 app.use('/api/activity-logs', require('./routes/activityLogs'));
 app.use('/api/registration', require('./routes/registration'));
 app.use('/api/pending-registrations', require('./routes/pendingRegistrations'));

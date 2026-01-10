@@ -18,13 +18,15 @@ const IORedis = require('ioredis');
 const { processFileImport } = require('../jobs/fileImport');
 const { processBulkParsingTest } = require('../jobs/bulkParsingTest');
 const { processInvoiceImport } = require('../jobs/invoiceImport');
+const { processSupplierDocumentImportJob } = require('../jobs/supplierDocumentImport');
 const { processEmailJob } = require('../jobs/emailJob');
 const { cleanupOldFiles } = require('../jobs/fileCleanup');
 const { processLocalFolderScan } = require('../jobs/localFolderScanner');
 const { 
   fileImportQueue, 
   bulkParsingQueue, 
-  invoiceImportQueue, 
+  invoiceImportQueue,
+  supplierDocumentQueue,
   emailQueue,
   scheduledTasksQueue,
   EMAIL_RATE_MAX,
@@ -232,6 +234,7 @@ async function getHealthStatus() {
       { name: 'file-import', queue: fileImportQueue },
       { name: 'bulk-parsing', queue: bulkParsingQueue },
       { name: 'invoice-import', queue: invoiceImportQueue },
+      { name: 'supplier-document-import', queue: supplierDocumentQueue },
       { name: 'email', queue: emailQueue },
       { name: 'scheduled-tasks', queue: scheduledTasksQueue }
     ];
@@ -390,6 +393,47 @@ invoiceImportWorker.on('stalled', (jobId) => {
 
 workers.push(invoiceImportWorker);
 console.log('✅ Invoice import worker initialized');
+
+// Supplier document import worker (concurrency 2 for parallel processing)
+const supplierDocumentWorker = new Worker('supplier-document-import', async (job) => {
+  console.log(`📥 Processing supplier document import job ${job.id}: ${job.data.fileName || 'Unknown'}`);
+  return await processSupplierDocumentImportJob(job);
+}, {
+  ...commonWorkerOptions,
+  concurrency: 2,
+  lockDuration: 120000 // 2 minutes for import operations
+});
+
+supplierDocumentWorker.on('completed', (job, result) => {
+  console.log(`✅ Supplier document import job ${job.id} completed:`, result?.invoiceNumber || result?.fileName || 'Unknown');
+});
+
+supplierDocumentWorker.on('failed', async (job, err) => {
+  console.error(`❌ Supplier document import job ${job.id} failed:`, err.message);
+  if (err.stack) {
+    console.error('   Stack:', err.stack);
+  }
+  
+  const maxAttempts = job.opts?.attempts || 2;
+  if (job.attemptsMade >= maxAttempts) {
+    await moveToDeadLetterQueue(job, err, 'supplier-document-import');
+  }
+});
+
+supplierDocumentWorker.on('error', (error) => {
+  console.error('❌ Supplier document import worker error:', error.message);
+});
+
+supplierDocumentWorker.on('active', (job) => {
+  console.log(`🔄 Supplier document import job ${job.id} is now active`);
+});
+
+supplierDocumentWorker.on('stalled', (jobId) => {
+  console.warn(`⚠️  Supplier document import job ${jobId} stalled - will be retried`);
+});
+
+workers.push(supplierDocumentWorker);
+console.log('✅ Supplier document import worker initialized');
 
 // Email worker with provider-aware concurrency and rate limiting
 // No BullMQ limiter - Bottleneck reservoir handles rate limiting smoothly

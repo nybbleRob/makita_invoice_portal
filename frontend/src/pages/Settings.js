@@ -1805,6 +1805,32 @@ const Settings = () => {
                               </div>
                             </div>
                             
+                            {/* Suppliers Module */}
+                            <div className="list-group-item">
+                              <div className="d-flex justify-content-between align-items-center">
+                                <div className="flex-grow-1">
+                                  <h4 className="mb-1">Suppliers</h4>
+                                  <p className="text-muted mb-0 small">
+                                    Allows internal staff to view and process supplier documents (invoices, credit notes, statements). When enabled, staff can manage suppliers, create templates, and process supplier documents. When disabled, all supplier features are hidden and API endpoints are disabled.
+                                  </p>
+                                </div>
+                                <div className="ms-3">
+                                  <div className="form-check form-switch">
+                                    <input
+                                      className="form-check-input"
+                                      type="checkbox"
+                                      id="module-suppliersEnabled"
+                                      checked={settings.suppliersEnabled !== false}
+                                      onChange={(e) => handleInputChange('suppliersEnabled', e.target.checked)}
+                                    />
+                                    <label className="form-check-label" htmlFor="module-suppliersEnabled">
+                                      {settings.suppliersEnabled !== false ? 'Enabled' : 'Disabled'}
+                                    </label>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            
                             {/* Add more modules here as needed */}
                             {/* Example:
                             <div className="list-group-item">

@@ -260,6 +260,19 @@ if (connection) {
   nestedSetQueue = createDummyQueue();
 }
 
+// Supplier document import queue
+let supplierDocumentQueue = null;
+if (connection) {
+  supplierDocumentQueue = new Queue('supplier-document-import', {
+    connection,
+    defaultJobOptions: defaultInvoiceImportOptions // Reuse same options
+  });
+  console.log('✅ Supplier document import queue initialized');
+} else {
+  console.log('ℹ️  Supplier document import queue: Not initialized (Redis not configured)');
+  supplierDocumentQueue = createDummyQueue();
+}
+
 // Graceful shutdown - close all queues
 async function closeAllQueues() {
   console.log('🔄 Closing all queues...');
@@ -282,6 +295,9 @@ async function closeAllQueues() {
   }
   if (nestedSetQueue && nestedSetQueue.close) {
     closePromises.push(nestedSetQueue.close().catch(err => console.error('Error closing nestedSetQueue:', err.message)));
+  }
+  if (supplierDocumentQueue && supplierDocumentQueue.close) {
+    closePromises.push(supplierDocumentQueue.close().catch(err => console.error('Error closing supplierDocumentQueue:', err.message)));
   }
   if (connection && connection.quit) {
     closePromises.push(connection.quit().catch(err => console.error('Error closing Redis connection:', err.message)));
@@ -306,6 +322,7 @@ module.exports = {
   emailQueue,
   scheduledTasksQueue,
   nestedSetQueue,
+  supplierDocumentQueue,
   connection,
   closeAllQueues,
   // Export default options for workers to use

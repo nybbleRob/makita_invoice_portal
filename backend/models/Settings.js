@@ -254,6 +254,11 @@ module.exports = (sequelize) => {
       defaultValue: true,
       comment: 'Enable/disable the document queries feature system-wide. When disabled, all query features are hidden.'
     },
+    suppliersEnabled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      comment: 'Enable/disable the suppliers feature system-wide. When disabled, all supplier features are hidden.'
+    },
     importSettings: {
       type: DataTypes.JSONB,
       defaultValue: {

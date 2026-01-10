@@ -309,6 +309,11 @@ router.put('/', globalAdmin, async (req, res) => {
       settings.queriesEnabled = req.body.queriesEnabled === true || req.body.queriesEnabled === 'true';
     }
     
+    // Update suppliers enabled setting
+    if (req.body.suppliersEnabled !== undefined) {
+      settings.suppliersEnabled = req.body.suppliersEnabled === true || req.body.suppliersEnabled === 'true';
+    }
+    
     // Update test mode default company ID
     if (req.body.testModeDefaultCompanyId !== undefined) {
       // Allow null to clear the setting, otherwise validate UUID format
