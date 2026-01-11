@@ -69,10 +69,10 @@ const Suppliers = () => {
       const response = await api.get('/api/suppliers', { params });
       setSuppliers(response.data.suppliers || []);
       setPagination({
-        page: response.data.page || pagination.page,
+        page: response.data.pagination?.page || pagination.page,
         limit: pagination.limit,
-        total: response.data.total || 0,
-        pages: response.data.pages || 0
+        total: response.data.pagination?.total || 0,
+        pages: response.data.pagination?.totalPages || response.data.pagination?.pages || 0
       });
     } catch (error) {
       console.error('Error fetching suppliers:', error);
@@ -219,7 +219,7 @@ const Suppliers = () => {
                       suppliers.map((supplier) => (
                         <tr key={supplier.id}>
                           <td>{supplier.name}</td>
-                          <td>{supplier.referenceNo || '-'}</td>
+                          <td>{supplier.code || '-'}</td>
                           <td>{supplier.email || '-'}</td>
                           <td>{supplier.phone || '-'}</td>
                           <td>
