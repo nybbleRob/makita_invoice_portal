@@ -26,8 +26,7 @@ const SupplierView = () => {
   const fetchSupplier = async () => {
     try {
       setLoading(true);
-      // Validate ID is numeric (not "new" or other route names)
-      if (!id || isNaN(parseInt(id))) {
+      if (!id) {
         navigate('/suppliers');
         return;
       }
@@ -45,8 +44,7 @@ const SupplierView = () => {
   const fetchTemplates = async () => {
     try {
       setTemplatesLoading(true);
-      // Validate ID is numeric (not "new" or other route names)
-      if (!id || isNaN(parseInt(id))) {
+      if (!id) {
         setTemplates([]);
         return;
       }
