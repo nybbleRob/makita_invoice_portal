@@ -11,23 +11,34 @@ async function createSupplierTables() {
   try {
     console.log('🔄 Creating supplier tables...');
     
-    // Check if suppliers table already exists
+    // Check if ALL supplier tables already exist
     const [tables] = await sequelize.query(`
       SELECT table_name 
       FROM information_schema.tables 
-      WHERE table_name = 'suppliers'
+      WHERE table_name IN ('suppliers', 'supplier_templates', 'supplier_documents', 'supplier_files')
+      AND table_schema = 'public'
     `);
     
-    if (tables.length > 0) {
-      console.log('✅ Supplier tables already exist, skipping...');
+    const existingTables = tables.map(t => t.table_name);
+    const requiredTables = ['suppliers', 'supplier_templates', 'supplier_documents', 'supplier_files'];
+    const allExist = requiredTables.every(table => existingTables.includes(table));
+    
+    if (allExist) {
+      console.log('✅ All supplier tables already exist, skipping...');
       await transaction.rollback();
       return;
     }
     
+    if (existingTables.length > 0) {
+      console.log(`⚠️  Some supplier tables already exist: ${existingTables.join(', ')}`);
+      console.log('   The script will attempt to create missing tables only.');
+    }
+    
     // 1. Create suppliers table
-    console.log('📝 Creating suppliers table...');
-    await sequelize.query(`
-      CREATE TABLE suppliers (
+    if (!existingTables.includes('suppliers')) {
+      console.log('📝 Creating suppliers table...');
+      await sequelize.query(`
+        CREATE TABLE suppliers (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(255) NOT NULL,
         code VARCHAR(50) UNIQUE,
@@ -63,12 +74,16 @@ async function createSupplierTables() {
       CREATE INDEX suppliers_isActive_idx ON suppliers("isActive");
       CREATE INDEX suppliers_createdAt_idx ON suppliers("createdAt" DESC);
       CREATE INDEX suppliers_deletedAt_idx ON suppliers("deletedAt") WHERE "deletedAt" IS NULL;
-    `, { transaction });
+      `, { transaction });
+    } else {
+      console.log('✅ suppliers table already exists, skipping...');
+    }
     
     // 2. Create supplier_templates table
-    console.log('📝 Creating supplier_templates table...');
-    await sequelize.query(`
-      CREATE TABLE supplier_templates (
+    if (!existingTables.includes('supplier_templates')) {
+      console.log('📝 Creating supplier_templates table...');
+      await sequelize.query(`
+        CREATE TABLE supplier_templates (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         "supplierId" UUID NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
         name VARCHAR(255) NOT NULL,
@@ -113,12 +128,16 @@ async function createSupplierTables() {
       CREATE INDEX supplier_templates_isDefault_idx ON supplier_templates("isDefault");
       CREATE INDEX supplier_templates_supplier_type_file_idx ON supplier_templates("supplierId", "templateType", "fileType");
       CREATE INDEX supplier_templates_deletedAt_idx ON supplier_templates("deletedAt") WHERE "deletedAt" IS NULL;
-    `, { transaction });
+      `, { transaction });
+    } else {
+      console.log('✅ supplier_templates table already exists, skipping...');
+    }
     
     // 3. Create supplier_documents table
-    console.log('📝 Creating supplier_documents table...');
-    await sequelize.query(`
-      CREATE TABLE supplier_documents (
+    if (!existingTables.includes('supplier_documents')) {
+      console.log('📝 Creating supplier_documents table...');
+      await sequelize.query(`
+        CREATE TABLE supplier_documents (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         "supplierId" UUID NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
         "templateId" UUID REFERENCES supplier_templates(id) ON DELETE SET NULL,
@@ -186,12 +205,16 @@ async function createSupplierTables() {
       CREATE INDEX supplier_documents_invoiceNumber_idx ON supplier_documents("invoiceNumber");
       CREATE INDEX supplier_documents_poNumber_idx ON supplier_documents("poNumber");
       CREATE INDEX supplier_documents_deletedAt_idx ON supplier_documents("deletedAt") WHERE "deletedAt" IS NULL;
-    `, { transaction });
+      `, { transaction });
+    } else {
+      console.log('✅ supplier_documents table already exists, skipping...');
+    }
     
     // 4. Create supplier_files table (optional - for tracking uploads)
-    console.log('📝 Creating supplier_files table...');
-    await sequelize.query(`
-      CREATE TABLE supplier_files (
+    if (!existingTables.includes('supplier_files')) {
+      console.log('📝 Creating supplier_files table...');
+      await sequelize.query(`
+        CREATE TABLE supplier_files (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         "fileName" VARCHAR(500) NOT NULL,
         "originalName" VARCHAR(500),
@@ -231,7 +254,10 @@ async function createSupplierTables() {
       CREATE INDEX supplier_files_source_idx ON supplier_files("source");
       CREATE INDEX supplier_files_createdAt_idx ON supplier_files("createdAt" DESC);
       CREATE INDEX supplier_files_deletedAt_idx ON supplier_files("deletedAt") WHERE "deletedAt" IS NULL;
-    `, { transaction });
+      `, { transaction });
+    } else {
+      console.log('✅ supplier_files table already exists, skipping...');
+    }
     
     await transaction.commit();
     console.log('✅ Successfully created all supplier tables!');
