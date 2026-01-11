@@ -278,7 +278,7 @@ function validateCrucialFields(parsedData) {
     isValid: missing.length === 0,
     missing,
     errors
-  });
+  };
 }
 
 /**
