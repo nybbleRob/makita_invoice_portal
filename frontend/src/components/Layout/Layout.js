@@ -109,25 +109,16 @@ const Layout = () => {
           </Link>
         </li>
       )}
-      {/* Suppliers Dropdown - Staff roles (only if module enabled) - Opens on hover */}
+      {/* Suppliers Dropdown - Staff roles (only if module enabled) */}
       {settings?.suppliersEnabled !== false && isStaff() && (
-        <li 
-          className={`nav-item dropdown ${location.pathname.startsWith('/suppliers') || location.pathname.startsWith('/supplier-') ? 'active' : ''}`}
-          onMouseEnter={(e) => {
-            e.currentTarget.classList.add('show');
-            e.currentTarget.querySelector('.dropdown-menu')?.classList.add('show');
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.classList.remove('show');
-            e.currentTarget.querySelector('.dropdown-menu')?.classList.remove('show');
-          }}
-        >
+        <li className={`nav-item dropdown ${location.pathname.startsWith('/suppliers') || location.pathname.startsWith('/supplier-') ? 'active' : ''}`}>
           <a 
             className="nav-link dropdown-toggle" 
             href="#navbar-suppliers" 
+            data-bs-toggle="dropdown"
+            data-bs-auto-close="outside"
             role="button" 
             aria-expanded="false"
-            onClick={(e) => e.preventDefault()}
           >
             <span className="nav-link-icon">
               <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-building-warehouse" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
