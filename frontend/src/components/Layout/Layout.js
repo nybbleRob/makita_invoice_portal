@@ -75,6 +75,22 @@ const Layout = () => {
           <span className="nav-link-title">Credit Notes</span>
         </Link>
       </li>
+      {/* Suppliers - Staff roles (only if module enabled) */}
+      {settings?.suppliersEnabled !== false && hasPermission('SUPPLIERS_VIEW') && (
+        <li className={`nav-item ${location.pathname.startsWith('/suppliers') || location.pathname.startsWith('/supplier-templates') || location.pathname.startsWith('/supplier-documents') ? 'active' : ''}`}>
+          <Link to="/suppliers" className="nav-link">
+            <span className="nav-link-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-building-warehouse" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M3 21v-13l9 -4l9 4v13" />
+                <path d="M13 13h4v8h-10v-6h6" />
+                <path d="M13 17h4" />
+              </svg>
+            </span>
+            <span className="nav-link-title">Suppliers</span>
+          </Link>
+        </li>
+      )}
       {/* Statements - HIDDEN until client decides on scope */}
       {/* {hasPermission('STATEMENTS_VIEW') && (
         <li className={`nav-item ${location.pathname === '/statements' ? 'active' : ''}`}>
@@ -157,24 +173,6 @@ const Layout = () => {
               </svg>
             </span>
             <span className="nav-link-title">Activity Logs</span>
-          </Link>
-        </li>
-      )}
-      {/* Suppliers - Staff roles (only if module enabled) */}
-      {settings?.suppliersEnabled !== false && hasPermission('USERS_VIEW') && (
-        <li className={`nav-item ${location.pathname.startsWith('/suppliers') || location.pathname.startsWith('/supplier-templates') || location.pathname.startsWith('/supplier-documents') ? 'active' : ''}`}>
-          <Link to="/suppliers" className="nav-link">
-            <span className="nav-link-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                <path d="M3 21l18 0" />
-                <path d="M5 21v-16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v16" />
-                <path d="M9 7l6 0" />
-                <path d="M9 11l6 0" />
-                <path d="M9 15l6 0" />
-              </svg>
-            </span>
-            <span className="nav-link-title">Suppliers</span>
           </Link>
         </li>
       )}

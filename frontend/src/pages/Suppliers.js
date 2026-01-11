@@ -1,27 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
+import { usePermissions } from '../context/PermissionContext';
 import { useDebounce } from '../hooks/useDebounce';
+import { getRoleLabel, getRoleBadgeClass } from '../utils/roleLabels';
 
 const Suppliers = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { settings } = useSettings();
+  const { hasPermission } = usePermissions();
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 0 });
-  const [isActiveFilter, setIsActiveFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [supplierToDelete, setSupplierToDelete] = useState(null);
   const debouncedSearch = useDebounce(searchQuery, 300);
+  const searchInputRef = useRef(null);
   
-  const isGlobalAdmin = user?.role === 'global_admin';
-  
-  // Check if suppliers module is enabled
+  const isGlobalAdmin = user?.role === 'global_admin' || user?.role === 'administrator';
   const suppliersEnabled = settings?.suppliersEnabled !== false;
   
   useEffect(() => {
@@ -31,7 +33,19 @@ const Suppliers = () => {
       return;
     }
     fetchSuppliers();
-  }, [pagination.page, debouncedSearch, isActiveFilter, suppliersEnabled, navigate]);
+  }, [pagination.page, debouncedSearch, statusFilter, suppliersEnabled, navigate]);
+  
+  // Keyboard shortcut for search (Ctrl+K)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
   
   const fetchSuppliers = async () => {
     try {
@@ -40,12 +54,20 @@ const Suppliers = () => {
         page: pagination.page,
         limit: pagination.limit,
         search: debouncedSearch || '',
-        isActive: isActiveFilter === 'all' ? undefined : isActiveFilter === 'active'
       };
       
-      const response = await api.get('/suppliers', { params });
+      if (statusFilter !== 'all') {
+        params.isActive = statusFilter === 'active';
+      }
+      
+      const response = await api.get('/api/suppliers', { params });
       setSuppliers(response.data.suppliers || []);
-      setPagination(response.data.pagination || { page: 1, limit: 50, total: 0, totalPages: 0 });
+      setPagination({
+        page: response.data.page || pagination.page,
+        limit: pagination.limit,
+        total: response.data.total || 0,
+        pages: response.data.pages || 0
+      });
     } catch (error) {
       console.error('Error fetching suppliers:', error);
       toast.error('Error fetching suppliers');
@@ -58,7 +80,7 @@ const Suppliers = () => {
     if (!supplierToDelete) return;
     
     try {
-      await api.delete(`/suppliers/${supplierToDelete.id}`);
+      await api.delete(`/api/suppliers/${supplierToDelete.id}`);
       toast.success('Supplier deleted successfully');
       setShowDeleteModal(false);
       setSupplierToDelete(null);
@@ -69,8 +91,16 @@ const Suppliers = () => {
     }
   };
   
-  const handlePageChange = (newPage) => {
-    setPagination(prev => ({ ...prev, page: newPage }));
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+  
+  const getInitials = (firstName, lastName) => {
+    const first = firstName ? firstName.charAt(0).toUpperCase() : '';
+    const last = lastName ? lastName.charAt(0).toUpperCase() : '';
+    return `${first}${last}` || '?';
   };
   
   if (!suppliersEnabled) {
@@ -79,239 +109,220 @@ const Suppliers = () => {
   
   return (
     <div className="page">
-      <div className="page-header">
-        <div className="container-fluid">
-          <div className="row g-2 align-items-center">
-            <div className="col">
-              <div className="page-pretitle">Internal</div>
-              <h2 className="page-title">Suppliers</h2>
-            </div>
-            <div className="col-auto ms-auto">
-              {isGlobalAdmin && (
-                <button
-                  className="btn btn-primary"
-                  onClick={() => navigate('/suppliers/new')}
-                >
-                  <i className="ti ti-plus me-1"></i>
-                  Add Supplier
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-      
       <div className="page-body">
-        <div className="container-fluid">
-          <div className="row row-cards">
-            <div className="col-12">
-              <div className="card">
-                <div className="card-header">
-                  <div className="card-title">All Suppliers</div>
-                  <div className="card-actions">
-                    <div className="input-group">
+        <div className="container-xl">
+          <div className="card">
+            <div className="card-header">
+              <div className="row w-100 g-3">
+                {/* Title and description */}
+                <div className="col-lg-3 col-md-4 col-12">
+                  <h3 className="card-title mb-0">Suppliers</h3>
+                  <p className="text-secondary m-0">Manage supplier information</p>
+                </div>
+                {/* Controls */}
+                <div className="col-lg-9 col-md-8 col-12">
+                  <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
+                    {/* Search */}
+                    <div className="input-group input-group-flat" style={{ maxWidth: '280px' }}>
+                      <span className="input-group-text">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon">
+                          <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
+                          <path d="M21 21l-6 -6"></path>
+                        </svg>
+                      </span>
                       <input
+                        ref={searchInputRef}
                         type="text"
                         className="form-control"
-                        placeholder="Search suppliers..."
+                        placeholder="Search..."
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setPagination(prev => ({ ...prev, page: 1 }));
+                        }}
                       />
                       <span className="input-group-text">
-                        <i className="ti ti-search"></i>
+                        <kbd>Ctrl+K</kbd>
                       </span>
                     </div>
+                    {/* Status Filter */}
+                    <select
+                      className="form-select w-auto"
+                      value={statusFilter}
+                      onChange={(e) => {
+                        setStatusFilter(e.target.value);
+                        setPagination(prev => ({ ...prev, page: 1 }));
+                      }}
+                    >
+                      <option value="all">All Status</option>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                    {/* Reset */}
+                    <button 
+                      className="btn btn-outline-secondary" 
+                      onClick={handleResetFilters}
+                      title="Reset all filters"
+                    >
+                      Reset
+                    </button>
+                    {/* Add Supplier */}
+                    {hasPermission('SUPPLIERS_CREATE') && (
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => navigate('/suppliers/add')}
+                      >
+                        Add Supplier
+                      </button>
+                    )}
                   </div>
-                </div>
-                <div className="card-body">
-                  {/* Filters */}
-                  <div className="mb-3">
-                    <div className="btn-group" role="group">
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${isActiveFilter === 'all' ? 'btn-primary' : 'btn-outline-primary'}`}
-                        onClick={() => setIsActiveFilter('all')}
-                      >
-                        All
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${isActiveFilter === 'active' ? 'btn-primary' : 'btn-outline-primary'}`}
-                        onClick={() => setIsActiveFilter('active')}
-                      >
-                        Active
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${isActiveFilter === 'inactive' ? 'btn-primary' : 'btn-outline-primary'}`}
-                        onClick={() => setIsActiveFilter('inactive')}
-                      >
-                        Inactive
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {/* Suppliers Table */}
-                  {loading ? (
-                    <div className="text-center py-5">
-                      <div className="spinner-border" role="status">
-                        <span className="visually-hidden">Loading...</span>
-                      </div>
-                    </div>
-                  ) : suppliers.length === 0 ? (
-                    <div className="text-center py-5 text-muted">
-                      <p>No suppliers found</p>
-                      {isGlobalAdmin && (
-                        <button
-                          className="btn btn-primary mt-2"
-                          onClick={() => navigate('/suppliers/new')}
-                        >
-                          Add First Supplier
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="table-responsive">
-                      <table className="table table-vcenter table-hover">
-                        <thead>
-                          <tr>
-                            <th>Name</th>
-                            <th>Code</th>
-                            <th>Email</th>
-                            <th>Phone</th>
-                            <th>Status</th>
-                            <th>Templates</th>
-                            <th>Documents</th>
-                            <th className="w-1">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {suppliers.map((supplier) => (
-                            <tr key={supplier.id}>
-                              <td>
-                                <a
-                                  href="#"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    navigate(`/suppliers/${supplier.id}`);
-                                  }}
-                                  className="text-reset"
-                                >
-                                  {supplier.name}
-                                </a>
-                              </td>
-                              <td>{supplier.code || '-'}</td>
-                              <td>{supplier.email || '-'}</td>
-                              <td>{supplier.phone || '-'}</td>
-                              <td>
-                                <span className={`badge ${supplier.isActive ? 'bg-success' : 'bg-secondary'}`}>
-                                  {supplier.isActive ? 'Active' : 'Inactive'}
-                                </span>
-                              </td>
-                              <td>
-                                <span className="badge bg-info">
-                                  {supplier.templateCount || 0}
-                                </span>
-                              </td>
-                              <td>
-                                <span className="badge bg-primary">
-                                  {supplier.documentCount || 0}
-                                </span>
-                              </td>
-                              <td>
-                                <div className="btn-list flex-nowrap">
-                                  <button
-                                    className="btn btn-sm btn-outline-primary"
-                                    onClick={() => navigate(`/suppliers/${supplier.id}`)}
-                                  >
-                                    View
-                                  </button>
-                                  {isGlobalAdmin && (
-                                    <>
-                                      <button
-                                        className="btn btn-sm btn-outline-secondary"
-                                        onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}
-                                      >
-                                        Edit
-                                      </button>
-                                      <button
-                                        className="btn btn-sm btn-outline-danger"
-                                        onClick={() => {
-                                          setSupplierToDelete(supplier);
-                                          setShowDeleteModal(true);
-                                        }}
-                                      >
-                                        Delete
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      
-                      {/* Pagination */}
-                      {pagination.totalPages > 1 && (
-                        <div className="d-flex justify-content-between align-items-center mt-3">
-                          <div className="text-muted">
-                            Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} suppliers
-                          </div>
-                          <nav>
-                            <ul className="pagination mb-0">
-                              <li className={`page-item ${pagination.page === 1 ? 'disabled' : ''}`}>
-                                <button
-                                  className="page-link"
-                                  onClick={() => handlePageChange(pagination.page - 1)}
-                                  disabled={pagination.page === 1}
-                                >
-                                  Previous
-                                </button>
-                              </li>
-                              {[...Array(pagination.totalPages)].map((_, i) => {
-                                const page = i + 1;
-                                if (
-                                  page === 1 ||
-                                  page === pagination.totalPages ||
-                                  (page >= pagination.page - 2 && page <= pagination.page + 2)
-                                ) {
-                                  return (
-                                    <li key={page} className={`page-item ${pagination.page === page ? 'active' : ''}`}>
-                                      <button
-                                        className="page-link"
-                                        onClick={() => handlePageChange(page)}
-                                      >
-                                        {page}
-                                      </button>
-                                    </li>
-                                  );
-                                } else if (page === pagination.page - 3 || page === pagination.page + 3) {
-                                  return (
-                                    <li key={page} className="page-item disabled">
-                                      <span className="page-link">...</span>
-                                    </li>
-                                  );
-                                }
-                                return null;
-                              })}
-                              <li className={`page-item ${pagination.page === pagination.totalPages ? 'disabled' : ''}`}>
-                                <button
-                                  className="page-link"
-                                  onClick={() => handlePageChange(pagination.page + 1)}
-                                  disabled={pagination.page === pagination.totalPages}
-                                >
-                                  Next
-                                </button>
-                              </li>
-                            </ul>
-                          </nav>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
+            </div>
+            <div className="card-body">
+              <div className="table-responsive">
+                <table className="table table-vcenter table-selectable">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Reference No.</th>
+                      <th>Email</th>
+                      <th>Phone</th>
+                      <th>Status</th>
+                      <th>Created By</th>
+                      <th>Created At</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr>
+                        <td colSpan="8" className="text-center py-4">
+                          <div className="spinner-border spinner-border-sm" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : suppliers.length === 0 ? (
+                      <tr>
+                        <td colSpan="8" className="text-center text-muted py-4">
+                          {pagination.total === 0 ? 'No suppliers found' : 'No suppliers match your filters on this page'}
+                        </td>
+                      </tr>
+                    ) : (
+                      suppliers.map((supplier) => (
+                        <tr key={supplier.id}>
+                          <td>{supplier.name}</td>
+                          <td>{supplier.referenceNo || '-'}</td>
+                          <td>{supplier.email || '-'}</td>
+                          <td>{supplier.phone || '-'}</td>
+                          <td>
+                            <span className={`badge ${supplier.isActive ? 'bg-success-lt' : 'bg-danger-lt'}`}>
+                              {supplier.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td>
+                            {supplier.createdBy ? (
+                              <div className="d-flex align-items-center">
+                                <span className={`avatar avatar-xs me-2 ${getRoleBadgeClass(supplier.createdBy.role)}`}>
+                                  {getInitials(supplier.createdBy.firstName, supplier.createdBy.lastName)}
+                                </span>
+                                <span>{supplier.createdBy.firstName} {supplier.createdBy.lastName}</span>
+                              </div>
+                            ) : (
+                              <span className="text-muted">System</span>
+                            )}
+                          </td>
+                          <td>{new Date(supplier.createdAt).toLocaleDateString()}</td>
+                          <td>
+                            <div className="btn-list">
+                              {hasPermission('SUPPLIERS_VIEW') && (
+                                <button
+                                  className="btn btn-sm btn-primary"
+                                  onClick={() => navigate(`/suppliers/${supplier.id}/view`)}
+                                >
+                                  View
+                                </button>
+                              )}
+                              {hasPermission('SUPPLIERS_EDIT') && (
+                                <button
+                                  className="btn btn-sm btn-info"
+                                  onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}
+                                >
+                                  Edit
+                                </button>
+                              )}
+                              {hasPermission('SUPPLIERS_DELETE') && (
+                                <button
+                                  className="btn btn-sm btn-danger"
+                                  onClick={() => {
+                                    setSupplierToDelete(supplier);
+                                    setShowDeleteModal(true);
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {pagination.total > 0 && (
+                <div className="d-flex justify-content-between align-items-center mt-3">
+                  <div className="text-muted">
+                    Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} suppliers
+                  </div>
+                  <div className="d-flex gap-2">
+                    <button
+                      className="btn btn-sm btn-outline-primary"
+                      onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                      disabled={pagination.page === 1 || loading}
+                    >
+                      Previous
+                    </button>
+                    <div className="d-flex align-items-center gap-2">
+                      <span className="text-muted">Page</span>
+                      <input
+                        type="number"
+                        className="form-control form-control-sm"
+                        style={{ width: '70px' }}
+                        min="1"
+                        max={pagination.pages}
+                        defaultValue={pagination.page}
+                        key={pagination.page}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const page = parseInt(e.target.value);
+                            if (page >= 1 && page <= pagination.pages) {
+                              setPagination(prev => ({ ...prev, page }));
+                            }
+                            e.target.blur();
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const page = parseInt(e.target.value);
+                          if (page >= 1 && page <= pagination.pages && page !== pagination.page) {
+                            setPagination(prev => ({ ...prev, page }));
+                          }
+                        }}
+                      />
+                      <span className="text-muted">of {pagination.pages}</span>
+                    </div>
+                    <button
+                      className="btn btn-sm btn-outline-primary"
+                      onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                      disabled={pagination.page >= pagination.pages || loading}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
