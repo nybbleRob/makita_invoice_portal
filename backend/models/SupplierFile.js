@@ -74,9 +74,9 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING(50),
       defaultValue: 'manual',
       validate: {
-        isIn: [['manual', 'ftp', 'email', 'api']]
+        isIn: [['manual', 'ftp', 'email', 'api', 'bulk_import']]
       },
-      comment: 'File source: manual, ftp, email, api'
+      comment: 'File source: manual, ftp, email, api, bulk_import'
     },
     metadata: {
       type: DataTypes.JSONB,
