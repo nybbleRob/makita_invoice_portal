@@ -30,7 +30,6 @@ const Suppliers = () => {
     taxId: '',
     vatNumber: '',
     website: '',
-    notes: '',
     isActive: true
   });
   const [submitting, setSubmitting] = useState(false);
@@ -127,7 +126,6 @@ const Suppliers = () => {
       taxId: '',
       vatNumber: '',
       website: '',
-      notes: '',
       isActive: true
     });
   };
@@ -404,8 +402,8 @@ const Suppliers = () => {
       
       {/* Add Supplier Modal */}
       {showAddModal && (
-        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div className="modal modal-blur fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', overflow: 'auto' }}>
+          <div className="modal-dialog modal-lg modal-dialog-centered" style={{ maxHeight: '90vh' }}>
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">
@@ -427,8 +425,8 @@ const Suppliers = () => {
                 ></button>
               </div>
               <form onSubmit={handleCreateSupplier} autoComplete="off">
-                <div className="modal-body">
-                  <div className="card">
+                <div className="modal-body" style={{ maxHeight: 'calc(90vh - 130px)', overflowY: 'auto' }}>
+                  <div className="card mb-0">
                     <div className="card-body">
                       {/* Supplier Details Section */}
                       <h4 className="card-title mb-3">Supplier Details</h4>
@@ -608,21 +606,8 @@ const Suppliers = () => {
                       
                       <hr className="my-4" />
                       
-                      {/* Additional Info Section */}
-                      <h4 className="card-title mb-3">Additional Information</h4>
+                      {/* Status Section */}
                       <div className="row">
-                        <div className="col-12 mb-3">
-                          <label htmlFor="supplier-notes" className="form-label">Notes</label>
-                          <textarea
-                            id="supplier-notes"
-                            className="form-control"
-                            name="notes"
-                            rows="3"
-                            placeholder="Any additional notes about this supplier..."
-                            value={formData.notes}
-                            onChange={handleInputChange}
-                          />
-                        </div>
                         <div className="col-12">
                           <label className="form-check form-switch">
                             <input
