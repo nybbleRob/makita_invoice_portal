@@ -26,6 +26,11 @@ const SupplierView = () => {
   const fetchSupplier = async () => {
     try {
       setLoading(true);
+      // Validate ID is numeric (not "new" or other route names)
+      if (!id || isNaN(parseInt(id))) {
+        navigate('/suppliers');
+        return;
+      }
       const response = await api.get(`/api/suppliers/${id}`);
       setSupplier(response.data);
     } catch (error) {
@@ -40,6 +45,11 @@ const SupplierView = () => {
   const fetchTemplates = async () => {
     try {
       setTemplatesLoading(true);
+      // Validate ID is numeric (not "new" or other route names)
+      if (!id || isNaN(parseInt(id))) {
+        setTemplates([]);
+        return;
+      }
       const response = await api.get('/api/supplier-templates', {
         params: { supplierId: id }
       });
