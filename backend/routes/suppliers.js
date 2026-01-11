@@ -331,9 +331,8 @@ router.delete('/:id', globalAdmin, async (req, res) => {
       });
     }
     
-    // Soft delete
-    supplier.deletedAt = new Date();
-    await supplier.save();
+    // Hard delete - permanently remove from database
+    await supplier.destroy();
     
     // Log activity
     await logActivity({
