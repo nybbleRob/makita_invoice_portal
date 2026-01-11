@@ -36,10 +36,13 @@ const SupplierTemplates = () => {
       if (fileTypeFilter) params.fileType = fileTypeFilter;
       
       const response = await api.get('/supplier-templates', { params });
-      setTemplates(response.data || []);
+      // Ensure templates is always an array
+      const templatesData = response.data || [];
+      setTemplates(Array.isArray(templatesData) ? templatesData : []);
     } catch (error) {
       console.error('Error fetching templates:', error);
       toast.error('Error fetching supplier templates');
+      setTemplates([]); // Ensure templates is set to empty array on error
     } finally {
       setLoading(false);
     }
@@ -98,7 +101,7 @@ const SupplierTemplates = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {templates.map((template) => (
+                      {Array.isArray(templates) && templates.map((template) => (
                         <tr key={template.id}>
                           <td>{template.name}</td>
                           <td>
