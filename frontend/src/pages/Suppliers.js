@@ -251,7 +251,7 @@ const Suppliers = () => {
                   <thead>
                     <tr>
                       <th>Name</th>
-                      <th>Reference No.</th>
+                      <th>Account Ref</th>
                       <th>Email</th>
                       <th>Phone</th>
                       <th>Status</th>
@@ -429,17 +429,18 @@ const Suppliers = () => {
                         />
                       </div>
                       <div className="mb-3">
-                        <label htmlFor="supplier-code" className="form-label required">Supplier Code</label>
+                        <label htmlFor="supplier-code" className="form-label required">Our Account Reference</label>
                         <input
                           id="supplier-code"
                           type="text"
                           className="form-control"
                           name="code"
-                          placeholder="e.g. SUP001"
+                          placeholder="e.g. ACC001, CUST-1234"
                           value={formData.code}
                           onChange={handleInputChange}
                           required
                         />
+                        <small className="form-hint">The account number, customer code, or reference the supplier uses for us on their invoices</small>
                       </div>
                       <div className="mb-3">
                         <label htmlFor="supplier-email" className="form-label">Email</label>
