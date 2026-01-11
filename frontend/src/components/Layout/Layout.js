@@ -109,10 +109,26 @@ const Layout = () => {
           </Link>
         </li>
       )}
-      {/* Suppliers Dropdown - Staff roles (only if module enabled) */}
+      {/* Suppliers Dropdown - Staff roles (only if module enabled) - Opens on hover */}
       {settings?.suppliersEnabled !== false && isStaff() && (
-        <li className={`nav-item dropdown ${location.pathname.startsWith('/suppliers') || location.pathname.startsWith('/supplier-') ? 'active' : ''}`}>
-          <a className="nav-link dropdown-toggle" href="#navbar-suppliers" data-bs-toggle="dropdown" data-bs-auto-close="outside" role="button" aria-expanded="false">
+        <li 
+          className={`nav-item dropdown ${location.pathname.startsWith('/suppliers') || location.pathname.startsWith('/supplier-') ? 'active' : ''}`}
+          onMouseEnter={(e) => {
+            e.currentTarget.classList.add('show');
+            e.currentTarget.querySelector('.dropdown-menu')?.classList.add('show');
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.classList.remove('show');
+            e.currentTarget.querySelector('.dropdown-menu')?.classList.remove('show');
+          }}
+        >
+          <a 
+            className="nav-link dropdown-toggle" 
+            href="#navbar-suppliers" 
+            role="button" 
+            aria-expanded="false"
+            onClick={(e) => e.preventDefault()}
+          >
             <span className="nav-link-icon">
               <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-building-warehouse" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
                 <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
@@ -125,7 +141,7 @@ const Layout = () => {
           </a>
           <div className="dropdown-menu">
             <Link className={`dropdown-item ${location.pathname === '/suppliers' ? 'active' : ''}`} to="/suppliers">
-              Suppliers
+              Manage Suppliers
             </Link>
             <Link className={`dropdown-item ${location.pathname === '/supplier-invoices' ? 'active' : ''}`} to="/supplier-invoices">
               Invoices
