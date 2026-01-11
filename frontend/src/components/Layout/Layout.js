@@ -11,7 +11,7 @@ import { API_BASE_URL } from '../../services/api';
 const Layout = () => {
   const { user, logout } = useAuth();
   const { settings } = useSettings();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, isStaff } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -76,7 +76,7 @@ const Layout = () => {
         </Link>
       </li>
       {/* Suppliers - Staff roles (only if module enabled) */}
-      {settings?.suppliersEnabled !== false && hasPermission('SUPPLIERS_VIEW') && (
+      {settings?.suppliersEnabled !== false && isStaff() && (
         <li className={`nav-item ${location.pathname.startsWith('/suppliers') || location.pathname.startsWith('/supplier-templates') || location.pathname.startsWith('/supplier-documents') ? 'active' : ''}`}>
           <Link to="/suppliers" className="nav-link">
             <span className="nav-link-icon">

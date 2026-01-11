@@ -26,6 +26,12 @@ const Suppliers = () => {
   const isGlobalAdmin = user?.role === 'global_admin' || user?.role === 'administrator';
   const suppliersEnabled = settings?.suppliersEnabled !== false;
   
+  // Check permissions - suppliers requires staff role
+  const canCreate = isGlobalAdmin;
+  const canEdit = isGlobalAdmin;
+  const canDelete = isGlobalAdmin;
+  const canView = user?.role && ['global_admin', 'administrator', 'manager', 'credit_senior', 'credit_controller'].includes(user.role);
+  
   useEffect(() => {
     if (!suppliersEnabled) {
       toast.error('Suppliers module is disabled');
@@ -167,7 +173,7 @@ const Suppliers = () => {
                       Reset
                     </button>
                     {/* Add Supplier */}
-                    {hasPermission('SUPPLIERS_CREATE') && (
+                    {canCreate && (
                       <button
                         className="btn btn-primary"
                         onClick={() => navigate('/suppliers/add')}
@@ -236,7 +242,7 @@ const Suppliers = () => {
                           <td>{new Date(supplier.createdAt).toLocaleDateString()}</td>
                           <td>
                             <div className="btn-list">
-                              {hasPermission('SUPPLIERS_VIEW') && (
+                              {canView && (
                                 <button
                                   className="btn btn-sm btn-primary"
                                   onClick={() => navigate(`/suppliers/${supplier.id}/view`)}
@@ -244,7 +250,7 @@ const Suppliers = () => {
                                   View
                                 </button>
                               )}
-                              {hasPermission('SUPPLIERS_EDIT') && (
+                              {canEdit && (
                                 <button
                                   className="btn btn-sm btn-info"
                                   onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}
@@ -252,7 +258,7 @@ const Suppliers = () => {
                                   Edit
                                 </button>
                               )}
-                              {hasPermission('SUPPLIERS_DELETE') && (
+                              {canDelete && (
                                 <button
                                   className="btn btn-sm btn-danger"
                                   onClick={() => {
