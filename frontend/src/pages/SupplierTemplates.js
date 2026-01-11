@@ -22,21 +22,6 @@ const SupplierTemplates = () => {
   const isGlobalAdmin = user?.role === 'global_admin' || user?.role === 'administrator';
   const suppliersEnabled = settings?.suppliersEnabled !== false;
   
-  useEffect(() => {
-    if (!suppliersEnabled) {
-      navigate('/dashboard');
-      return;
-    }
-    if (!isGlobalAdmin) {
-      navigate('/suppliers');
-      return;
-    }
-    if (supplierId) {
-      fetchSupplier();
-      fetchTemplates();
-    }
-  }, [supplierId, suppliersEnabled, isGlobalAdmin, navigate]);
-  
   const fetchSupplier = async () => {
     try {
       const response = await api.get(`/api/suppliers/${supplierId}`);
@@ -64,6 +49,22 @@ const SupplierTemplates = () => {
       setLoading(false);
     }
   };
+  
+  useEffect(() => {
+    if (!suppliersEnabled) {
+      navigate('/dashboard');
+      return;
+    }
+    if (!isGlobalAdmin) {
+      navigate('/suppliers');
+      return;
+    }
+    if (supplierId) {
+      fetchSupplier();
+      fetchTemplates();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supplierId, suppliersEnabled, isGlobalAdmin, navigate]);
   
   const handleDelete = async (templateId) => {
     if (!window.confirm('Are you sure you want to delete this template?')) {
