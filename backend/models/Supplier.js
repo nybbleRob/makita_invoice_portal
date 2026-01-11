@@ -80,6 +80,7 @@ module.exports = (sequelize) => {
     }
   }, {
     tableName: 'suppliers',
+    underscored: true,
     timestamps: true,
     paranoid: false, // We track deletion manually with deletedAt
     indexes: [

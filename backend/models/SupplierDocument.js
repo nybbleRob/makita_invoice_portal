@@ -166,6 +166,7 @@ module.exports = (sequelize) => {
     }
   }, {
     tableName: 'supplier_documents',
+    underscored: true,
     timestamps: true,
     paranoid: false,
     indexes: [
