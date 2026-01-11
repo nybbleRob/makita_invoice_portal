@@ -204,10 +204,15 @@ router.post('/', globalAdmin, async (req, res) => {
     const sanitizedPhone = phone && phone.trim() ? phone.trim() : null;
     const sanitizedWebsite = website && website.trim() ? website.trim() : null;
     
-    // Check if code is already taken (if provided)
+    // Check if code is already taken (if provided) - check ALL suppliers including deleted
     if (sanitizedCode) {
-      const existingSupplier = await Supplier.findByCode(sanitizedCode);
+      const existingSupplier = await Supplier.findOne({
+        where: { code: sanitizedCode }
+      });
       if (existingSupplier) {
+        if (existingSupplier.deletedAt) {
+          return res.status(400).json({ message: 'Supplier with this code was previously deleted. Please use a different code or contact an administrator to restore the deleted supplier.' });
+        }
         return res.status(400).json({ message: 'Supplier with this code already exists' });
       }
     }
@@ -259,10 +264,15 @@ router.put('/:id', globalAdmin, async (req, res) => {
     // Sanitize inputs - convert empty strings to null
     const sanitizedCode = code && code.trim() ? code.trim() : null;
     
-    // Check if code is already taken by another supplier (if changing code)
+    // Check if code is already taken by another supplier (if changing code) - check ALL suppliers including deleted
     if (sanitizedCode && sanitizedCode !== supplier.code) {
-      const existingSupplier = await Supplier.findByCode(sanitizedCode);
+      const existingSupplier = await Supplier.findOne({
+        where: { code: sanitizedCode }
+      });
       if (existingSupplier && existingSupplier.id !== id) {
+        if (existingSupplier.deletedAt) {
+          return res.status(400).json({ message: 'Supplier with this code was previously deleted. Please use a different code or contact an administrator to restore the deleted supplier.' });
+        }
         return res.status(400).json({ message: 'Supplier with this code already exists' });
       }
     }
