@@ -200,6 +200,7 @@ module.exports = {
   SupplierTemplate: Template, // Backward compatibility alias for customer templates
   Supplier,
   SupplierTemplateSupplier: SupplierTemplate, // Supplier templates (different from customer Template)
+  SupplierTemplate: SupplierTemplate, // Alias for supplier templates (matches route imports)
   SupplierDocument,
   SupplierFile
 };
