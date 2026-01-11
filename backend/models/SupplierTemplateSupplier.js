@@ -106,7 +106,6 @@ module.exports = (sequelize) => {
     }
   }, {
     tableName: 'supplier_templates',
-    underscored: true,
     timestamps: true,
     paranoid: false,
     indexes: [

@@ -90,7 +90,6 @@ module.exports = (sequelize) => {
     }
   }, {
     tableName: 'supplier_files',
-    underscored: true,
     timestamps: true,
     paranoid: false,
     indexes: [
