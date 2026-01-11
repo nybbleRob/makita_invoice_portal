@@ -26,10 +26,7 @@ const Suppliers = () => {
     code: '',
     email: '',
     phone: '',
-    address: { line1: '', line2: '', city: '', state: '', zip: '', country: '' },
-    taxId: '',
-    vatNumber: '',
-    website: '',
+    address: { line1: '', line2: '', city: '', zip: '', country: '' },
     isActive: true
   });
   const [submitting, setSubmitting] = useState(false);
@@ -122,10 +119,7 @@ const Suppliers = () => {
       code: '',
       email: '',
       phone: '',
-      address: { line1: '', line2: '', city: '', state: '', zip: '', country: '' },
-      taxId: '',
-      vatNumber: '',
-      website: '',
+      address: { line1: '', line2: '', city: '', zip: '', country: '' },
       isActive: true
     });
   };
@@ -402,19 +396,11 @@ const Suppliers = () => {
       
       {/* Add Supplier Modal */}
       {showAddModal && (
-        <div className="modal modal-blur fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)', overflow: 'auto' }}>
-          <div className="modal-dialog modal-lg modal-dialog-centered" style={{ maxHeight: '90vh' }}>
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-xl modal-dialog-centered">
             <div className="modal-content">
               <div className="modal-header">
-                <h5 className="modal-title">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-building-warehouse me-2" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                    <path d="M3 21v-13l9 -4l9 4v13" />
-                    <path d="M13 13h4v8h-10v-6h6" />
-                    <path d="M13 21v-9a1 1 0 0 0 -1 -1h-2a1 1 0 0 0 -1 1v3" />
-                  </svg>
-                  Add Supplier
-                </h5>
+                <h5 className="modal-title">Add Supplier</h5>
                 <button
                   type="button"
                   className="btn-close"
@@ -425,93 +411,106 @@ const Suppliers = () => {
                 ></button>
               </div>
               <form onSubmit={handleCreateSupplier} autoComplete="off">
-                <div className="modal-body" style={{ maxHeight: 'calc(90vh - 130px)', overflowY: 'auto' }}>
-                  <div className="card mb-0">
-                    <div className="card-body">
-                      {/* Supplier Details Section */}
-                      <h4 className="card-title mb-3">Supplier Details</h4>
-                      <div className="row">
-                        <div className="col-md-6 mb-3">
-                          <label htmlFor="supplier-name" className="form-label required">Supplier Name</label>
-                          <input
-                            id="supplier-name"
-                            type="text"
-                            className="form-control"
-                            name="name"
-                            placeholder="Enter supplier name"
-                            value={formData.name}
-                            onChange={handleInputChange}
-                            required
-                          />
-                        </div>
-                        <div className="col-md-6 mb-3">
-                          <label htmlFor="supplier-code" className="form-label">Supplier Code</label>
-                          <input
-                            id="supplier-code"
-                            type="text"
-                            className="form-control"
-                            name="code"
-                            placeholder="e.g. SUP001"
-                            value={formData.code}
-                            onChange={handleInputChange}
-                          />
-                        </div>
-                        <div className="col-md-6 mb-3">
-                          <label htmlFor="supplier-email" className="form-label">Email</label>
-                          <input
-                            id="supplier-email"
-                            type="email"
-                            className="form-control"
-                            name="email"
-                            placeholder="supplier@example.com"
-                            value={formData.email}
-                            onChange={handleInputChange}
-                          />
-                        </div>
-                        <div className="col-md-6 mb-3">
-                          <label htmlFor="supplier-phone" className="form-label">Phone</label>
-                          <input
-                            id="supplier-phone"
-                            type="text"
-                            className="form-control"
-                            name="phone"
-                            placeholder="+44 1234 567890"
-                            value={formData.phone}
-                            onChange={handleInputChange}
-                          />
-                        </div>
+                <div className="modal-body">
+                  <div className="row">
+                    {/* Left Column - Basic Info */}
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label htmlFor="supplier-name" className="form-label required">Supplier Name</label>
+                        <input
+                          id="supplier-name"
+                          type="text"
+                          className="form-control"
+                          name="name"
+                          placeholder="Enter supplier name"
+                          value={formData.name}
+                          onChange={handleInputChange}
+                          required
+                        />
                       </div>
-                      
-                      <hr className="my-4" />
-                      
-                      {/* Address Section */}
-                      <h4 className="card-title mb-3">Address</h4>
+                      <div className="mb-3">
+                        <label htmlFor="supplier-code" className="form-label required">Supplier Code</label>
+                        <input
+                          id="supplier-code"
+                          type="text"
+                          className="form-control"
+                          name="code"
+                          placeholder="e.g. SUP001"
+                          value={formData.code}
+                          onChange={handleInputChange}
+                          required
+                        />
+                      </div>
+                      <div className="mb-3">
+                        <label htmlFor="supplier-email" className="form-label">Email</label>
+                        <input
+                          id="supplier-email"
+                          type="email"
+                          className="form-control"
+                          name="email"
+                          placeholder="supplier@example.com"
+                          value={formData.email}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                      <div className="mb-3">
+                        <label htmlFor="supplier-phone" className="form-label">Phone</label>
+                        <input
+                          id="supplier-phone"
+                          type="text"
+                          className="form-control"
+                          name="phone"
+                          placeholder="+44 1234 567890"
+                          value={formData.phone}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                      <div className="mb-3">
+                        <label className="row">
+                          <span className="col">Active</span>
+                          <span className="col-auto">
+                            <label className="form-check form-check-single form-switch">
+                              <input
+                                id="supplier-is-active"
+                                type="checkbox"
+                                className="form-check-input"
+                                name="isActive"
+                                checked={formData.isActive}
+                                onChange={handleInputChange}
+                              />
+                            </label>
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                    {/* Right Column - Address */}
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label htmlFor="supplier-address-line1" className="form-label">Address Line 1</label>
+                        <input
+                          id="supplier-address-line1"
+                          type="text"
+                          className="form-control"
+                          name="address.line1"
+                          placeholder="Street address"
+                          value={formData.address.line1}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                      <div className="mb-3">
+                        <label htmlFor="supplier-address-line2" className="form-label">Address Line 2</label>
+                        <input
+                          id="supplier-address-line2"
+                          type="text"
+                          className="form-control"
+                          name="address.line2"
+                          placeholder="Apartment, suite, etc."
+                          value={formData.address.line2}
+                          onChange={handleInputChange}
+                        />
+                      </div>
                       <div className="row">
                         <div className="col-md-6 mb-3">
-                          <label htmlFor="supplier-address-line1" className="form-label">Street Address</label>
-                          <input
-                            id="supplier-address-line1"
-                            type="text"
-                            className="form-control"
-                            name="address.line1"
-                            placeholder="Street address"
-                            value={formData.address.line1}
-                            onChange={handleInputChange}
-                          />
-                        </div>
-                        <div className="col-md-6 mb-3">
-                          <label htmlFor="supplier-address-line2" className="form-label">Address Line 2</label>
-                          <input
-                            id="supplier-address-line2"
-                            type="text"
-                            className="form-control"
-                            name="address.line2"
-                            placeholder="Apartment, suite, etc."
-                            value={formData.address.line2}
-                            onChange={handleInputChange}
-                          />
-                        </div>
-                        <div className="col-md-3 mb-3">
                           <label htmlFor="supplier-address-city" className="form-label">City</label>
                           <input
                             id="supplier-address-city"
@@ -523,113 +522,38 @@ const Suppliers = () => {
                             onChange={handleInputChange}
                           />
                         </div>
-                        <div className="col-md-3 mb-3">
-                          <label htmlFor="supplier-address-state" className="form-label">County / State</label>
-                          <input
-                            id="supplier-address-state"
-                            type="text"
-                            className="form-control"
-                            name="address.state"
-                            placeholder="County"
-                            value={formData.address.state}
-                            onChange={handleInputChange}
-                          />
-                        </div>
-                        <div className="col-md-3 mb-3">
-                          <label htmlFor="supplier-address-zip" className="form-label">Post Code</label>
+                        <div className="col-md-6 mb-3">
+                          <label htmlFor="supplier-address-zip" className="form-label">Postcode</label>
                           <input
                             id="supplier-address-zip"
                             type="text"
                             className="form-control"
                             name="address.zip"
-                            placeholder="Post code"
+                            placeholder="Postcode"
                             value={formData.address.zip}
                             onChange={handleInputChange}
                           />
                         </div>
-                        <div className="col-md-3 mb-3">
-                          <label htmlFor="supplier-address-country" className="form-label">Country</label>
-                          <input
-                            id="supplier-address-country"
-                            type="text"
-                            className="form-control"
-                            name="address.country"
-                            placeholder="Country"
-                            value={formData.address.country}
-                            onChange={handleInputChange}
-                          />
-                        </div>
                       </div>
-                      
-                      <hr className="my-4" />
-                      
-                      {/* Tax & Billing Section */}
-                      <h4 className="card-title mb-3">Tax &amp; Billing</h4>
-                      <div className="row">
-                        <div className="col-md-4 mb-3">
-                          <label htmlFor="supplier-tax-id" className="form-label">Tax ID</label>
-                          <input
-                            id="supplier-tax-id"
-                            type="text"
-                            className="form-control"
-                            name="taxId"
-                            placeholder="Tax identification number"
-                            value={formData.taxId}
-                            onChange={handleInputChange}
-                          />
-                        </div>
-                        <div className="col-md-4 mb-3">
-                          <label htmlFor="supplier-vat-number" className="form-label">VAT Number</label>
-                          <input
-                            id="supplier-vat-number"
-                            type="text"
-                            className="form-control"
-                            name="vatNumber"
-                            placeholder="GB123456789"
-                            value={formData.vatNumber}
-                            onChange={handleInputChange}
-                          />
-                        </div>
-                        <div className="col-md-4 mb-3">
-                          <label htmlFor="supplier-website" className="form-label">Website</label>
-                          <input
-                            id="supplier-website"
-                            type="url"
-                            className="form-control"
-                            name="website"
-                            placeholder="https://example.com"
-                            value={formData.website}
-                            onChange={handleInputChange}
-                          />
-                        </div>
-                      </div>
-                      
-                      <hr className="my-4" />
-                      
-                      {/* Status Section */}
-                      <div className="row">
-                        <div className="col-12">
-                          <label className="form-check form-switch">
-                            <input
-                              id="supplier-is-active"
-                              className="form-check-input"
-                              type="checkbox"
-                              name="isActive"
-                              checked={formData.isActive}
-                              onChange={handleInputChange}
-                            />
-                            <span className="form-check-label">Active Supplier</span>
-                          </label>
-                          <small className="text-muted d-block mt-1">Inactive suppliers won't appear in supplier lists</small>
-                        </div>
+                      <div className="mb-3">
+                        <label htmlFor="supplier-address-country" className="form-label">Country</label>
+                        <input
+                          id="supplier-address-country"
+                          type="text"
+                          className="form-control"
+                          name="address.country"
+                          placeholder="Country"
+                          value={formData.address.country}
+                          onChange={handleInputChange}
+                        />
                       </div>
                     </div>
                   </div>
                 </div>
-                <div className="modal-footer bg-light">
+                <div className="modal-footer">
                   <button
                     type="button"
-                    className="btn btn-link link-secondary"
+                    className="btn btn-danger"
                     onClick={() => {
                       setShowAddModal(false);
                       resetForm();
@@ -637,22 +561,8 @@ const Suppliers = () => {
                   >
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary ms-auto" disabled={submitting}>
-                    {submitting ? (
-                      <>
-                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                        Creating...
-                      </>
-                    ) : (
-                      <>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-plus" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                          <path d="M12 5l0 14" />
-                          <path d="M5 12l14 0" />
-                        </svg>
-                        Create Supplier
-                      </>
-                    )}
+                  <button type="submit" className="btn btn-primary" disabled={submitting}>
+                    {submitting ? 'Creating...' : 'Create Supplier'}
                   </button>
                 </div>
               </form>
