@@ -4,13 +4,32 @@
  */
 
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+const fs = require('fs');
+
+// Load .env file - check both root and backend directories (same as database.js)
+const rootEnv = path.join(__dirname, '..', '..', '.env');
+const backendEnv = path.join(__dirname, '..', '.env');
+if (fs.existsSync(rootEnv)) {
+  require('dotenv').config({ path: rootEnv });
+} else if (fs.existsSync(backendEnv)) {
+  require('dotenv').config({ path: backendEnv });
+} else {
+  require('dotenv').config();
+}
+
 const { Sequelize } = require('sequelize');
 
-const sequelize = new Sequelize(process.env.DATABASE_URL, {
-  dialect: 'postgres',
-  logging: console.log
-});
+const sequelize = new Sequelize(
+  process.env.DB_NAME || 'invoice_portal',
+  process.env.DB_USER || 'postgres',
+  process.env.DB_PASSWORD || 'postgres',
+  {
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 5432,
+    dialect: 'postgres',
+    logging: console.log
+  }
+);
 
 async function fixSchema() {
   console.log('🔧 Fixing supplier_templates table schema...\n');
