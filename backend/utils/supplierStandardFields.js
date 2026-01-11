@@ -314,7 +314,7 @@ function validateMandatoryFields(parsedData, mandatoryFields) {
     isValid: missing.length === 0,
     missing,
     errors
-  });
+  };
 }
 
 /**
