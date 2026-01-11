@@ -20,6 +20,20 @@ const Suppliers = () => {
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [supplierToDelete, setSupplierToDelete] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    code: '',
+    email: '',
+    phone: '',
+    address: { line1: '', line2: '', city: '', state: '', zip: '', country: '' },
+    taxId: '',
+    vatNumber: '',
+    website: '',
+    notes: '',
+    isActive: true
+  });
+  const [submitting, setSubmitting] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
   const searchInputRef = useRef(null);
   
@@ -103,6 +117,54 @@ const Suppliers = () => {
     setPagination(prev => ({ ...prev, page: 1 }));
   };
   
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      code: '',
+      email: '',
+      phone: '',
+      address: { line1: '', line2: '', city: '', state: '', zip: '', country: '' },
+      taxId: '',
+      vatNumber: '',
+      website: '',
+      notes: '',
+      isActive: true
+    });
+  };
+  
+  const handleInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    if (name.startsWith('address.')) {
+      const field = name.split('.')[1];
+      setFormData(prev => ({
+        ...prev,
+        address: { ...prev.address, [field]: value }
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: type === 'checkbox' ? checked : value
+      }));
+    }
+  };
+  
+  const handleCreateSupplier = async (e) => {
+    e.preventDefault();
+    try {
+      setSubmitting(true);
+      await api.post('/api/suppliers', formData);
+      toast.success('Supplier created successfully');
+      setShowAddModal(false);
+      resetForm();
+      fetchSuppliers();
+    } catch (error) {
+      console.error('Error creating supplier:', error);
+      toast.error(error.response?.data?.message || 'Error creating supplier');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  
   const getInitials = (name) => {
     if (!name) return '?';
     const parts = name.trim().split(/\s+/);
@@ -179,7 +241,10 @@ const Suppliers = () => {
                     {canCreate && (
                       <button
                         className="btn btn-primary"
-                        onClick={() => navigate('/suppliers/new')}
+                        onClick={() => {
+                          resetForm();
+                          setShowAddModal(true);
+                        }}
                       >
                         Add Supplier
                       </button>
@@ -336,6 +401,216 @@ const Suppliers = () => {
           </div>
         </div>
       </div>
+      
+      {/* Add Supplier Modal */}
+      {showAddModal && (
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-xl modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Add Supplier</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    resetForm();
+                  }}
+                ></button>
+              </div>
+              <form onSubmit={handleCreateSupplier} autoComplete="off">
+                <div className="modal-body">
+                  <div className="row">
+                    <div className="col-md-6 mb-3">
+                      <label htmlFor="supplier-name" className="form-label required">Name</label>
+                      <input
+                        id="supplier-name"
+                        type="text"
+                        className="form-control"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleInputChange}
+                        required
+                      />
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <label htmlFor="supplier-code" className="form-label">Code</label>
+                      <input
+                        id="supplier-code"
+                        type="text"
+                        className="form-control"
+                        name="code"
+                        value={formData.code}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <label htmlFor="supplier-email" className="form-label">Email</label>
+                      <input
+                        id="supplier-email"
+                        type="email"
+                        className="form-control"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <label htmlFor="supplier-phone" className="form-label">Phone</label>
+                      <input
+                        id="supplier-phone"
+                        type="text"
+                        className="form-control"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <label htmlFor="supplier-address-line1" className="form-label">Address Line 1</label>
+                      <input
+                        id="supplier-address-line1"
+                        type="text"
+                        className="form-control"
+                        name="address.line1"
+                        value={formData.address.line1}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <label htmlFor="supplier-address-line2" className="form-label">Address Line 2</label>
+                      <input
+                        id="supplier-address-line2"
+                        type="text"
+                        className="form-control"
+                        name="address.line2"
+                        value={formData.address.line2}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                    <div className="col-md-4 mb-3">
+                      <label htmlFor="supplier-address-city" className="form-label">City</label>
+                      <input
+                        id="supplier-address-city"
+                        type="text"
+                        className="form-control"
+                        name="address.city"
+                        value={formData.address.city}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                    <div className="col-md-4 mb-3">
+                      <label htmlFor="supplier-address-state" className="form-label">State</label>
+                      <input
+                        id="supplier-address-state"
+                        type="text"
+                        className="form-control"
+                        name="address.state"
+                        value={formData.address.state}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                    <div className="col-md-4 mb-3">
+                      <label htmlFor="supplier-address-zip" className="form-label">Zip</label>
+                      <input
+                        id="supplier-address-zip"
+                        type="text"
+                        className="form-control"
+                        name="address.zip"
+                        value={formData.address.zip}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <label htmlFor="supplier-address-country" className="form-label">Country</label>
+                      <input
+                        id="supplier-address-country"
+                        type="text"
+                        className="form-control"
+                        name="address.country"
+                        value={formData.address.country}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <label htmlFor="supplier-tax-id" className="form-label">Tax ID</label>
+                      <input
+                        id="supplier-tax-id"
+                        type="text"
+                        className="form-control"
+                        name="taxId"
+                        value={formData.taxId}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <label htmlFor="supplier-vat-number" className="form-label">VAT Number</label>
+                      <input
+                        id="supplier-vat-number"
+                        type="text"
+                        className="form-control"
+                        name="vatNumber"
+                        value={formData.vatNumber}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                    <div className="col-md-6 mb-3">
+                      <label htmlFor="supplier-website" className="form-label">Website</label>
+                      <input
+                        id="supplier-website"
+                        type="url"
+                        className="form-control"
+                        name="website"
+                        value={formData.website}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                    <div className="col-md-12 mb-3">
+                      <label htmlFor="supplier-notes" className="form-label">Notes</label>
+                      <textarea
+                        id="supplier-notes"
+                        className="form-control"
+                        name="notes"
+                        rows="3"
+                        value={formData.notes}
+                        onChange={handleInputChange}
+                      />
+                    </div>
+                    <div className="col-md-12 mb-3">
+                      <div className="form-check form-switch">
+                        <input
+                          id="supplier-is-active"
+                          className="form-check-input"
+                          type="checkbox"
+                          name="isActive"
+                          checked={formData.isActive}
+                          onChange={handleInputChange}
+                        />
+                        <label htmlFor="supplier-is-active" className="form-check-label">Active</label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => {
+                      setShowAddModal(false);
+                      resetForm();
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={submitting}>
+                    {submitting ? 'Creating...' : 'Create Supplier'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (

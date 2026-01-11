@@ -33,7 +33,6 @@ import ActivityLogs from './pages/ActivityLogs';
 import ImportData from './pages/ImportData';
 import Suppliers from './pages/Suppliers';
 import SupplierView from './pages/SupplierView';
-import AddSupplier from './pages/AddSupplier';
 import EditSupplier from './pages/EditSupplier';
 import SupplierDocuments from './pages/SupplierDocuments';
 import SupplierDocumentView from './pages/SupplierDocumentView';
@@ -202,7 +201,6 @@ function AppRoutes() {
         
         {/* Suppliers - Staff roles (only if module enabled) */}
         <Route path="suppliers" element={<Suppliers />} />
-        <Route path="suppliers/new" element={<AdminRoute><AddSupplier /></AdminRoute>} />
         <Route path="suppliers/:id/edit" element={<AdminRoute><EditSupplier /></AdminRoute>} />
         <Route path="suppliers/:id" element={<SupplierView />} />
         <Route path="supplier-documents" element={<SupplierDocuments />} />
