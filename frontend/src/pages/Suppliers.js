@@ -179,7 +179,7 @@ const Suppliers = () => {
                     {canCreate && (
                       <button
                         className="btn btn-primary"
-                        onClick={() => navigate('/suppliers/add')}
+                        onClick={() => navigate('/suppliers/new')}
                       >
                         Add Supplier
                       </button>
