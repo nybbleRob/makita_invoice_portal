@@ -212,6 +212,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Bulk import endpoint (multiple files)
+// supplierId is now OPTIONAL - system will auto-detect supplier from document
 router.post('/import', upload.array('files', 500), async (req, res) => {
   try {
     const { supplierId, documentType } = req.body;
@@ -220,19 +221,18 @@ router.post('/import', upload.array('files', 500), async (req, res) => {
       return res.status(400).json({ message: 'At least one file is required' });
     }
     
-    if (!supplierId) {
-      return res.status(400).json({ message: 'Supplier ID is required' });
+    // supplierId is optional - if provided, verify it exists
+    let supplier = null;
+    if (supplierId) {
+      supplier = await Supplier.findByPk(supplierId);
+      if (!supplier) {
+        return res.status(404).json({ message: 'Supplier not found' });
+      }
     }
     
-    // Verify supplier exists
-    const supplier = await Supplier.findByPk(supplierId);
-    if (!supplier) {
-      return res.status(404).json({ message: 'Supplier not found' });
-    }
-    
-    // Optional: Find matching template for the document type
+    // Optional: Find matching template for the document type (only if supplierId provided)
     let templateId = null;
-    if (documentType) {
+    if (supplierId && documentType) {
       const { SupplierTemplateSupplier } = require('../models');
       const template = await SupplierTemplateSupplier.findOne({
         where: {
@@ -276,7 +276,7 @@ router.post('/import', upload.array('files', 500), async (req, res) => {
           continue;
         }
         
-        // Create supplier file record
+        // Create supplier file record (supplierId can be null for auto-detection)
         const supplierFile = await SupplierFile.create({
           fileName: file.filename,
           originalName: file.originalname,
@@ -284,19 +284,19 @@ router.post('/import', upload.array('files', 500), async (req, res) => {
           fileHash,
           fileSize: file.size,
           mimeType: file.mimetype,
-          supplierId,
+          supplierId: supplierId || null,
           templateId,
           source: 'bulk_import',
           status: 'uploaded'
         });
         
-        // Queue for processing
+        // Queue for processing - processor will auto-detect supplier if not provided
         if (supplierDocumentQueue) {
           await supplierDocumentQueue.add('supplier-document-import', {
             filePath: file.path,
             fileName: file.filename,
             originalName: file.originalname,
-            supplierId,
+            supplierId: supplierId || null, // Can be null - processor will auto-detect
             templateId,
             documentType: documentType || null,
             fileHash,
@@ -333,8 +333,9 @@ router.post('/import', upload.array('files', 500), async (req, res) => {
       }
     }
     
+    const autoDetectMsg = supplierId ? '' : ' (supplier will be auto-detected)';
     res.status(201).json({
-      message: `Import started: ${results.queued} files queued for processing`,
+      message: `Import started: ${results.queued} files queued for processing${autoDetectMsg}`,
       importId,
       results
     });
@@ -345,22 +346,22 @@ router.post('/import', upload.array('files', 500), async (req, res) => {
 });
 
 // Manual document upload (triggers processing)
+// supplierId is now OPTIONAL - system will auto-detect supplier from document
 router.post('/', upload.single('file'), async (req, res) => {
   try {
-    const { supplierId, templateId } = req.body;
+    const { supplierId, templateId, documentType } = req.body;
     
     if (!req.file) {
       return res.status(400).json({ message: 'File is required' });
     }
     
-    if (!supplierId) {
-      return res.status(400).json({ message: 'Supplier ID is required' });
-    }
-    
-    // Verify supplier exists
-    const supplier = await Supplier.findByPk(supplierId);
-    if (!supplier) {
-      return res.status(404).json({ message: 'Supplier not found' });
+    // supplierId is optional - if provided, verify it exists
+    let supplier = null;
+    if (supplierId) {
+      supplier = await Supplier.findByPk(supplierId);
+      if (!supplier) {
+        return res.status(404).json({ message: 'Supplier not found' });
+      }
     }
     
     // Calculate file hash
@@ -384,7 +385,7 @@ router.post('/', upload.single('file'), async (req, res) => {
       });
     }
     
-    // Create supplier file record
+    // Create supplier file record (supplierId can be null for auto-detection)
     const supplierFile = await SupplierFile.create({
       fileName: req.file.filename,
       originalName: req.file.originalname,
@@ -392,20 +393,21 @@ router.post('/', upload.single('file'), async (req, res) => {
       fileHash,
       fileSize: req.file.size,
       mimeType: req.file.mimetype,
-      supplierId,
+      supplierId: supplierId || null,
       templateId: templateId || null,
       source: 'manual',
       status: 'uploaded'
     });
     
-    // Queue for processing
+    // Queue for processing - processor will auto-detect supplier if not provided
     if (supplierDocumentQueue) {
       await supplierDocumentQueue.add('supplier-document-import', {
         filePath: req.file.path,
         fileName: req.file.filename,
         originalName: req.file.originalname,
-        supplierId,
+        supplierId: supplierId || null, // Can be null - processor will auto-detect
         templateId: templateId || null,
+        documentType: documentType || null,
         fileHash,
         supplierFileId: supplierFile.id,
         userId: req.user.id,
@@ -428,8 +430,9 @@ router.post('/', upload.single('file'), async (req, res) => {
       await supplierFile.save();
     }
     
+    const autoDetectMsg = supplierId ? '' : ' (supplier will be auto-detected)';
     res.status(201).json({
-      message: 'Document uploaded and queued for processing',
+      message: `Document uploaded and queued for processing${autoDetectMsg}`,
       supplierFileId: supplierFile.id,
       fileHash
     });

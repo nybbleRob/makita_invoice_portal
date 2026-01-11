@@ -36,6 +36,9 @@ import SupplierView from './pages/SupplierView';
 import EditSupplier from './pages/EditSupplier';
 import SupplierDocuments from './pages/SupplierDocuments';
 import SupplierDocumentView from './pages/SupplierDocumentView';
+import SupplierInvoices from './pages/SupplierInvoices';
+import SupplierCreditNotes from './pages/SupplierCreditNotes';
+import SupplierStatements from './pages/SupplierStatements';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
 import { PermissionProvider, usePermissions } from './context/PermissionContext';
@@ -203,6 +206,9 @@ function AppRoutes() {
         <Route path="suppliers" element={<Suppliers />} />
         <Route path="suppliers/:id/edit" element={<AdminRoute><EditSupplier /></AdminRoute>} />
         <Route path="suppliers/:id" element={<SupplierView />} />
+        <Route path="supplier-invoices" element={<SupplierInvoices />} />
+        <Route path="supplier-credit-notes" element={<SupplierCreditNotes />} />
+        <Route path="supplier-statements" element={<SupplierStatements />} />
         <Route path="supplier-documents" element={<SupplierDocuments />} />
         <Route path="supplier-documents/:id" element={<SupplierDocumentView />} />
       </Route>

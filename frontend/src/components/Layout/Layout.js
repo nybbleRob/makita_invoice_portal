@@ -75,22 +75,6 @@ const Layout = () => {
           <span className="nav-link-title">Credit Notes</span>
         </Link>
       </li>
-      {/* Suppliers - Staff roles (only if module enabled) */}
-      {settings?.suppliersEnabled !== false && isStaff() && (
-        <li className={`nav-item ${location.pathname.startsWith('/suppliers') || location.pathname.startsWith('/supplier-documents') ? 'active' : ''}`}>
-          <Link to="/suppliers" className="nav-link">
-            <span className="nav-link-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-building-warehouse" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                <path d="M3 21v-13l9 -4l9 4v13" />
-                <path d="M13 13h4v8h-10v-6h6" />
-                <path d="M13 17h4" />
-              </svg>
-            </span>
-            <span className="nav-link-title">Suppliers</span>
-          </Link>
-        </li>
-      )}
       {/* Statements - HIDDEN until client decides on scope */}
       {/* {hasPermission('STATEMENTS_VIEW') && (
         <li className={`nav-item ${location.pathname === '/statements' ? 'active' : ''}`}>
@@ -123,6 +107,36 @@ const Layout = () => {
             </span>
             <span className="nav-link-title">Unallocated</span>
           </Link>
+        </li>
+      )}
+      {/* Suppliers Dropdown - Staff roles (only if module enabled) */}
+      {settings?.suppliersEnabled !== false && isStaff() && (
+        <li className={`nav-item dropdown ${location.pathname.startsWith('/suppliers') || location.pathname.startsWith('/supplier-') ? 'active' : ''}`}>
+          <a className="nav-link dropdown-toggle" href="#navbar-suppliers" data-bs-toggle="dropdown" data-bs-auto-close="outside" role="button" aria-expanded="false">
+            <span className="nav-link-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-building-warehouse" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M3 21v-13l9 -4l9 4v13" />
+                <path d="M13 13h4v8h-10v-6h6" />
+                <path d="M13 17h4" />
+              </svg>
+            </span>
+            <span className="nav-link-title">Suppliers</span>
+          </a>
+          <div className="dropdown-menu">
+            <Link className={`dropdown-item ${location.pathname === '/suppliers' ? 'active' : ''}`} to="/suppliers">
+              Suppliers
+            </Link>
+            <Link className={`dropdown-item ${location.pathname === '/supplier-invoices' ? 'active' : ''}`} to="/supplier-invoices">
+              Invoices
+            </Link>
+            <Link className={`dropdown-item ${location.pathname === '/supplier-credit-notes' ? 'active' : ''}`} to="/supplier-credit-notes">
+              Credit Notes
+            </Link>
+            <Link className={`dropdown-item ${location.pathname === '/supplier-statements' ? 'active' : ''}`} to="/supplier-statements">
+              Statements
+            </Link>
+          </div>
         </li>
       )}
       {/* Companies - Staff roles */}
