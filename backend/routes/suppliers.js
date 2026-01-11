@@ -198,9 +198,15 @@ router.post('/', globalAdmin, async (req, res) => {
       return res.status(400).json({ message: 'Supplier name is required' });
     }
     
+    // Sanitize inputs - convert empty strings to null
+    const sanitizedCode = code && code.trim() ? code.trim() : null;
+    const sanitizedEmail = email && email.trim() ? email.trim() : null;
+    const sanitizedPhone = phone && phone.trim() ? phone.trim() : null;
+    const sanitizedWebsite = website && website.trim() ? website.trim() : null;
+    
     // Check if code is already taken (if provided)
-    if (code) {
-      const existingSupplier = await Supplier.findByCode(code);
+    if (sanitizedCode) {
+      const existingSupplier = await Supplier.findByCode(sanitizedCode);
       if (existingSupplier) {
         return res.status(400).json({ message: 'Supplier with this code already exists' });
       }
@@ -208,16 +214,16 @@ router.post('/', globalAdmin, async (req, res) => {
     
     const supplier = await Supplier.create({
       name: name.trim(),
-      code: code ? code.trim() : null,
-      email: email || null,
-      phone: phone || null,
+      code: sanitizedCode,
+      email: sanitizedEmail,
+      phone: sanitizedPhone,
       address: address || {},
-      taxId: taxId || null,
-      vatNumber: vatNumber || null,
-      website: website || null,
-      notes: notes || null,
+      taxId: taxId && taxId.trim() ? taxId.trim() : null,
+      vatNumber: vatNumber && vatNumber.trim() ? vatNumber.trim() : null,
+      website: sanitizedWebsite,
+      notes: notes && notes.trim() ? notes.trim() : null,
       isActive,
-      metadata,
+      metadata: metadata || {},
       createdById: req.user.id
     });
     
@@ -250,26 +256,29 @@ router.put('/:id', globalAdmin, async (req, res) => {
       return res.status(404).json({ message: 'Supplier not found' });
     }
     
+    // Sanitize inputs - convert empty strings to null
+    const sanitizedCode = code && code.trim() ? code.trim() : null;
+    
     // Check if code is already taken by another supplier (if changing code)
-    if (code && code !== supplier.code) {
-      const existingSupplier = await Supplier.findByCode(code);
+    if (sanitizedCode && sanitizedCode !== supplier.code) {
+      const existingSupplier = await Supplier.findByCode(sanitizedCode);
       if (existingSupplier && existingSupplier.id !== id) {
         return res.status(400).json({ message: 'Supplier with this code already exists' });
       }
     }
     
-    // Update fields
+    // Update fields - sanitize all inputs
     if (name !== undefined) supplier.name = name.trim();
-    if (code !== undefined) supplier.code = code ? code.trim() : null;
-    if (email !== undefined) supplier.email = email || null;
-    if (phone !== undefined) supplier.phone = phone || null;
+    if (code !== undefined) supplier.code = sanitizedCode;
+    if (email !== undefined) supplier.email = email && email.trim() ? email.trim() : null;
+    if (phone !== undefined) supplier.phone = phone && phone.trim() ? phone.trim() : null;
     if (address !== undefined) supplier.address = address || {};
-    if (taxId !== undefined) supplier.taxId = taxId || null;
-    if (vatNumber !== undefined) supplier.vatNumber = vatNumber || null;
-    if (website !== undefined) supplier.website = website || null;
-    if (notes !== undefined) supplier.notes = notes || null;
+    if (taxId !== undefined) supplier.taxId = taxId && taxId.trim() ? taxId.trim() : null;
+    if (vatNumber !== undefined) supplier.vatNumber = vatNumber && vatNumber.trim() ? vatNumber.trim() : null;
+    if (website !== undefined) supplier.website = website && website.trim() ? website.trim() : null;
+    if (notes !== undefined) supplier.notes = notes && notes.trim() ? notes.trim() : null;
     if (isActive !== undefined) supplier.isActive = isActive;
-    if (metadata !== undefined) supplier.metadata = metadata;
+    if (metadata !== undefined) supplier.metadata = metadata || {};
     
     await supplier.save();
     
