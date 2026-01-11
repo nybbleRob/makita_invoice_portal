@@ -211,6 +211,139 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Bulk import endpoint (multiple files)
+router.post('/import', upload.array('files', 500), async (req, res) => {
+  try {
+    const { supplierId, documentType } = req.body;
+    
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: 'At least one file is required' });
+    }
+    
+    if (!supplierId) {
+      return res.status(400).json({ message: 'Supplier ID is required' });
+    }
+    
+    // Verify supplier exists
+    const supplier = await Supplier.findByPk(supplierId);
+    if (!supplier) {
+      return res.status(404).json({ message: 'Supplier not found' });
+    }
+    
+    // Optional: Find matching template for the document type
+    let templateId = null;
+    if (documentType) {
+      const { SupplierTemplateSupplier } = require('../models');
+      const template = await SupplierTemplateSupplier.findOne({
+        where: {
+          supplierId,
+          templateType: documentType,
+          isDefault: true,
+          deletedAt: null
+        }
+      });
+      if (template) {
+        templateId = template.id;
+      }
+    }
+    
+    const importId = `import-${Date.now()}`;
+    const results = {
+      total: req.files.length,
+      queued: 0,
+      duplicates: 0,
+      errors: []
+    };
+    
+    for (const file of req.files) {
+      try {
+        // Calculate file hash
+        const fileBuffer = fs.readFileSync(file.path);
+        const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+        
+        // Check for duplicate
+        const existingDocument = await SupplierDocument.findOne({
+          where: {
+            fileHash,
+            deletedAt: null
+          }
+        });
+        
+        if (existingDocument) {
+          // Clean up uploaded file
+          fs.unlinkSync(file.path);
+          results.duplicates++;
+          continue;
+        }
+        
+        // Create supplier file record
+        const supplierFile = await SupplierFile.create({
+          fileName: file.filename,
+          originalName: file.originalname,
+          filePath: file.path,
+          fileHash,
+          fileSize: file.size,
+          mimeType: file.mimetype,
+          supplierId,
+          templateId,
+          source: 'bulk_import',
+          status: 'uploaded'
+        });
+        
+        // Queue for processing
+        if (supplierDocumentQueue) {
+          await supplierDocumentQueue.add('supplier-document-import', {
+            filePath: file.path,
+            fileName: file.filename,
+            originalName: file.originalname,
+            supplierId,
+            templateId,
+            documentType: documentType || null,
+            fileHash,
+            supplierFileId: supplierFile.id,
+            userId: req.user.id,
+            source: 'bulk_import',
+            importId
+          }, {
+            jobId: `supplier-import-${Date.now()}-${fileHash.substring(0, 8)}`,
+            priority: 2,
+            attempts: 3,
+            backoff: {
+              type: 'exponential',
+              delay: 2000
+            },
+            removeOnComplete: true,
+            removeOnFail: false
+          });
+          
+          supplierFile.status = 'processing';
+          await supplierFile.save();
+          results.queued++;
+        }
+      } catch (fileError) {
+        console.error(`Error processing file ${file.originalname}:`, fileError);
+        results.errors.push({
+          file: file.originalname,
+          error: fileError.message
+        });
+        // Clean up file on error
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      }
+    }
+    
+    res.status(201).json({
+      message: `Import started: ${results.queued} files queued for processing`,
+      importId,
+      results
+    });
+  } catch (error) {
+    console.error('Error during bulk import:', error);
+    res.status(500).json({ message: 'Error during bulk import', error: error.message });
+  }
+});
+
 // Manual document upload (triggers processing)
 router.post('/', upload.single('file'), async (req, res) => {
   try {

@@ -35,6 +35,15 @@ const Suppliers = () => {
   const debouncedSearch = useDebounce(searchQuery, 300);
   const searchInputRef = useRef(null);
   
+  // Upload states
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFiles, setUploadFiles] = useState([]);
+  const [uploadSupplierId, setUploadSupplierId] = useState('');
+  const [uploadDocumentType, setUploadDocumentType] = useState('invoice');
+  const [uploading, setUploading] = useState(false);
+  const [uploadResults, setUploadResults] = useState(null);
+  const fileInputRef = useRef(null);
+  
   const isGlobalAdmin = user?.role === 'global_admin' || user?.role === 'administrator';
   const suppliersEnabled = settings?.suppliersEnabled !== false;
   
@@ -205,6 +214,80 @@ const Suppliers = () => {
     return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
   };
   
+  // Upload handlers
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 500) {
+      toast.error('Maximum 500 files allowed');
+      return;
+    }
+    setUploadFiles(files);
+    if (files.length > 0 && !showUploadModal) {
+      setShowUploadModal(true);
+    }
+  };
+  
+  const handleUploadDocuments = async () => {
+    if (uploadFiles.length === 0) {
+      toast.error('Please select at least one file');
+      return;
+    }
+    
+    if (!uploadSupplierId) {
+      toast.error('Please select a supplier');
+      return;
+    }
+    
+    setUploading(true);
+    setUploadResults(null);
+    
+    try {
+      const formData = new FormData();
+      uploadFiles.forEach(file => {
+        formData.append('files', file);
+      });
+      formData.append('supplierId', uploadSupplierId);
+      formData.append('documentType', uploadDocumentType);
+      
+      const response = await api.post('/api/supplier-documents/import', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      setUploadResults(response.data.results);
+      toast.success(`${response.data.results.queued} files queued for processing`);
+      
+      // Reset after successful upload
+      setTimeout(() => {
+        setShowUploadModal(false);
+        setUploadFiles([]);
+        setUploadSupplierId('');
+        setUploadDocumentType('invoice');
+        setUploadResults(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }, 3000);
+    } catch (error) {
+      console.error('Error uploading documents:', error);
+      toast.error(error.response?.data?.message || 'Error uploading documents');
+    } finally {
+      setUploading(false);
+    }
+  };
+  
+  const resetUploadModal = () => {
+    setShowUploadModal(false);
+    setUploadFiles([]);
+    setUploadSupplierId('');
+    setUploadDocumentType('invoice');
+    setUploadResults(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+  
   if (!suppliersEnabled) {
     return null;
   }
@@ -268,6 +351,25 @@ const Suppliers = () => {
                     >
                       Reset
                     </button>
+                    {/* Upload Documents */}
+                    {canView && (
+                      <>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          multiple
+                          accept=".pdf,.xlsx,.xls"
+                          onChange={handleFileSelect}
+                          style={{ display: 'none' }}
+                        />
+                        <button 
+                          className="btn btn-success"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          Upload Documents
+                        </button>
+                      </>
+                    )}
                     {/* Add Supplier */}
                     {canCreate && (
                       <button
@@ -834,6 +936,154 @@ const Suppliers = () => {
                   Delete
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Upload Documents Modal */}
+      {showUploadModal && (
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-lg modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Upload Supplier Documents</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={resetUploadModal}
+                  disabled={uploading}
+                ></button>
+              </div>
+              <div className="modal-body">
+                {uploadResults ? (
+                  <div className="text-center py-3">
+                    <div className="mb-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-lg text-success" width="48" height="48" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                        <path d="M5 12l5 5l10 -10"></path>
+                      </svg>
+                    </div>
+                    <h3>Upload Complete</h3>
+                    <p className="text-muted">
+                      {uploadResults.queued} file(s) queued for processing
+                      {uploadResults.duplicates > 0 && `, ${uploadResults.duplicates} duplicate(s) skipped`}
+                    </p>
+                    {uploadResults.errors?.length > 0 && (
+                      <div className="alert alert-warning mt-3">
+                        <strong>Errors:</strong>
+                        <ul className="mb-0 mt-2">
+                          {uploadResults.errors.map((err, i) => (
+                            <li key={i}>{err.file}: {err.error}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div className="mb-3">
+                      <label className="form-label required">Select Supplier</label>
+                      <select
+                        className="form-select"
+                        value={uploadSupplierId}
+                        onChange={(e) => setUploadSupplierId(e.target.value)}
+                        disabled={uploading}
+                        required
+                      >
+                        <option value="">-- Select a supplier --</option>
+                        {suppliers.map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} {s.code ? `(${s.code})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div className="mb-3">
+                      <label className="form-label">Document Type</label>
+                      <select
+                        className="form-select"
+                        value={uploadDocumentType}
+                        onChange={(e) => setUploadDocumentType(e.target.value)}
+                        disabled={uploading}
+                      >
+                        <option value="invoice">Invoice</option>
+                        <option value="credit_note">Credit Note</option>
+                        <option value="statement">Statement</option>
+                      </select>
+                      <small className="form-hint">
+                        The system will use the default template for this document type if available.
+                      </small>
+                    </div>
+                    
+                    <div className="mb-3">
+                      <label className="form-label">Selected Files</label>
+                      <div className="card">
+                        <div className="card-body" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                          {uploadFiles.length === 0 ? (
+                            <p className="text-muted mb-0">No files selected</p>
+                          ) : (
+                            <ul className="list-unstyled mb-0">
+                              {uploadFiles.map((file, i) => (
+                                <li key={i} className="d-flex align-items-center py-1">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="icon me-2 text-primary" width="20" height="20" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                    <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                                    <path d="M14 3v4a1 1 0 0 0 1 1h4"></path>
+                                    <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z"></path>
+                                  </svg>
+                                  <span className="text-truncate" style={{ maxWidth: '400px' }}>{file.name}</span>
+                                  <small className="text-muted ms-2">({(file.size / 1024).toFixed(1)} KB)</small>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          className="btn btn-outline-primary btn-sm"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploading}
+                        >
+                          {uploadFiles.length > 0 ? 'Change Files' : 'Select Files'}
+                        </button>
+                        {uploadFiles.length > 0 && (
+                          <span className="ms-2 text-muted">{uploadFiles.length} file(s) selected</span>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+              {!uploadResults && (
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={resetUploadModal}
+                    disabled={uploading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleUploadDocuments}
+                    disabled={uploading || uploadFiles.length === 0 || !uploadSupplierId}
+                  >
+                    {uploading ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        Uploading...
+                      </>
+                    ) : (
+                      `Upload ${uploadFiles.length} File${uploadFiles.length !== 1 ? 's' : ''}`
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
