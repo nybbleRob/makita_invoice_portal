@@ -20,6 +20,7 @@ const {
 } = require('../config/storage');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const { validateMandatoryFields, getMandatoryFields } = require('../utils/supplierStandardFields');
+const { findSupplierFromParsedData } = require('../utils/supplierMatcher');
 
 /**
  * Process a supplier document file
@@ -27,9 +28,14 @@ const { validateMandatoryFields, getMandatoryFields } = require('../utils/suppli
  * @returns {Promise<Object>} Processing result
  */
 async function processSupplierDocumentImport(job) {
-  const { filePath, fileName, originalName, supplierId, templateId, fileHash, supplierFileId, userId, documentId } = job.data;
+  const { filePath, fileName, originalName, supplierId: providedSupplierId, templateId, fileHash, supplierFileId, userId, documentId } = job.data;
   const startTime = Date.now();
   const importId = documentId || supplierFileId || 'supplier-import';
+  
+  // Track supplier matching details for logging
+  let supplierMatchMethod = providedSupplierId ? 'provided' : null;
+  let extractedSupplierCode = null;
+  let extractedSupplierName = null;
   
   try {
     await job.updateProgress(10);
@@ -50,11 +56,104 @@ async function processSupplierDocumentImport(job) {
     
     await job.updateProgress(20);
     
-    // Verify supplier exists
-    const supplier = await Supplier.findByPk(supplierId);
-    if (!supplier) {
-      throw new Error(`Supplier not found: ${supplierId}`);
+    // Determine file type
+    const fileExt = path.extname(fileName).toLowerCase();
+    const isExcel = ['.xlsx', '.xls', '.csv'].includes(fileExt);
+    const isPDF = fileExt === '.pdf';
+    
+    if (!isPDF && !isExcel) {
+      throw new Error('Unsupported file type. Only PDF and Excel files are supported.');
     }
+    
+    // Extract text for document type detection and potential supplier auto-detection
+    let quickText = '';
+    let detectedDocType = null;
+    
+    if (isPDF) {
+      try {
+        const quickTextResult = await extractTextFromPDF(filePath);
+        quickText = quickTextResult.text || quickTextResult || '';
+        if (quickText.length > 0) {
+          const textUpper = quickText.toUpperCase();
+          if (textUpper.includes('CREDIT NOTE') || textUpper.includes('CREDITNOTE')) {
+            detectedDocType = 'credit_note';
+          } else if (textUpper.includes('STATEMENT')) {
+            detectedDocType = 'statement';
+          } else {
+            detectedDocType = 'invoice';
+          }
+        }
+      } catch (e) {
+        console.warn(`Could not extract text from PDF: ${e.message}`);
+      }
+    }
+    
+    await job.updateProgress(25);
+    
+    // Resolve supplier - either from provided ID or auto-detect from document
+    let supplier = null;
+    let resolvedSupplierId = providedSupplierId;
+    
+    if (providedSupplierId) {
+      // Supplier ID was provided - verify it exists
+      supplier = await Supplier.findByPk(providedSupplierId);
+      if (!supplier) {
+        throw new Error(`Supplier not found: ${providedSupplierId}`);
+      }
+      console.log(`📋 [${importId}] Using provided supplier: ${supplier.name} (ID: ${supplier.id})`);
+    } else {
+      // No supplier ID provided - try to auto-detect from document
+      console.log(`🔍 [${importId}] No supplier ID provided, attempting auto-detection...`);
+      
+      // Build a pseudo-parsed data object from raw text for supplier matching
+      const pseudoParsedData = extractSupplierIdentifiersFromText(quickText);
+      extractedSupplierCode = pseudoParsedData.supplierCode;
+      extractedSupplierName = pseudoParsedData.supplierName;
+      
+      console.log(`📋 [${importId}] Extracted identifiers - Code: "${extractedSupplierCode || 'not found'}", Name: "${extractedSupplierName || 'not found'}"`);
+      
+      // Try to match supplier
+      const matchResult = await findSupplierFromParsedData(pseudoParsedData);
+      
+      if (matchResult.supplier) {
+        supplier = matchResult.supplier;
+        resolvedSupplierId = supplier.id;
+        supplierMatchMethod = matchResult.matchMethod;
+        console.log(`✓ [${importId}] Auto-detected supplier: ${supplier.name} (ID: ${supplier.id}) via ${matchResult.matchMethod}`);
+      } else {
+        // Failed to auto-detect supplier
+        const failedPath = path.join(UNPROCESSED_SUPPLIER_FAILED, `${new Date().toISOString().split('T')[0]}`, fileName);
+        ensureDir(path.dirname(failedPath));
+        fs.copyFileSync(filePath, failedPath);
+        fs.unlinkSync(filePath);
+        
+        // Update supplier file status
+        if (supplierFileId) {
+          const supplierFile = await SupplierFile.findByPk(supplierFileId);
+          if (supplierFile) {
+            supplierFile.status = 'failed';
+            supplierFile.processingErrors = [{ 
+              message: matchResult.error,
+              extractedCode: extractedSupplierCode,
+              extractedName: extractedSupplierName
+            }];
+            await supplierFile.save();
+          }
+        }
+        
+        return {
+          success: false,
+          fileName: originalName || fileName,
+          error: matchResult.error || 'Could not identify supplier from document',
+          extractedSupplierCode,
+          extractedSupplierName,
+          processingTime: Date.now() - startTime,
+          timestamp: new Date().toISOString()
+        };
+      }
+    }
+    
+    await job.updateProgress(30);
     
     // Check for duplicate
     const existingDocument = await SupplierDocument.findOne({
@@ -66,7 +165,6 @@ async function processSupplierDocumentImport(job) {
     
     if (existingDocument && !documentId) {
       // This is a duplicate (unless we're re-parsing)
-      // For supplier documents, use a separate duplicate folder or reuse unprocessed/duplicates
       const duplicatePath = path.join(UNPROCESSED_SUPPLIER_FAILED, `${new Date().toISOString().split('T')[0]}`, fileName);
       ensureDir(path.dirname(duplicatePath));
       fs.copyFileSync(filePath, duplicatePath);
@@ -91,56 +189,26 @@ async function processSupplierDocumentImport(job) {
       };
     }
     
-    await job.updateProgress(30);
-    
-    // Determine file type
-    const fileExt = path.extname(fileName).toLowerCase();
-    const isExcel = ['.xlsx', '.xls', '.csv'].includes(fileExt);
-    const isPDF = fileExt === '.pdf';
-    
-    if (!isPDF && !isExcel) {
-      throw new Error('Unsupported file type. Only PDF and Excel files are supported.');
-    }
+    await job.updateProgress(35);
     
     // Find template - use provided templateId or find default for supplier
     let template = null;
     if (templateId) {
       template = await SupplierTemplate.findByPk(templateId);
-      if (!template || template.supplierId !== supplierId) {
+      if (!template || template.supplierId !== resolvedSupplierId) {
         throw new Error(`Template not found or does not belong to supplier: ${templateId}`);
       }
     }
     
-    // If no template provided, try to detect document type and find appropriate template
-    let detectedDocType = null;
-    if (!template && isPDF) {
-      try {
-        const quickTextResult = await extractTextFromPDF(filePath);
-        const quickText = quickTextResult.text || quickTextResult;
-        if (quickText && quickText.length > 0) {
-          const textUpper = quickText.toUpperCase();
-          if (textUpper.includes('CREDIT NOTE') || textUpper.includes('CREDITNOTE')) {
-            detectedDocType = 'credit_note';
-          } else if (textUpper.includes('STATEMENT')) {
-            detectedDocType = 'statement';
-          } else {
-            detectedDocType = 'invoice';
-          }
-        }
-      } catch (e) {
-        console.warn(`Could not detect document type: ${e.message}`);
-      }
-    }
-    
     // Find default template for supplier if not provided
-    if (!template && supplierId) {
+    if (!template && resolvedSupplierId) {
       const fileType = isPDF ? 'pdf' : 'excel';
       const docType = detectedDocType || 'invoice';
-      template = await SupplierTemplate.findDefaultForSupplier(supplierId, docType, fileType);
+      template = await SupplierTemplate.findDefaultForSupplier(resolvedSupplierId, docType, fileType);
     }
     
     if (!template) {
-      throw new Error(`No template found for supplier ${supplierId}. Please create a template first.`);
+      throw new Error(`No template found for supplier ${supplier.name} (ID: ${resolvedSupplierId}). Please create a template first.`);
     }
     
     await job.updateProgress(40);
@@ -231,7 +299,7 @@ async function processSupplierDocumentImport(job) {
     if (invoiceNumber) {
       const existingDoc = await SupplierDocument.findOne({
         where: {
-          supplierId,
+          supplierId: resolvedSupplierId,
           invoiceNumber,
           deletedAt: null,
           ...(documentId ? { id: { [Op.ne]: documentId } } : {})
@@ -260,7 +328,7 @@ async function processSupplierDocumentImport(job) {
     const year = docDate.getFullYear().toString();
     const month = String(docDate.getMonth() + 1).padStart(2, '0');
     const day = String(docDate.getDate()).padStart(2, '0');
-    const datedFolder = path.join(PROCESSED_SUPPLIER_DOCUMENTS, supplierId.toString(), year, month, day);
+    const datedFolder = path.join(PROCESSED_SUPPLIER_DOCUMENTS, resolvedSupplierId.toString(), year, month, day);
     ensureDir(datedFolder);
     const finalFileName = `${Date.now()}-${fileName}`;
     const finalPath = path.join(datedFolder, finalFileName);
@@ -300,7 +368,7 @@ async function processSupplierDocumentImport(job) {
     } else {
       // Create new document
       document = await SupplierDocument.create({
-        supplierId,
+        supplierId: resolvedSupplierId,
         templateId: template.id,
         documentType,
         invoiceNumber,
@@ -394,6 +462,72 @@ async function processSupplierDocumentImport(job) {
   }
 }
 
+/**
+ * Extract supplier identifiers (code and name) from raw document text
+ * Used for auto-detection when no supplierId is provided
+ * @param {string} text - Raw text extracted from document
+ * @returns {Object} Object with supplierCode and supplierName if found
+ */
+function extractSupplierIdentifiersFromText(text) {
+  const result = {
+    supplierCode: null,
+    supplierName: null
+  };
+  
+  if (!text || typeof text !== 'string') {
+    return result;
+  }
+  
+  // Common patterns for supplier/account codes
+  const codePatterns = [
+    // Account Number patterns
+    /account\s*(?:number|no\.?|#|code)?[:\s]*([A-Z0-9][\w\-]{2,20})/i,
+    /a\/c\s*(?:no\.?|#)?[:\s]*([A-Z0-9][\w\-]{2,20})/i,
+    /customer\s*(?:number|no\.?|#|code|ref)?[:\s]*([A-Z0-9][\w\-]{2,20})/i,
+    /cust\.?\s*(?:no\.?|#|code)?[:\s]*([A-Z0-9][\w\-]{2,20})/i,
+    /our\s*ref(?:erence)?[:\s]*([A-Z0-9][\w\-]{2,20})/i,
+    /your\s*ref(?:erence)?[:\s]*([A-Z0-9][\w\-]{2,20})/i,
+    /supplier\s*(?:code|ref|number|no\.?|#)?[:\s]*([A-Z0-9][\w\-]{2,20})/i
+  ];
+  
+  // Try each pattern to find supplier code
+  for (const pattern of codePatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const code = match[1].trim();
+      // Validate: should be alphanumeric, not too short or too long
+      if (code.length >= 3 && code.length <= 20 && !/^(no|yes|na|n\/a|the|and|for)$/i.test(code)) {
+        result.supplierCode = code;
+        break;
+      }
+    }
+  }
+  
+  // Common patterns for supplier/company names
+  // Look for "From:", "Supplier:", company name at top of document, etc.
+  const namePatterns = [
+    /(?:from|supplier|vendor|billed\s*by|invoiced\s*by)[:\s]+([A-Z][A-Za-z0-9\s\-&',\.]+(?:Ltd|Limited|Inc|Corp|PLC|LLP|LLC)?)/i,
+    /^([A-Z][A-Z\s\-&'\.]{5,50}(?:Ltd|Limited|Inc|Corp|PLC|LLP|LLC)?)/m
+  ];
+  
+  // Try each pattern to find supplier name
+  for (const pattern of namePatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const name = match[1].trim();
+      // Validate: should be reasonable length and not common words
+      if (name.length >= 3 && name.length <= 100) {
+        // Clean up the name - remove trailing punctuation
+        result.supplierName = name.replace(/[,\.\s]+$/, '').trim();
+        break;
+      }
+    }
+  }
+  
+  return result;
+}
+
 module.exports = {
-  processSupplierDocumentImport
+  processSupplierDocumentImport,
+  extractSupplierIdentifiersFromText // Export for testing
 };

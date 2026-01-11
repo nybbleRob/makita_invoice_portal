@@ -6,6 +6,17 @@
 
 // Standard field names (camelCase for JavaScript)
 const STANDARD_FIELDS = {
+  // SUPPLIER IDENTIFIER FIELDS - Used for supplier matching
+  supplierCode: {
+    standardName: 'supplierCode',
+    displayName: 'Supplier Code',
+    description: 'Supplier code, account number, or customer reference - used to match document to supplier',
+    isCrucial: false,
+    isMandatory: false,
+    parsingOrder: 1, // Parse first - needed for supplier matching
+    aliases: ['supplier_code', 'suppliercode', 'account_number', 'account_no', 'customer_number', 'customer_no', 'our_ref', 'our_reference', 'your_ref', 'your_reference']
+  },
+  
   // CRUCIAL FIELDS - Must parse correctly or document fails
   documentType: {
     standardName: 'documentType',
