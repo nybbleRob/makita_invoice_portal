@@ -186,6 +186,45 @@ function getUnprocessedFilePath(reason, fileName, date = new Date()) {
 }
 
 /**
+ * Get full path for a processed supplier document
+ * @param {string} supplierId - Supplier ID (optional, for per-supplier folders)
+ * @param {string} documentType - Type of document ('invoice', 'credit_note', 'statement')
+ * @param {string} fileName - Name of the file
+ * @param {Date} date - Date for folder structure (defaults to now)
+ * @param {boolean} usePerSupplierFolders - If true, create per-supplier folders (default: false)
+ * @returns {string} Full path to store the document
+ */
+function getProcessedSupplierFilePath(supplierId, documentType, fileName, date = new Date(), usePerSupplierFolders = false) {
+  let baseFolder = PROCESSED_SUPPLIER_DOCUMENTS;
+  
+  // If per-supplier folders enabled, create structure: /suppliers/{supplierId}/{documentType}/
+  if (usePerSupplierFolders && supplierId) {
+    baseFolder = path.join(PROCESSED_BASE, 'suppliers', supplierId, documentType.replace('_', '-'));
+  } else {
+    // Default: flat structure with document type subfolder
+    baseFolder = path.join(PROCESSED_SUPPLIER_DOCUMENTS, documentType.replace('_', '-'));
+  }
+  
+  const datedFolder = getDatedFolder(baseFolder, date);
+  return path.join(datedFolder, fileName);
+}
+
+/**
+ * Get full path for an unprocessed/failed supplier document
+ * @param {string} fileName - Name of the file
+ * @param {Date} date - Date for folder structure (defaults to now)
+ * @returns {string} Full path to store the document
+ */
+function getUnprocessedSupplierFilePath(fileName, date = new Date()) {
+  const year = date.getFullYear().toString();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const datedFolder = path.join(UNPROCESSED_SUPPLIER_FAILED, `${year}-${month}-${day}`);
+  ensureDir(datedFolder);
+  return path.join(datedFolder, fileName);
+}
+
+/**
  * Ensure all storage directories exist
  */
 function ensureStorageDirs() {
@@ -299,6 +338,8 @@ module.exports = {
   getProcessedFolder,
   getProcessedFilePath,
   getUnprocessedFilePath,
+  getProcessedSupplierFilePath,
+  getUnprocessedSupplierFilePath,
   ensureStorageDirs,
   getStorageDir,
   getFilePath,

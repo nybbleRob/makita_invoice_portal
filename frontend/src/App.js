@@ -35,7 +35,6 @@ import Suppliers from './pages/Suppliers';
 import SupplierView from './pages/SupplierView';
 import AddSupplier from './pages/AddSupplier';
 import EditSupplier from './pages/EditSupplier';
-import SupplierTemplates from './pages/SupplierTemplates';
 import SupplierDocuments from './pages/SupplierDocuments';
 import SupplierDocumentView from './pages/SupplierDocumentView';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -204,7 +203,6 @@ function AppRoutes() {
         {/* Suppliers - Staff roles (only if module enabled) */}
         <Route path="suppliers" element={<Suppliers />} />
         <Route path="suppliers/new" element={<AdminRoute><AddSupplier /></AdminRoute>} />
-        <Route path="suppliers/:id/templates" element={<AdminRoute><SupplierTemplates /></AdminRoute>} />
         <Route path="suppliers/:id/edit" element={<AdminRoute><EditSupplier /></AdminRoute>} />
         <Route path="suppliers/:id" element={<SupplierView />} />
         <Route path="supplier-documents" element={<SupplierDocuments />} />

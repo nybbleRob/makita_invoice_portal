@@ -248,26 +248,18 @@ const Suppliers = () => {
                               {canView && (
                                 <button
                                   className="btn btn-sm btn-primary"
-                                  onClick={() => navigate(`/suppliers/${supplier.id}/view`)}
+                                  onClick={() => navigate(`/suppliers/${supplier.id}`)}
                                 >
                                   View
                                 </button>
                               )}
                               {canEdit && (
-                                <>
-                                  <button
-                                    className="btn btn-sm btn-info"
-                                    onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    className="btn btn-sm btn-secondary"
-                                    onClick={() => navigate(`/suppliers/${supplier.id}/templates`)}
-                                  >
-                                    Templates
-                                  </button>
-                                </>
+                                <button
+                                  className="btn btn-sm btn-info"
+                                  onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}
+                                >
+                                  Edit
+                                </button>
                               )}
                               {canDelete && (
                                 <button
