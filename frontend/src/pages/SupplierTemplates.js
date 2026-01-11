@@ -1,22 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
+import ExcelTemplateBuilder from '../components/ExcelTemplateBuilder';
+import TemplateBuilder from '../components/TemplateBuilder';
 
 const SupplierTemplates = () => {
   const navigate = useNavigate();
-  const location = useLocation();
+  const { id: supplierId } = useParams();
   const { user } = useAuth();
   const { settings } = useSettings();
+  const [supplier, setSupplier] = useState(null);
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [supplierFilter, setSupplierFilter] = useState(location.state?.supplierId || '');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [fileTypeFilter, setFileTypeFilter] = useState('');
+  const [showBuilder, setShowBuilder] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [builderType, setBuilderType] = useState(null); // 'excel' or 'pdf'
   
-  const isGlobalAdmin = user?.role === 'global_admin';
+  const isGlobalAdmin = user?.role === 'global_admin' || user?.role === 'administrator';
   const suppliersEnabled = settings?.suppliersEnabled !== false;
   
   useEffect(() => {
@@ -24,162 +27,263 @@ const SupplierTemplates = () => {
       navigate('/dashboard');
       return;
     }
-    fetchTemplates();
-  }, [supplierFilter, typeFilter, fileTypeFilter, suppliersEnabled, navigate]);
+    if (!isGlobalAdmin) {
+      navigate('/suppliers');
+      return;
+    }
+    if (supplierId) {
+      fetchSupplier();
+      fetchTemplates();
+    }
+  }, [supplierId, suppliersEnabled, isGlobalAdmin, navigate]);
+  
+  const fetchSupplier = async () => {
+    try {
+      const response = await api.get(`/api/suppliers/${supplierId}`);
+      setSupplier(response.data);
+    } catch (error) {
+      console.error('Error fetching supplier:', error);
+      toast.error('Error fetching supplier');
+      navigate('/suppliers');
+    }
+  };
   
   const fetchTemplates = async () => {
     try {
       setLoading(true);
-      const params = {};
-      if (supplierFilter) params.supplierId = supplierFilter;
-      if (typeFilter) params.templateType = typeFilter;
-      if (fileTypeFilter) params.fileType = fileTypeFilter;
-      
-      const response = await api.get('/supplier-templates', { params });
-      // Ensure templates is always an array
+      const response = await api.get('/api/supplier-templates', {
+        params: { supplierId }
+      });
       const templatesData = response.data || [];
       setTemplates(Array.isArray(templatesData) ? templatesData : []);
     } catch (error) {
       console.error('Error fetching templates:', error);
       toast.error('Error fetching supplier templates');
-      setTemplates([]); // Ensure templates is set to empty array on error
+      setTemplates([]);
     } finally {
       setLoading(false);
     }
   };
   
-  if (!suppliersEnabled) {
+  const handleDelete = async (templateId) => {
+    if (!window.confirm('Are you sure you want to delete this template?')) {
+      return;
+    }
+    
+    try {
+      await api.delete(`/api/supplier-templates/${templateId}`);
+      toast.success('Template deleted successfully');
+      fetchTemplates();
+    } catch (error) {
+      toast.error('Failed to delete template: ' + (error.response?.data?.message || error.message));
+    }
+  };
+  
+  const handleEdit = (template) => {
+    setEditingTemplate(template);
+    setBuilderType(template.fileType || 'pdf');
+    setShowBuilder(true);
+  };
+  
+  const handleNewTemplate = (type, fileType = 'pdf') => {
+    setEditingTemplate({ 
+      templateType: type, 
+      fileType: fileType,
+      supplierId: supplierId 
+    });
+    setBuilderType(fileType);
+    setShowBuilder(true);
+  };
+  
+  const handleBuilderClose = () => {
+    setShowBuilder(false);
+    setEditingTemplate(null);
+    fetchTemplates();
+  };
+  
+  if (!suppliersEnabled || !isGlobalAdmin) {
     return null;
   }
   
-  return (
-    <div className="page">
-      <div className="page-header">
+  if (showBuilder) {
+    return (
+      <div className="page-header d-print-none">
         <div className="container-fluid">
           <div className="row g-2 align-items-center">
             <div className="col">
               <div className="page-pretitle">Suppliers</div>
-              <h2 className="page-title">Supplier Templates</h2>
+              <h2 className="page-title">
+                {editingTemplate?.id ? 'Edit Template' : 'Create Template'}
+                {supplier && ` - ${supplier.name}`}
+              </h2>
             </div>
-            {isGlobalAdmin && (
-              <div className="col-auto ms-auto">
-                <button
-                  className="btn btn-primary"
-                  onClick={() => navigate('/supplier-templates/new')}
-                >
-                  <i className="ti ti-plus me-1"></i>
-                  Add Template
-                </button>
-              </div>
+            <div className="col-auto ms-auto">
+              <button
+                className="btn btn-secondary"
+                onClick={handleBuilderClose}
+              >
+                Back to Templates
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="page-body">
+          <div className="container-fluid">
+            {builderType === 'pdf' ? (
+              <TemplateBuilder
+                template={editingTemplate}
+                supplierId={supplierId}
+                onSave={handleBuilderClose}
+                onCancel={handleBuilderClose}
+              />
+            ) : (
+              <ExcelTemplateBuilder
+                template={editingTemplate}
+                supplierId={supplierId}
+                onSave={handleBuilderClose}
+                onCancel={handleBuilderClose}
+              />
             )}
           </div>
         </div>
       </div>
-      
+    );
+  }
+  
+  const templatesByType = {
+    invoice: templates.filter(t => t.templateType === 'invoice'),
+    credit_note: templates.filter(t => t.templateType === 'credit_note'),
+    statement: templates.filter(t => t.templateType === 'statement')
+  };
+  
+  return (
+    <div className="page-header d-print-none">
+      <div className="container-fluid">
+        <div className="row g-2 align-items-center">
+          <div className="col">
+            <div className="page-pretitle">Suppliers</div>
+            <h2 className="page-title">
+              Templates
+              {supplier && ` - ${supplier.name}`}
+            </h2>
+          </div>
+          <div className="col-auto ms-auto">
+            <button
+              className="btn btn-secondary"
+              onClick={() => navigate(`/suppliers/${supplierId}`)}
+            >
+              Back to Supplier
+            </button>
+          </div>
+        </div>
+      </div>
       <div className="page-body">
         <div className="container-fluid">
-          <div className="card">
-            <div className="card-body">
-              {loading ? (
-                <div className="text-center py-5">
-                  <div className="spinner-border" role="status">
-                    <span className="visually-hidden">Loading...</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="table-responsive">
-                  <table className="table table-vcenter table-hover">
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Supplier</th>
-                        <th>Type</th>
-                        <th>File Type</th>
-                        <th>Default</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Array.isArray(templates) && templates.map((template) => (
-                        <tr key={template.id}>
-                          <td>{template.name}</td>
-                          <td>
-                            {template.supplier ? (
-                              <a
-                                href="#"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  navigate(`/suppliers/${template.supplier.id}`);
-                                }}
-                              >
-                                {template.supplier.name}
-                              </a>
-                            ) : (
-                              '-'
-                            )}
-                          </td>
-                          <td>
-                            <span className={`badge ${
-                              template.templateType === 'invoice' ? 'bg-primary' :
-                              template.templateType === 'credit_note' ? 'bg-warning' :
-                              'bg-info'
-                            }`}>
-                              {template.templateType}
-                            </span>
-                          </td>
-                          <td>
-                            <span className="badge bg-secondary">{template.fileType}</span>
-                          </td>
-                          <td>
-                            {template.isDefault ? (
-                              <span className="badge bg-success">Yes</span>
-                            ) : (
-                              <span className="badge bg-secondary">No</span>
-                            )}
-                          </td>
-                          <td>
-                            {template.enabled ? (
-                              <span className="badge bg-success">Enabled</span>
-                            ) : (
-                              <span className="badge bg-secondary">Disabled</span>
-                            )}
-                          </td>
-                          <td>
-                            <div className="btn-list flex-nowrap">
-                              <button
-                                className="btn btn-sm btn-outline-primary"
-                                onClick={() => navigate(`/supplier-templates/${template.id}`)}
-                              >
-                                View
-                              </button>
-                              {isGlobalAdmin && (
-                                <button
-                                  className="btn btn-sm btn-outline-danger"
-                                  onClick={() => {
-                                    if (window.confirm('Delete this template?')) {
-                                      api.delete(`/supplier-templates/${template.id}`)
-                                        .then(() => {
-                                          toast.success('Template deleted');
-                                          fetchTemplates();
-                                        })
-                                        .catch(err => toast.error(err.response?.data?.message || 'Error deleting template'));
-                                    }
-                                  }}
-                                >
-                                  Delete
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+          <div className="mb-4">
+            <p className="text-muted">Manage parsing templates for this supplier's invoices, credit notes, and statements</p>
           </div>
+          
+          {loading ? (
+            <div className="text-center p-5">
+              <div className="spinner-border" role="status">
+                <span className="visually-hidden">Loading...</span>
+              </div>
+            </div>
+          ) : (
+            <div className="row">
+              {['invoice', 'credit_note', 'statement'].map(type => {
+                const typeTemplates = templatesByType[type];
+                
+                return (
+                  <div key={type} className="col-md-4 mb-4">
+                    <div className="card">
+                      <div className="card-header">
+                        <h3 className="card-title text-capitalize">
+                          {type.replace('_', ' ')} Templates
+                        </h3>
+                      </div>
+                      <div className="card-body">
+                        {typeTemplates.length === 0 ? (
+                          <p className="text-muted">No templates yet</p>
+                        ) : (
+                          <div className="list-group list-group-flush">
+                            {typeTemplates.map(template => (
+                              <div key={template.id} className="list-group-item px-0">
+                                <div className="d-flex justify-content-between align-items-start">
+                                  <div>
+                                    <div className="d-flex align-items-center gap-2">
+                                      <strong>{template.name}</strong>
+                                      {template.isDefault && (
+                                        <span className="badge bg-success-lt" title="This is the default template for this type">
+                                          Default
+                                        </span>
+                                      )}
+                                    </div>
+                                    <br />
+                                    <small className="text-muted">
+                                      {template.fileType === 'pdf' 
+                                        ? `${Object.keys(template.coordinates || {}).length} regions mapped`
+                                        : `${Object.keys(template.excelCells || {}).length} cells mapped`}
+                                      <span className={`badge ms-2 ${template.fileType === 'pdf' ? 'bg-primary-lt' : 'bg-secondary-lt'}`}>
+                                        {template.fileType === 'pdf' ? 'PDF' : 'Excel'}
+                                      </span>
+                                    </small>
+                                  </div>
+                                  <div className="btn-group btn-group-sm">
+                                    <button
+                                      className="btn btn-outline-primary"
+                                      onClick={() => handleEdit(template)}
+                                      title="Edit"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      className="btn btn-outline-danger"
+                                      onClick={() => handleDelete(template.id)}
+                                      title="Delete"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-3">
+                          {type === 'statement' ? (
+                            <div className="btn-group w-100" role="group">
+                              <button
+                                className="btn btn-sm btn-success"
+                                onClick={() => handleNewTemplate(type, 'excel')}
+                                style={{ flex: 1 }}
+                              >
+                                + Excel Template
+                              </button>
+                              <button
+                                className="btn btn-sm btn-primary"
+                                onClick={() => handleNewTemplate(type, 'pdf')}
+                                style={{ flex: 1 }}
+                              >
+                                + PDF Template
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              className="btn btn-sm btn-primary w-100"
+                              onClick={() => handleNewTemplate(type, 'pdf')}
+                            >
+                              + PDF Template
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

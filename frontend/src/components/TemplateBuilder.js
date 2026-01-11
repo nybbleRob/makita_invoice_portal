@@ -18,7 +18,7 @@ if (typeof window !== 'undefined') {
   };
 }
 
-const TemplateBuilder = ({ template, onSave, onCancel }) => {
+const TemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
   
   // Generate template code from name (same logic as backend)
   const generateTemplateCode = (name) => {
@@ -670,13 +670,19 @@ const TemplateBuilder = ({ template, onSave, onCancel }) => {
     formData.append('fileType', 'pdf');
     formData.append('coordinates', JSON.stringify(coordinates));
     formData.append('isDefault', templateData.isDefault || false);
+    
+    // Add supplierId if provided (for supplier templates)
+    if (supplierId) {
+      formData.append('supplierId', supplierId);
+    }
+    
     if (pdfFile) {
-      // POST route expects 'sampleExcel' (backend checks fileType to determine storage)
-      // PUT route expects 'samplePdf'
+      // POST route expects 'sampleFile' for supplier templates, 'sampleExcel' for regular templates
+      // PUT route expects 'sampleFile' for supplier templates, 'samplePdf' for regular templates
       if (template?.id) {
-        formData.append('samplePdf', pdfFile);
+        formData.append(supplierId ? 'sampleFile' : 'samplePdf', pdfFile);
       } else {
-        formData.append('sampleExcel', pdfFile); // Backend will handle based on fileType='pdf'
+        formData.append(supplierId ? 'sampleFile' : 'sampleExcel', pdfFile); // Backend will handle based on fileType='pdf'
       }
     }
     
@@ -685,14 +691,17 @@ const TemplateBuilder = ({ template, onSave, onCancel }) => {
       console.log('Saving PDF template with coordinates:', coordinates);
       console.log('Document Type field ID:', docTypeFieldId);
       console.log('Has document_type in coordinates:', !!coordinates[docTypeFieldId]);
+      console.log('Supplier ID:', supplierId);
+      
+      const baseEndpoint = supplierId ? '/api/supplier-templates' : '/api/templates';
       
       if (template?.id) {
-        await api.put(`/api/templates/${template.id}`, formData, {
+        await api.put(`${baseEndpoint}/${template.id}`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         toast.success('Template updated successfully');
       } else {
-        await api.post('/api/templates', formData, {
+        await api.post(baseEndpoint, formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         toast.success('Template created successfully');

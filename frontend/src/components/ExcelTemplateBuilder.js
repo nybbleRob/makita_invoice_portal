@@ -3,7 +3,7 @@ import api from '../services/api';
 import toast from '../utils/toast';
 import './ExcelTemplateBuilder.css';
 
-const ExcelTemplateBuilder = ({ template, onSave, onCancel }) => {
+const ExcelTemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
   const templateType = template?.templateType || 'invoice';
   
   // Get template code (from existing template or generate from name)
@@ -430,18 +430,26 @@ const ExcelTemplateBuilder = ({ template, onSave, onCancel }) => {
     formData.append('excelCells', JSON.stringify(excelCells));
     formData.append('customFields', JSON.stringify(customFieldsObj));
     
+    // Add supplierId if provided (for supplier templates)
+    if (supplierId) {
+      formData.append('supplierId', supplierId);
+    }
+    
     try {
       console.log('Saving template with excelCells:', excelCells);
       console.log('Template code:', saveTemplateCode);
       console.log('Template name:', templateData.name);
+      console.log('Supplier ID:', supplierId);
+      
+      const baseEndpoint = supplierId ? '/api/supplier-templates' : '/api/templates';
       
       if (template?.id) {
-        await api.put(`/api/templates/${template.id}`, formData, {
+        await api.put(`${baseEndpoint}/${template.id}`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         toast.success('Template updated successfully');
       } else {
-        await api.post('/api/templates', formData, {
+        await api.post(baseEndpoint, formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         toast.success('Template created successfully');

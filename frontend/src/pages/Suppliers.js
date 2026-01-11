@@ -254,12 +254,20 @@ const Suppliers = () => {
                                 </button>
                               )}
                               {canEdit && (
-                                <button
-                                  className="btn btn-sm btn-info"
-                                  onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}
-                                >
-                                  Edit
-                                </button>
+                                <>
+                                  <button
+                                    className="btn btn-sm btn-info"
+                                    onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    className="btn btn-sm btn-secondary"
+                                    onClick={() => navigate(`/suppliers/${supplier.id}/templates`)}
+                                  >
+                                    Templates
+                                  </button>
+                                </>
                               )}
                               {canDelete && (
                                 <button
