@@ -21,6 +21,8 @@ const Suppliers = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [supplierToDelete, setSupplierToDelete] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingSupplierId, setEditingSupplierId] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     code: '',
@@ -152,6 +154,43 @@ const Suppliers = () => {
     } catch (error) {
       console.error('Error creating supplier:', error);
       toast.error(error.response?.data?.message || 'Error creating supplier');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  
+  const openEditModal = (supplier) => {
+    setEditingSupplierId(supplier.id);
+    setFormData({
+      name: supplier.name || '',
+      code: supplier.code || '',
+      email: supplier.email || '',
+      phone: supplier.phone || '',
+      address: {
+        line1: supplier.address?.line1 || '',
+        line2: supplier.address?.line2 || '',
+        city: supplier.address?.city || '',
+        zip: supplier.address?.zip || '',
+        country: supplier.address?.country || ''
+      },
+      isActive: supplier.isActive !== false
+    });
+    setShowEditModal(true);
+  };
+  
+  const handleUpdateSupplier = async (e) => {
+    e.preventDefault();
+    try {
+      setSubmitting(true);
+      await api.put(`/api/suppliers/${editingSupplierId}`, formData);
+      toast.success('Supplier updated successfully');
+      setShowEditModal(false);
+      setEditingSupplierId(null);
+      resetForm();
+      fetchSuppliers();
+    } catch (error) {
+      console.error('Error updating supplier:', error);
+      toast.error(error.response?.data?.message || 'Error updating supplier');
     } finally {
       setSubmitting(false);
     }
@@ -313,7 +352,7 @@ const Suppliers = () => {
                               {canEdit && (
                                 <button
                                   className="btn btn-sm btn-info"
-                                  onClick={() => navigate(`/suppliers/${supplier.id}/edit`)}
+                                  onClick={() => openEditModal(supplier)}
                                 >
                                   Edit
                                 </button>
@@ -564,6 +603,186 @@ const Suppliers = () => {
                   </button>
                   <button type="submit" className="btn btn-primary" disabled={submitting}>
                     {submitting ? 'Creating...' : 'Create Supplier'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Edit Supplier Modal */}
+      {showEditModal && (
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-xl modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Edit Supplier</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingSupplierId(null);
+                    resetForm();
+                  }}
+                ></button>
+              </div>
+              <form onSubmit={handleUpdateSupplier} autoComplete="off">
+                <div className="modal-body">
+                  <div className="row">
+                    {/* Left Column - Basic Info */}
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label htmlFor="edit-supplier-name" className="form-label required">Supplier Name</label>
+                        <input
+                          id="edit-supplier-name"
+                          type="text"
+                          className="form-control"
+                          name="name"
+                          placeholder="Enter supplier name"
+                          value={formData.name}
+                          onChange={handleInputChange}
+                          required
+                        />
+                      </div>
+                      <div className="mb-3">
+                        <label htmlFor="edit-supplier-code" className="form-label required">Supplier Code</label>
+                        <input
+                          id="edit-supplier-code"
+                          type="text"
+                          className="form-control"
+                          name="code"
+                          placeholder="e.g. SUP001"
+                          value={formData.code}
+                          onChange={handleInputChange}
+                          required
+                        />
+                        <small className="form-hint">Unique code for supplier, such as Account No. / Customer No. usually displayed on supplier Invoices etc.</small>
+                      </div>
+                      <div className="mb-3">
+                        <label htmlFor="edit-supplier-email" className="form-label">Email</label>
+                        <input
+                          id="edit-supplier-email"
+                          type="email"
+                          className="form-control"
+                          name="email"
+                          placeholder="supplier@example.com"
+                          value={formData.email}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                      <div className="mb-3">
+                        <label htmlFor="edit-supplier-phone" className="form-label">Phone</label>
+                        <input
+                          id="edit-supplier-phone"
+                          type="text"
+                          className="form-control"
+                          name="phone"
+                          placeholder="+44 1234 567890"
+                          value={formData.phone}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                      <div className="mb-3">
+                        <label className="row">
+                          <span className="col">Active</span>
+                          <span className="col-auto">
+                            <label className="form-check form-check-single form-switch">
+                              <input
+                                id="edit-supplier-is-active"
+                                type="checkbox"
+                                className="form-check-input"
+                                name="isActive"
+                                checked={formData.isActive}
+                                onChange={handleInputChange}
+                              />
+                            </label>
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                    {/* Right Column - Address */}
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label htmlFor="edit-supplier-address-line1" className="form-label">Address Line 1</label>
+                        <input
+                          id="edit-supplier-address-line1"
+                          type="text"
+                          className="form-control"
+                          name="address.line1"
+                          placeholder="Street address"
+                          value={formData.address.line1}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                      <div className="mb-3">
+                        <label htmlFor="edit-supplier-address-line2" className="form-label">Address Line 2</label>
+                        <input
+                          id="edit-supplier-address-line2"
+                          type="text"
+                          className="form-control"
+                          name="address.line2"
+                          placeholder="Apartment, suite, etc."
+                          value={formData.address.line2}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                      <div className="row">
+                        <div className="col-md-6 mb-3">
+                          <label htmlFor="edit-supplier-address-city" className="form-label">City</label>
+                          <input
+                            id="edit-supplier-address-city"
+                            type="text"
+                            className="form-control"
+                            name="address.city"
+                            placeholder="City"
+                            value={formData.address.city}
+                            onChange={handleInputChange}
+                          />
+                        </div>
+                        <div className="col-md-6 mb-3">
+                          <label htmlFor="edit-supplier-address-zip" className="form-label">Postcode</label>
+                          <input
+                            id="edit-supplier-address-zip"
+                            type="text"
+                            className="form-control"
+                            name="address.zip"
+                            placeholder="Postcode"
+                            value={formData.address.zip}
+                            onChange={handleInputChange}
+                          />
+                        </div>
+                      </div>
+                      <div className="mb-3">
+                        <label htmlFor="edit-supplier-address-country" className="form-label">Country</label>
+                        <input
+                          id="edit-supplier-address-country"
+                          type="text"
+                          className="form-control"
+                          name="address.country"
+                          placeholder="Country"
+                          value={formData.address.country}
+                          onChange={handleInputChange}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setShowEditModal(false);
+                      setEditingSupplierId(null);
+                      resetForm();
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={submitting}>
+                    {submitting ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </form>
