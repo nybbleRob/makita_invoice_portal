@@ -103,10 +103,13 @@ const Suppliers = () => {
     setPagination(prev => ({ ...prev, page: 1 }));
   };
   
-  const getInitials = (firstName, lastName) => {
-    const first = firstName ? firstName.charAt(0).toUpperCase() : '';
-    const last = lastName ? lastName.charAt(0).toUpperCase() : '';
-    return `${first}${last}` || '?';
+  const getInitials = (name) => {
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) {
+      return parts[0].charAt(0).toUpperCase();
+    }
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
   };
   
   if (!suppliersEnabled) {
@@ -231,9 +234,9 @@ const Suppliers = () => {
                             {supplier.createdBy ? (
                               <div className="d-flex align-items-center">
                                 <span className={`avatar avatar-xs me-2 ${getRoleBadgeClass(supplier.createdBy.role)}`}>
-                                  {getInitials(supplier.createdBy.firstName, supplier.createdBy.lastName)}
+                                  {getInitials(supplier.createdBy.name)}
                                 </span>
-                                <span>{supplier.createdBy.firstName} {supplier.createdBy.lastName}</span>
+                                <span>{supplier.createdBy.name}</span>
                               </div>
                             ) : (
                               <span className="text-muted">System</span>

@@ -77,7 +77,7 @@ router.get('/', async (req, res) => {
         {
           model: User,
           as: 'createdBy',
-          attributes: ['id', 'firstName', 'lastName', 'email']
+          attributes: ['id', 'name', 'email']
         }
       ]
     });
@@ -137,7 +137,7 @@ router.get('/:id', async (req, res) => {
         {
           model: User,
           as: 'createdBy',
-          attributes: ['id', 'firstName', 'lastName', 'email']
+          attributes: ['id', 'name', 'email']
         },
         {
           model: SupplierTemplate,
