@@ -90,8 +90,9 @@ const AddSupplier = () => {
                   </div>
                   <div className="card-body">
                     <div className="mb-3">
-                      <label className="form-label required">Name</label>
+                      <label htmlFor="supplier-name" className="form-label required">Name</label>
                       <input
+                        id="supplier-name"
                         type="text"
                         className="form-control"
                         name="name"
@@ -102,8 +103,9 @@ const AddSupplier = () => {
                     </div>
                     
                     <div className="mb-3">
-                      <label className="form-label">Code</label>
+                      <label htmlFor="supplier-code" className="form-label">Code</label>
                       <input
+                        id="supplier-code"
                         type="text"
                         className="form-control"
                         name="code"
@@ -113,8 +115,9 @@ const AddSupplier = () => {
                     </div>
                     
                     <div className="mb-3">
-                      <label className="form-label">Email</label>
+                      <label htmlFor="supplier-email" className="form-label">Email</label>
                       <input
+                        id="supplier-email"
                         type="email"
                         className="form-control"
                         name="email"
@@ -124,8 +127,9 @@ const AddSupplier = () => {
                     </div>
                     
                     <div className="mb-3">
-                      <label className="form-label">Phone</label>
+                      <label htmlFor="supplier-phone" className="form-label">Phone</label>
                       <input
+                        id="supplier-phone"
                         type="text"
                         className="form-control"
                         name="phone"
@@ -135,8 +139,9 @@ const AddSupplier = () => {
                     </div>
                     
                     <div className="mb-3">
-                      <label className="form-label">Address Line 1</label>
+                      <label htmlFor="supplier-address-line1" className="form-label">Address Line 1</label>
                       <input
+                        id="supplier-address-line1"
                         type="text"
                         className="form-control"
                         name="address.line1"
@@ -146,8 +151,9 @@ const AddSupplier = () => {
                     </div>
                     
                     <div className="mb-3">
-                      <label className="form-label">City</label>
+                      <label htmlFor="supplier-address-city" className="form-label">City</label>
                       <input
+                        id="supplier-address-city"
                         type="text"
                         className="form-control"
                         name="address.city"
@@ -157,8 +163,9 @@ const AddSupplier = () => {
                     </div>
                     
                     <div className="mb-3">
-                      <label className="form-label">State</label>
+                      <label htmlFor="supplier-address-state" className="form-label">State</label>
                       <input
+                        id="supplier-address-state"
                         type="text"
                         className="form-control"
                         name="address.state"
@@ -168,8 +175,9 @@ const AddSupplier = () => {
                     </div>
                     
                     <div className="mb-3">
-                      <label className="form-label">Zip</label>
+                      <label htmlFor="supplier-address-zip" className="form-label">Zip</label>
                       <input
+                        id="supplier-address-zip"
                         type="text"
                         className="form-control"
                         name="address.zip"
@@ -179,8 +187,9 @@ const AddSupplier = () => {
                     </div>
                     
                     <div className="mb-3">
-                      <label className="form-label">Country</label>
+                      <label htmlFor="supplier-address-country" className="form-label">Country</label>
                       <input
+                        id="supplier-address-country"
                         type="text"
                         className="form-control"
                         name="address.country"
@@ -190,8 +199,9 @@ const AddSupplier = () => {
                     </div>
                     
                     <div className="mb-3">
-                      <label className="form-label">Tax ID</label>
+                      <label htmlFor="supplier-tax-id" className="form-label">Tax ID</label>
                       <input
+                        id="supplier-tax-id"
                         type="text"
                         className="form-control"
                         name="taxId"
@@ -201,8 +211,9 @@ const AddSupplier = () => {
                     </div>
                     
                     <div className="mb-3">
-                      <label className="form-label">VAT Number</label>
+                      <label htmlFor="supplier-vat-number" className="form-label">VAT Number</label>
                       <input
+                        id="supplier-vat-number"
                         type="text"
                         className="form-control"
                         name="vatNumber"
@@ -212,8 +223,9 @@ const AddSupplier = () => {
                     </div>
                     
                     <div className="mb-3">
-                      <label className="form-label">Website</label>
+                      <label htmlFor="supplier-website" className="form-label">Website</label>
                       <input
+                        id="supplier-website"
                         type="url"
                         className="form-control"
                         name="website"
@@ -223,27 +235,29 @@ const AddSupplier = () => {
                     </div>
                     
                     <div className="mb-3">
-                      <label className="form-label">Notes</label>
+                      <label htmlFor="supplier-notes" className="form-label">Notes</label>
                       <textarea
+                        id="supplier-notes"
                         className="form-control"
                         name="notes"
+                        rows="4"
                         value={formData.notes}
                         onChange={handleChange}
-                        rows="3"
                       />
                     </div>
                     
                     <div className="mb-3">
-                      <label className="form-check form-switch">
+                      <div className="form-check form-switch">
                         <input
+                          id="supplier-is-active"
                           className="form-check-input"
                           type="checkbox"
                           name="isActive"
                           checked={formData.isActive}
                           onChange={handleChange}
                         />
-                        <span className="form-check-label">Active</span>
-                      </label>
+                        <label htmlFor="supplier-is-active" className="form-check-label">Active</label>
+                      </div>
                     </div>
                   </div>
                   <div className="card-footer">
