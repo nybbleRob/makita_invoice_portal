@@ -1,5 +1,5 @@
 const express = require('express');
-const { Supplier, SupplierTemplate, SupplierDocument, Settings, User, Sequelize } = require('../models');
+const { Supplier, SupplierTemplateSupplier: SupplierTemplate, SupplierDocument, Settings, User, Sequelize } = require('../models');
 const { Op } = Sequelize;
 const auth = require('../middleware/auth');
 const globalAdmin = require('../middleware/globalAdmin');
