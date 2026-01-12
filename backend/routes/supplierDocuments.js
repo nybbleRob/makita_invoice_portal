@@ -10,6 +10,7 @@ const { requireStaff, requireManager } = require('../middleware/permissions');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const { ensureStorageDirs, getStorageDir } = require('../config/storage');
 const { supplierDocumentQueue } = require('../config/queue');
+const supplierImportStore = require('../utils/supplierImportStore');
 const router = express.Router();
 
 // Middleware to check if suppliers module is enabled
@@ -247,13 +248,17 @@ router.post('/import', upload.array('files', 500), async (req, res) => {
       }
     }
     
-    const importId = `import-${Date.now()}`;
+    const importId = `supplier-import-${Date.now()}`;
     const results = {
       total: req.files.length,
       queued: 0,
       duplicates: 0,
       errors: []
     };
+    
+    // Create import session for tracking
+    const filePaths = req.files.map(f => f.path);
+    await supplierImportStore.createImport(importId, req.files.length, filePaths, req.user.id);
     
     for (const file of req.files) {
       try {
@@ -687,6 +692,164 @@ router.get('/:id/queries', async (req, res) => {
   } catch (error) {
     console.error('Error fetching queries:', error);
     res.status(500).json({ message: 'Error fetching queries', error: error.message });
+  }
+});
+
+// Get import status
+router.get('/import/:importId', async (req, res) => {
+  try {
+    const { importId } = req.params;
+    const importSession = await supplierImportStore.getImport(importId);
+    
+    if (!importSession) {
+      return res.status(404).json({
+        success: false,
+        message: 'Import session not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      import: {
+        importId: importSession.importId,
+        totalFiles: importSession.totalFiles,
+        processedFiles: importSession.processedFiles || 0,
+        currentFile: importSession.currentFile || null,
+        status: importSession.status,
+        cancelled: importSession.cancelled || false,
+        createdAt: importSession.createdAt,
+        completedAt: importSession.completedAt
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching supplier import status:', error);
+    res.status(500).json({ success: false, message: 'Error fetching import status' });
+  }
+});
+
+// Get import results
+router.get('/import/:importId/results', async (req, res) => {
+  try {
+    const { importId } = req.params;
+    const importSession = await supplierImportStore.getImport(importId);
+    
+    if (!importSession) {
+      return res.status(404).json({
+        success: false,
+        message: 'Import session not found'
+      });
+    }
+    
+    // Calculate summary statistics
+    const successful = importSession.results.filter(r => r.success).length;
+    const failed = importSession.results.filter(r => !r.success).length;
+    const matched = importSession.results.filter(r => r.supplierId).length;
+    const unallocated = importSession.results.filter(r => r.success && !r.supplierId).length;
+    const totalProcessingTime = importSession.results.reduce((sum, r) => sum + (r.processingTime || 0), 0);
+    const avgProcessingTime = importSession.results.length > 0 ? totalProcessingTime / importSession.results.length : 0;
+    
+    res.json({
+      success: true,
+      import: {
+        importId: importSession.importId,
+        totalFiles: importSession.totalFiles,
+        processedFiles: importSession.processedFiles || 0,
+        status: importSession.status,
+        createdAt: importSession.createdAt,
+        completedAt: importSession.completedAt,
+        summary: {
+          successful,
+          failed,
+          matched,
+          unallocated,
+          avgProcessingTime: Math.round(avgProcessingTime)
+        },
+        results: importSession.results.map(r => ({
+          fileName: r.fileName,
+          success: r.success,
+          supplierId: r.supplierId,
+          supplierName: r.supplierName,
+          documentId: r.documentId,
+          invoiceNumber: r.invoiceNumber,
+          documentType: r.documentType,
+          amount: r.amount,
+          error: r.error,
+          matchMethod: r.matchMethod,
+          processingTime: r.processingTime
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching supplier import results:', error);
+    res.status(500).json({ success: false, message: 'Error fetching import results' });
+  }
+});
+
+// Cancel import
+router.post('/import/:importId/cancel', async (req, res) => {
+  try {
+    const { importId } = req.params;
+    const importSession = await supplierImportStore.getImport(importId);
+    
+    if (!importSession) {
+      return res.status(404).json({
+        success: false,
+        message: 'Import session not found'
+      });
+    }
+    
+    // Cancel the import
+    await supplierImportStore.cancelImport(importId);
+    
+    res.json({
+      success: true,
+      message: 'Import cancelled'
+    });
+  } catch (error) {
+    console.error('Error cancelling supplier import:', error);
+    res.status(500).json({ success: false, message: 'Error cancelling import' });
+  }
+});
+
+// Get unallocated/failed supplier files for review
+router.get('/unallocated', async (req, res) => {
+  try {
+    const { page = 1, limit = 50 } = req.query;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const offset = (pageNum - 1) * limitNum;
+    
+    // Find supplier files that failed processing (couldn't match to a supplier)
+    const { count, rows } = await SupplierFile.findAndCountAll({
+      where: {
+        status: 'failed',
+        deletedAt: null
+      },
+      include: [
+        {
+          model: Supplier,
+          as: 'supplier',
+          required: false,
+          attributes: ['id', 'name', 'code']
+        }
+      ],
+      limit: limitNum,
+      offset,
+      order: [['createdAt', 'DESC']]
+    });
+    
+    res.json({
+      files: rows,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: count,
+        totalPages: Math.ceil(count / limitNum)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching unallocated supplier files:', error);
+    res.status(500).json({ message: 'Error fetching unallocated files', error: error.message });
   }
 });
 

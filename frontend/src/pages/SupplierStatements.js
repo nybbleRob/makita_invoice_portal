@@ -23,14 +23,24 @@ const SupplierStatements = () => {
   const searchInputRef = useRef(null);
   const fileInputRef = useRef(null);
   
-  // Upload states
-  const [uploadFiles, setUploadFiles] = useState([]);
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadResults, setUploadResults] = useState(null);
+  // Import states
+  const [importFiles, setImportFiles] = useState([]);
+  const [importStatus, setImportStatus] = useState(null);
+  const [importResults, setImportResults] = useState(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importPollingInterval, setImportPollingInterval] = useState(null);
   
   const suppliersEnabled = settings?.suppliersEnabled !== false;
   const isStaff = currentUser?.role && ['global_admin', 'administrator', 'manager', 'credit_senior', 'credit_controller', 'staff'].includes(currentUser.role);
+  
+  // Cleanup polling interval on unmount
+  useEffect(() => {
+    return () => {
+      if (importPollingInterval) {
+        clearInterval(importPollingInterval);
+      }
+    };
+  }, [importPollingInterval]);
   
   const fetchDocuments = useCallback(async () => {
     try {
@@ -101,31 +111,33 @@ const SupplierStatements = () => {
     setPagination(prev => ({ ...prev, page: 1 }));
   };
   
-  // Upload handlers
+  // Import handlers
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files);
     if (files.length > 500) {
       toast.error('Maximum 500 files allowed');
       return;
     }
-    setUploadFiles(files);
-    if (files.length > 0) {
-      setShowUploadModal(true);
-    }
+    setImportFiles(files);
   };
   
-  const handleUploadDocuments = async () => {
-    if (uploadFiles.length === 0) {
+  const handleImportDocuments = async () => {
+    if (importFiles.length === 0) {
       toast.error('Please select at least one file');
       return;
     }
     
-    setUploading(true);
-    setUploadResults(null);
+    if (importFiles.length > 500) {
+      toast.error('Maximum 500 files allowed');
+      return;
+    }
+    
+    setShowImportModal(true);
+    setImportStatus({ processedFiles: 0, totalFiles: importFiles.length, status: 'processing' });
     
     try {
       const formData = new FormData();
-      uploadFiles.forEach(file => {
+      importFiles.forEach(file => {
         formData.append('files', file);
       });
       formData.append('documentType', 'statement');
@@ -134,26 +146,99 @@ const SupplierStatements = () => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       
-      setUploadResults(response.data.results);
-      toast.success(`${response.data.results.queued} files queued for processing`);
-      
-      setTimeout(() => {
-        resetUploadModal();
-        fetchDocuments();
-      }, 2000);
+      // Start polling for status
+      pollImportStatus(response.data.importId);
     } catch (error) {
-      console.error('Error uploading documents:', error);
-      toast.error(error.response?.data?.message || 'Error uploading documents');
-    } finally {
-      setUploading(false);
+      console.error('Error starting supplier document import:', error);
+      const errorMessage = error.response?.data?.message || error.message;
+      toast.error('Error starting import: ' + errorMessage, 8000);
+      setShowImportModal(false);
+      setImportStatus(null);
     }
   };
   
-  const resetUploadModal = () => {
-    setShowUploadModal(false);
-    setUploadFiles([]);
-    setUploadResults(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  const pollImportStatus = async (id) => {
+    const pollOnce = async () => {
+      try {
+        const statusResponse = await api.get(`/api/supplier-documents/import/${id}`);
+        const importSession = statusResponse.data.import;
+        
+        if (importSession.cancelled || importSession.status === 'cancelled') {
+          setImportStatus(null);
+          setShowImportModal(false);
+          if (importPollingInterval) {
+            clearInterval(importPollingInterval);
+            setImportPollingInterval(null);
+          }
+          toast.info('Import was cancelled');
+          return true;
+        }
+        
+        setImportStatus(importSession);
+        
+        if (importSession.status === 'completed') {
+          try {
+            const resultsResponse = await api.get(`/api/supplier-documents/import/${id}/results`);
+            const importData = resultsResponse.data.import;
+            setImportResults(importData);
+            setImportStatus({ ...importSession, ...importData });
+            setShowImportModal(false);
+            fetchDocuments();
+            setImportFiles([]);
+            return true;
+          } catch (error) {
+            console.error('Error fetching import results:', error);
+          }
+        }
+        
+        return false;
+      } catch (error) {
+        console.error('Error polling import status:', error);
+        setImportStatus(null);
+        setShowImportModal(false);
+        setImportPollingInterval(null);
+        toast.error('Error checking import status', 8000);
+        return true;
+      }
+    };
+    
+    const shouldStop = await pollOnce();
+    if (shouldStop) return;
+    
+    const intervalId = setInterval(async () => {
+      const shouldStop = await pollOnce();
+      if (shouldStop) {
+        clearInterval(intervalId);
+        setImportPollingInterval(null);
+      }
+    }, 1000);
+    
+    setImportPollingInterval(intervalId);
+  };
+  
+  const handleCancelImport = () => {
+    if (importPollingInterval) {
+      clearInterval(importPollingInterval);
+      setImportPollingInterval(null);
+    }
+    
+    setShowImportModal(false);
+    setImportStatus(null);
+    setImportResults(null);
+    setImportFiles([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    toast.info('Import cancelled', 3000);
+  };
+  
+  const handleFinishImport = () => {
+    setImportStatus(null);
+    setImportResults(null);
+    setImportFiles([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
   
   if (!suppliersEnabled) return null;
@@ -233,8 +318,13 @@ const SupplierStatements = () => {
                           style={{ display: 'none' }}
                         />
                         <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}>
-                          Upload Statements
+                          Upload
                         </button>
+                        {importFiles.length > 0 && (
+                          <button className="btn btn-success" onClick={handleImportDocuments}>
+                            Import {importFiles.length} File{importFiles.length !== 1 ? 's' : ''}
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
@@ -320,85 +410,276 @@ const SupplierStatements = () => {
         </div>
       </div>
       
-      {/* Upload Modal */}
-      {showUploadModal && (
-        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-lg modal-dialog-centered">
+      {/* Import Processing Modal */}
+      {showImportModal && (
+        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
+          <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content">
               <div className="modal-header">
-                <h5 className="modal-title">Upload Supplier Statements</h5>
-                <button type="button" className="btn-close" onClick={resetUploadModal} disabled={uploading}></button>
+                <h5 className="modal-title">Importing Supplier Statements</h5>
+                <button type="button" className="btn-close" onClick={handleCancelImport}></button>
               </div>
-              <div className="modal-body">
-                {uploadResults ? (
-                  <div className="text-center py-3">
-                    <div className="mb-3">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-lg text-success" width="48" height="48" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none">
-                        <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
-                        <path d="M5 12l5 5l10 -10"></path>
-                      </svg>
+              <div className="modal-body text-center py-4">
+                <div className="alert alert-info mb-3">
+                  <strong>Note:</strong> The system will automatically detect which supplier each document belongs to using Supplier Code or Name.
+                </div>
+                <div className="spinner-border text-primary mb-3" role="status">
+                  <span className="visually-hidden">Processing...</span>
+                </div>
+                <h3>Processing {importStatus?.totalFiles || 0} file(s)...</h3>
+                <p className="text-muted">
+                  Processed {importStatus?.processedFiles || 0} of {importStatus?.totalFiles || 0} files
+                </p>
+                {importStatus && importStatus.totalFiles > 0 && (
+                  <div className="progress">
+                    <div 
+                      className="progress-bar progress-bar-striped progress-bar-animated" 
+                      role="progressbar" 
+                      style={{ width: `${((importStatus?.processedFiles || 0) / importStatus.totalFiles) * 100}%` }}
+                    >
+                      {Math.round(((importStatus?.processedFiles || 0) / importStatus.totalFiles) * 100)}%
                     </div>
-                    <h3>Upload Complete</h3>
-                    <p className="text-muted">
-                      {uploadResults.queued} file(s) queued for processing
-                      {uploadResults.duplicates > 0 && `, ${uploadResults.duplicates} duplicate(s) skipped`}
-                    </p>
-                    <p className="text-info small">
-                      The system will automatically detect which supplier each statement belongs to.
-                    </p>
                   </div>
-                ) : (
-                  <>
-                    <div className="alert alert-info">
-                      <strong>Auto-Detection:</strong> The system will automatically identify the supplier from each statement using the Supplier Code or Name.
-                    </div>
-                    <div className="mb-3">
-                      <label className="form-label">Selected Files</label>
-                      <div className="card">
-                        <div className="card-body" style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                          {uploadFiles.length === 0 ? (
-                            <p className="text-muted mb-0">No files selected</p>
-                          ) : (
-                            <ul className="list-unstyled mb-0">
-                              {uploadFiles.map((file, i) => (
-                                <li key={i} className="py-1">
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="icon me-2 text-primary" width="20" height="20" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none">
-                                    <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
-                                    <path d="M14 3v4a1 1 0 0 0 1 1h4"></path>
-                                    <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z"></path>
-                                  </svg>
-                                  {file.name} <small className="text-muted">({(file.size / 1024).toFixed(1)} KB)</small>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className="btn btn-outline-primary btn-sm mt-2"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={uploading}
-                      >
-                        {uploadFiles.length > 0 ? 'Change Files' : 'Select Files'}
-                      </button>
-                    </div>
-                  </>
                 )}
               </div>
-              {!uploadResults && (
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={resetUploadModal} disabled={uploading}>Cancel</button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={handleUploadDocuments}
-                    disabled={uploading || uploadFiles.length === 0}
-                  >
-                    {uploading ? 'Uploading...' : `Upload ${uploadFiles.length} File${uploadFiles.length !== 1 ? 's' : ''}`}
-                  </button>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-danger" onClick={handleCancelImport}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Import Results Modal */}
+      {importResults && (
+        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
+          <div className="modal-dialog modal-xl">
+            <div className="modal-content">
+              <div className="modal-header bg-success-lt">
+                <h5 className="modal-title">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-md me-2" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                    <path d="M5 12l5 5l10 -10" />
+                  </svg>
+                  Import Complete
+                </h5>
+                <button type="button" className="btn-close" onClick={handleFinishImport}></button>
+              </div>
+              <div className="modal-body">
+                {/* Summary Cards */}
+                <div className="row mb-4">
+                  <div className="col-md-3">
+                    <div className="card card-sm">
+                      <div className="card-body">
+                        <div className="row align-items-center">
+                          <div className="col-auto">
+                            <span className="bg-primary text-white avatar">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                <path d="M5 12l5 5l10 -10" />
+                              </svg>
+                            </span>
+                          </div>
+                          <div className="col">
+                            <div className="font-weight-medium">{importResults.summary?.successful || 0}</div>
+                            <div className="text-muted">Successful</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-3">
+                    <div className="card card-sm">
+                      <div className="card-body">
+                        <div className="row align-items-center">
+                          <div className="col-auto">
+                            <span className="bg-success text-white avatar">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                <path d="M9 12l2 2l4 -4" />
+                                <path d="M21 12c-1 0 -2.5 -.5 -3 -1" />
+                                <path d="M3 12c1 0 2.5 -.5 3 -1" />
+                              </svg>
+                            </span>
+                          </div>
+                          <div className="col">
+                            <div className="font-weight-medium text-success">{importResults.summary?.matched || 0}</div>
+                            <div className="text-muted">Matched to Supplier</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-3">
+                    <div className="card card-sm">
+                      <div className="card-body">
+                        <div className="row align-items-center">
+                          <div className="col-auto">
+                            <span className="bg-warning text-white avatar">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
+                                <path d="M12 8v4" />
+                                <path d="M12 16h.01" />
+                              </svg>
+                            </span>
+                          </div>
+                          <div className="col">
+                            <div className="font-weight-medium text-warning">{importResults.summary?.unallocated || 0}</div>
+                            <div className="text-muted">Unallocated</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-3">
+                    <div className="card card-sm">
+                      <div className="card-body">
+                        <div className="row align-items-center">
+                          <div className="col-auto">
+                            <span className="bg-danger text-white avatar">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
+                                <path d="M10 10l4 4m0 -4l-4 4" />
+                              </svg>
+                            </span>
+                          </div>
+                          <div className="col">
+                            <div className="font-weight-medium text-danger">{importResults.summary?.failed || 0}</div>
+                            <div className="text-muted">Failed</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              )}
+                
+                {/* Overall Status Alert */}
+                {importResults.summary?.failed === 0 && importResults.summary?.unallocated === 0 ? (
+                  <div className="alert alert-success d-flex align-items-center mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="icon me-2" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                      <path d="M5 12l5 5l10 -10" />
+                    </svg>
+                    <div>
+                      <strong>Perfect!</strong> All {importResults.summary?.successful || 0} document(s) were successfully imported and matched to suppliers.
+                    </div>
+                  </div>
+                ) : importResults.summary?.failed > 0 ? (
+                  <div className="alert alert-danger d-flex align-items-center mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="icon me-2" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                      <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
+                      <path d="M10 10l4 4m0 -4l-4 4" />
+                    </svg>
+                    <div>
+                      <strong>Some documents failed to import.</strong> {importResults.summary?.failed || 0} document(s) encountered errors.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="alert alert-warning d-flex align-items-center mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="icon me-2" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                      <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
+                      <path d="M12 8v4" />
+                      <path d="M12 16h.01" />
+                    </svg>
+                    <div>
+                      <strong>Import completed with warnings.</strong> {importResults.summary?.unallocated || 0} document(s) could not be matched to a supplier.
+                    </div>
+                  </div>
+                )}
+                
+                {/* Detailed Results Table */}
+                <div className="card">
+                  <div className="card-header">
+                    <h3 className="card-title">Import Details</h3>
+                    <div className="card-actions">
+                      <span className="badge bg-secondary-lt">{importResults.results?.length || 0} file(s)</span>
+                    </div>
+                  </div>
+                  <div className="table-responsive" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                    <table className="table table-vcenter table-hover table-sm">
+                      <thead className="sticky-top bg-light">
+                        <tr>
+                          <th>File Name</th>
+                          <th>Status</th>
+                          <th>Supplier</th>
+                          <th>Reference</th>
+                          <th>Amount</th>
+                          <th>Error</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importResults.results && importResults.results.length > 0 ? (
+                          importResults.results.map((result, idx) => (
+                            <tr key={idx} className={result.success ? '' : 'table-danger'}>
+                              <td>
+                                <div className="text-truncate" style={{ maxWidth: '200px' }} title={result.fileName}>
+                                  {result.fileName}
+                                </div>
+                              </td>
+                              <td>
+                                {result.success ? (
+                                  <span className="badge bg-success-lt">Success</span>
+                                ) : (
+                                  <span className="badge bg-danger-lt">Failed</span>
+                                )}
+                              </td>
+                              <td>
+                                {result.supplierId ? (
+                                  <span className="badge bg-success-lt">{result.supplierName || 'Matched'}</span>
+                                ) : result.success ? (
+                                  <span className="badge bg-warning-lt">Unallocated</span>
+                                ) : (
+                                  <span className="text-muted">-</span>
+                                )}
+                              </td>
+                              <td>
+                                {result.invoiceNumber ? (
+                                  <span className="font-weight-medium">{result.invoiceNumber}</span>
+                                ) : (
+                                  <span className="text-muted">-</span>
+                                )}
+                              </td>
+                              <td>
+                                {result.amount ? (
+                                  <span className="font-weight-medium">£{Number(result.amount).toFixed(2)}</span>
+                                ) : (
+                                  <span className="text-muted">-</span>
+                                )}
+                              </td>
+                              <td>
+                                {result.error ? (
+                                  <span className="text-danger small" title={result.error}>
+                                    {result.error.length > 40 ? `${result.error.substring(0, 40)}...` : result.error}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted">-</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="6" className="text-center text-muted py-4">
+                              No results available
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-primary" onClick={handleFinishImport}>
+                  Done
+                </button>
+              </div>
             </div>
           </div>
         </div>

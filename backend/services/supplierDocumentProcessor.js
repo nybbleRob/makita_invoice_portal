@@ -21,6 +21,7 @@ const {
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const { validateMandatoryFields, getMandatoryFields } = require('../utils/supplierStandardFields');
 const { findSupplierFromParsedData } = require('../utils/supplierMatcher');
+const supplierImportStore = require('../utils/supplierImportStore');
 
 /**
  * Process a supplier document file
@@ -28,9 +29,9 @@ const { findSupplierFromParsedData } = require('../utils/supplierMatcher');
  * @returns {Promise<Object>} Processing result
  */
 async function processSupplierDocumentImport(job) {
-  const { filePath, fileName, originalName, supplierId: providedSupplierId, templateId, fileHash, supplierFileId, userId, documentId } = job.data;
+  const { filePath, fileName, originalName, supplierId: providedSupplierId, templateId, fileHash, supplierFileId, userId, documentId, importId: jobImportId } = job.data;
   const startTime = Date.now();
-  const importId = documentId || supplierFileId || 'supplier-import';
+  const importId = jobImportId || documentId || supplierFileId || 'supplier-import';
   
   // Track supplier matching details for logging
   let supplierMatchMethod = providedSupplierId ? 'provided' : null;
@@ -141,7 +142,7 @@ async function processSupplierDocumentImport(job) {
           }
         }
         
-        return {
+        const failedResult = {
           success: false,
           fileName: originalName || fileName,
           error: matchResult.error || 'Could not identify supplier from document',
@@ -150,6 +151,13 @@ async function processSupplierDocumentImport(job) {
           processingTime: Date.now() - startTime,
           timestamp: new Date().toISOString()
         };
+        
+        // Add result to import store for tracking
+        if (jobImportId) {
+          await supplierImportStore.addResult(jobImportId, failedResult);
+        }
+        
+        return failedResult;
       }
     }
     
@@ -179,7 +187,7 @@ async function processSupplierDocumentImport(job) {
         }
       }
       
-      return {
+      const duplicateResult = {
         success: false,
         fileName: originalName || fileName,
         error: 'Duplicate file detected',
@@ -187,6 +195,13 @@ async function processSupplierDocumentImport(job) {
         processingTime: Date.now() - startTime,
         timestamp: new Date().toISOString()
       };
+      
+      // Add result to import store for tracking
+      if (jobImportId) {
+        await supplierImportStore.addResult(jobImportId, duplicateResult);
+      }
+      
+      return duplicateResult;
     }
     
     await job.updateProgress(35);
@@ -261,7 +276,7 @@ async function processSupplierDocumentImport(job) {
         }
       }
       
-      return {
+      const validationResult = {
         success: false,
         fileName: originalName || fileName,
         error: `Missing mandatory fields: ${validation.missing.join(', ')}`,
@@ -270,6 +285,13 @@ async function processSupplierDocumentImport(job) {
         processingTime: Date.now() - startTime,
         timestamp: new Date().toISOString()
       };
+      
+      // Add result to import store for tracking
+      if (jobImportId) {
+        await supplierImportStore.addResult(jobImportId, validationResult);
+      }
+      
+      return validationResult;
     }
     
     // Extract fields
@@ -313,7 +335,7 @@ async function processSupplierDocumentImport(job) {
         fs.copyFileSync(filePath, failedPath);
         fs.unlinkSync(filePath);
         
-        return {
+        const dupInvoiceResult = {
           success: false,
           fileName: originalName || fileName,
           error: `Invoice number ${invoiceNumber} already exists for this supplier`,
@@ -321,6 +343,13 @@ async function processSupplierDocumentImport(job) {
           processingTime: Date.now() - startTime,
           timestamp: new Date().toISOString()
         };
+        
+        // Add result to import store for tracking
+        if (jobImportId) {
+          await supplierImportStore.addResult(jobImportId, dupInvoiceResult);
+        }
+        
+        return dupInvoiceResult;
       }
     }
     
@@ -418,16 +447,27 @@ async function processSupplierDocumentImport(job) {
       }
     });
     
-    return {
+    const successResult = {
       success: true,
       fileName: originalName || fileName,
       documentId: document.id,
+      supplierId: supplier.id,
+      supplierName: supplier.name,
       invoiceNumber,
       documentType,
+      amount: amount,
+      matchMethod: supplierMatchMethod,
       processingTime: Date.now() - startTime,
       timestamp: new Date().toISOString(),
       processingMethod
     };
+    
+    // Add result to import store for tracking
+    if (jobImportId) {
+      await supplierImportStore.addResult(jobImportId, successResult);
+    }
+    
+    return successResult;
     
   } catch (error) {
     console.error(`❌ [${importId}] Error processing supplier document:`, error.message);
@@ -455,6 +495,21 @@ async function processSupplierDocumentImport(job) {
         }
       } catch (updateError) {
         console.error(`Error updating supplier file status: ${updateError.message}`);
+      }
+    }
+    
+    // Add error result to import store for tracking
+    if (jobImportId) {
+      try {
+        await supplierImportStore.addResult(jobImportId, {
+          success: false,
+          fileName: originalName || fileName,
+          error: error.message,
+          processingTime: Date.now() - startTime,
+          timestamp: new Date().toISOString()
+        });
+      } catch (storeError) {
+        console.error(`Error adding result to import store: ${storeError.message}`);
       }
     }
     
