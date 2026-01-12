@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { SupplierDocument, Supplier, SupplierTemplate, SupplierFile, User, Settings } = require('../models');
+const { SupplierDocument, Supplier, SupplierTemplateSupplier: SupplierTemplate, SupplierFile, User, Settings } = require('../models');
 const { Op } = require('sequelize');
 const { extractTextFromPDF } = require('../utils/pdfExtractor');
 const { 
