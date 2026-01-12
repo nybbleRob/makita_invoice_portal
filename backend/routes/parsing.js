@@ -348,59 +348,85 @@ router.post('/test-parse', globalAdmin, upload.single('file'), async (req, res) 
         let template = null;
         let detectedDocType = null;
         
-        // Step 1: Quick document type detection using basic text extraction
-        try {
-          const { extractTextFromPDF } = require('../utils/pdfExtractor');
-          const quickText = await extractTextFromPDF(filePath);
-          if (quickText && quickText.length > 0) {
-            detectedDocType = detectDocumentTypeFromContent(quickText);
-            console.log(`📄 Detected document type: ${detectedDocType} (from quick text scan)`);
-          }
-        } catch (detectError) {
-          console.warn(`⚠️  Could not detect document type: ${detectError.message}`);
-        }
-        
-        // Step 2: Try to find default template matching detected type
-        if (detectedDocType) {
-          template = await Template.findDefaultTemplate('pdf', detectedDocType);
-          if (template && template.templateType === detectedDocType) {
-            console.log(`✅ Found DEFAULT template for detected type: ${template.name} (ID: ${template.id}, Type: ${template.templateType})`);
-          } else if (template) {
-            console.error(`❌ Template type mismatch! Rejecting.`);
-            template = null;
-          }
-        }
-        
-        // Step 3: If no default template found for detected type, try any template of the correct type
-        if (!template && detectedDocType) {
-          template = await Template.findTemplateByFileType('pdf', detectedDocType);
-          if (template) {
-            console.log(`⚠️  Using non-default template for ${detectedDocType}: ${template.name} (ID: ${template.id}, Type: ${template.templateType})`);
+        // Check if template is provided in request body (for testing unsaved templates)
+        if (req.body.template) {
+          try {
+            const templateData = typeof req.body.template === 'string' ? JSON.parse(req.body.template) : req.body.template;
+            if (templateData.coordinates && Object.keys(templateData.coordinates).length > 0) {
+              // Use provided template for testing
+              template = {
+                id: null,
+                code: templateData.code || 'test_template',
+                name: templateData.name || 'Test Template',
+                templateType: templateData.templateType || 'invoice',
+                fileType: 'pdf',
+                coordinates: templateData.coordinates,
+                isDefault: false
+              };
+              console.log(`📊 Using test PDF template from request body: ${template.name}`);
+              console.log(`   Template has ${Object.keys(template.coordinates).length} fields configured`);
+            }
+          } catch (e) {
+            console.warn('Error parsing PDF template from request body:', e);
           }
         }
         
-        // Step 4: If detection failed or no template found, try to find default template for 'invoice' (most common)
+        // Only search for templates from database if not provided in request body
         if (!template) {
-          console.log(`⚠️  Document type detection failed or no template found. Trying default invoice template...`);
-          template = await Template.findDefaultTemplate('pdf', 'invoice');
-          if (template) {
-            console.log(`✅ Using DEFAULT invoice template: ${template.name} (ID: ${template.id}, Type: ${template.templateType})`);
+          // Step 1: Quick document type detection using basic text extraction
+          try {
+            const { extractTextFromPDF } = require('../utils/pdfExtractor');
+            const quickText = await extractTextFromPDF(filePath);
+            if (quickText && quickText.length > 0) {
+              detectedDocType = detectDocumentTypeFromContent(quickText);
+              console.log(`📄 Detected document type: ${detectedDocType} (from quick text scan)`);
+            }
+          } catch (detectError) {
+            console.warn(`⚠️  Could not detect document type: ${detectError.message}`);
           }
-        }
-        
-        // Step 5: Last resort - find any enabled PDF template
-        if (!template) {
-          template = await Template.findTemplateByFileType('pdf');
-          if (template) {
-            console.log(`⚠️  Using any available PDF template: ${template.name} (ID: ${template.id}, Type: ${template.templateType})`);
+          
+          // Step 2: Try to find default template matching detected type
+          if (detectedDocType) {
+            template = await Template.findDefaultTemplate('pdf', detectedDocType);
+            if (template && template.templateType === detectedDocType) {
+              console.log(`✅ Found DEFAULT template for detected type: ${template.name} (ID: ${template.id}, Type: ${template.templateType})`);
+            } else if (template) {
+              console.error(`❌ Template type mismatch! Rejecting.`);
+              template = null;
+            }
           }
-        }
-        
-        // Final check - if still no template, log error
-        if (!template) {
-          console.error(`❌ CRITICAL: No PDF template found.`);
-          console.error(`   Detected type: ${detectedDocType || 'null'}`);
-          console.error(`   This document cannot be processed correctly. Please create a default template.`);
+          
+          // Step 3: If no default template found for detected type, try any template of the correct type
+          if (!template && detectedDocType) {
+            template = await Template.findTemplateByFileType('pdf', detectedDocType);
+            if (template) {
+              console.log(`⚠️  Using non-default template for ${detectedDocType}: ${template.name} (ID: ${template.id}, Type: ${template.templateType})`);
+            }
+          }
+          
+          // Step 4: If detection failed or no template found, try to find default template for 'invoice' (most common)
+          if (!template) {
+            console.log(`⚠️  Document type detection failed or no template found. Trying default invoice template...`);
+            template = await Template.findDefaultTemplate('pdf', 'invoice');
+            if (template) {
+              console.log(`✅ Using DEFAULT invoice template: ${template.name} (ID: ${template.id}, Type: ${template.templateType})`);
+            }
+          }
+          
+          // Step 5: Last resort - find any enabled PDF template
+          if (!template) {
+            template = await Template.findTemplateByFileType('pdf');
+            if (template) {
+              console.log(`⚠️  Using any available PDF template: ${template.name} (ID: ${template.id}, Type: ${template.templateType})`);
+            }
+          }
+          
+          // Final check - if still no template, log error
+          if (!template) {
+            console.error(`❌ CRITICAL: No PDF template found.`);
+            console.error(`   Detected type: ${detectedDocType || 'null'}`);
+            console.error(`   This document cannot be processed correctly. Please create a default template.`);
+          }
         }
         
         if (!template) {

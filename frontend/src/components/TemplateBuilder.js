@@ -132,6 +132,12 @@ const TemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
   const [startPos, setStartPos] = useState(null);
   const [extractingRegion, setExtractingRegion] = useState(false);
   
+  // Test Parse modal state
+  const [showTestModal, setShowTestModal] = useState(false);
+  const [testFile, setTestFile] = useState(null);
+  const [testResults, setTestResults] = useState(null);
+  const [testing, setTesting] = useState(false);
+  
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const renderTaskRef = useRef(null); // Track current render task to cancel if needed
@@ -716,6 +722,107 @@ const TemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
     }
   };
   
+  // Test parse handler
+  const handleTestParse = async () => {
+    if (!testFile) {
+      toast.error('Please select a PDF file to test');
+      return;
+    }
+    
+    // Check if we have any field coordinates defined
+    const fieldsWithCoordinates = templateData.fields.filter(f => f.hasCoordinates);
+    if (fieldsWithCoordinates.length === 0) {
+      toast.error('Please define at least one field area before testing');
+      return;
+    }
+    
+    setTesting(true);
+    setTestResults(null);
+    
+    try {
+      // Build coordinates object from current template data (same as handleSave)
+      const testTemplateCode = template?.code || generateTemplateCode(templateData.name) || 'test_template';
+      const coordinates = {};
+      
+      // Get PDF page dimensions for coordinate conversion
+      const pdfPageSize = pdfPage?.view;
+      const pdfPageWidth = pdfPageSize ? (pdfPageSize[2] - pdfPageSize[0]) : (pdfDimensions?.width || 612);
+      const pdfPageHeight = pdfPageSize ? (pdfPageSize[3] - pdfPageSize[1]) : (pdfDimensions?.height || 792);
+      
+      templateData.fields.forEach(field => {
+        if (field.hasCoordinates && field.coordinates) {
+          const coords = field.coordinates;
+          const fieldId = `${testTemplateCode}_${field.standardName}`;
+          
+          let pdfX, pdfY, pdfWidth, pdfHeight;
+          
+          if (coords.x !== undefined && coords.y !== undefined && coords.width && coords.height) {
+            pdfX = coords.x;
+            pdfY = coords.y;
+            pdfWidth = coords.width;
+            pdfHeight = coords.height;
+          } else if (coords.normalized) {
+            pdfX = coords.normalized.left * pdfPageWidth;
+            pdfWidth = (coords.normalized.right - coords.normalized.left) * pdfPageWidth;
+            pdfHeight = (coords.normalized.bottom - coords.normalized.top) * pdfPageHeight;
+            pdfY = pdfPageHeight - (coords.normalized.bottom * pdfPageHeight);
+          } else {
+            return;
+          }
+          
+          coordinates[fieldId] = {
+            x: pdfX,
+            y: pdfY,
+            width: pdfWidth,
+            height: pdfHeight,
+            page: coords.page || 1,
+            normalized: coords.normalized,
+            label: field.label
+          };
+        }
+      });
+      
+      // Create form data with the test file and template configuration
+      const formData = new FormData();
+      formData.append('file', testFile);
+      formData.append('parser', 'local');
+      formData.append('template', JSON.stringify({
+        code: testTemplateCode,
+        name: templateData.name || 'Test Template',
+        templateType: templateData.templateType,
+        fileType: 'pdf',
+        coordinates: coordinates
+      }));
+      
+      const response = await api.post('/api/parsing/test-parse', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 300000 // 5 minutes
+      });
+      
+      const results = response.data.results || response.data;
+      setTestResults({
+        success: response.data.success,
+        message: response.data.message,
+        confidenceScore: results.confidence || 0,
+        processingMethod: results.processingMethod || 'local_coordinates',
+        extractedFields: results.parsedData || results.extractedFields || {},
+        fullText: results.fullText || ''
+      });
+      
+      toast.success('Test parse completed successfully');
+    } catch (error) {
+      console.error('Error testing parse:', error);
+      toast.error('Test parse failed: ' + (error.response?.data?.message || error.message));
+      setTestResults({
+        success: false,
+        message: error.response?.data?.message || error.message,
+        error: true
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+  
   // Re-render when scale or currentPage changes
   useEffect(() => {
     if (pdfDoc) {
@@ -892,6 +999,14 @@ const TemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
                 disabled={!templateData.name.trim() || !templateData.fields.some(f => f.hasCoordinates)}
               >
                 {template?.id ? 'Update Template' : 'Save Template'}
+              </button>
+              <button 
+                className="btn btn-info w-100 mt-2" 
+                onClick={() => setShowTestModal(true)}
+                disabled={!templateData.fields.some(f => f.hasCoordinates)}
+                title="Test the template against a PDF file"
+              >
+                Test Parse
               </button>
               <button className="btn btn-secondary w-100 mt-2" onClick={onCancel}>
                 Cancel
@@ -1155,6 +1270,171 @@ const TemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
           </div>
         </div>
       </div>
+      
+      {/* Test Parse Modal */}
+      {showTestModal && (
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Test Parse Template</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => {
+                    setShowTestModal(false);
+                    setTestFile(null);
+                    setTestResults(null);
+                  }}
+                  disabled={testing}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <div className="mb-4">
+                  <label className="form-label">Select a PDF file to test</label>
+                  <input
+                    type="file"
+                    className="form-control"
+                    accept=".pdf"
+                    onChange={(e) => {
+                      setTestFile(e.target.files[0]);
+                      setTestResults(null);
+                    }}
+                    disabled={testing}
+                  />
+                  <small className="text-muted">
+                    Upload a PDF file that matches this template format to test the extraction
+                  </small>
+                </div>
+                
+                {testing && (
+                  <div className="text-center p-4">
+                    <div className="spinner-border text-primary" role="status">
+                      <span className="visually-hidden">Testing...</span>
+                    </div>
+                    <p className="mt-2 text-muted">Parsing PDF file...</p>
+                  </div>
+                )}
+                
+                {testResults && !testing && (
+                  <div>
+                    {testResults.error ? (
+                      <div className="alert alert-danger">
+                        <strong>Error:</strong> {testResults.message}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="alert alert-success mb-3">
+                          <strong>Parse completed successfully</strong>
+                        </div>
+                        
+                        <div className="row mb-3">
+                          <div className="col-6">
+                            <div className="card">
+                              <div className="card-body p-3">
+                                <div className="text-muted small">Confidence Score</div>
+                                <div className="h3 mb-0">{testResults.confidenceScore}%</div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="col-6">
+                            <div className="card">
+                              <div className="card-body p-3">
+                                <div className="text-muted small">Processing Method</div>
+                                <div className="h5 mb-0">{testResults.processingMethod}</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <h6 className="mb-2">Extracted Fields</h6>
+                        <div className="table-responsive" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                          <table className="table table-sm table-bordered">
+                            <thead className="table-light sticky-top">
+                              <tr>
+                                <th style={{ width: '40%' }}>Field</th>
+                                <th>Value</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {Object.entries(testResults.extractedFields || {})
+                                .filter(([key]) => !['fullText', 'fieldLabels', 'templateId', 'templateName', 'templateCode'].includes(key))
+                                .map(([key, value]) => (
+                                  <tr key={key}>
+                                    <td><strong>{key}</strong></td>
+                                    <td>
+                                      {value === null || value === '' || value === undefined ? (
+                                        <span className="text-muted">(empty)</span>
+                                      ) : (
+                                        <code style={{ wordBreak: 'break-word' }}>{String(value)}</code>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        
+                        <details className="mt-3">
+                          <summary className="cursor-pointer text-muted">View Raw JSON</summary>
+                          <pre style={{ 
+                            fontSize: '11px', 
+                            maxHeight: '200px', 
+                            overflow: 'auto', 
+                            marginTop: '10px', 
+                            backgroundColor: '#f5f5f5',
+                            padding: '10px',
+                            borderRadius: '4px',
+                            whiteSpace: 'pre-wrap', 
+                            wordWrap: 'break-word' 
+                          }}>
+                            {JSON.stringify(testResults.extractedFields, null, 2)}
+                          </pre>
+                        </details>
+                      </>
+                    )}
+                  </div>
+                )}
+                
+                {!testResults && !testing && (
+                  <div className="text-center text-muted p-4">
+                    <p>Select a PDF file and click "Run Test" to see extraction results</p>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setShowTestModal(false);
+                    setTestFile(null);
+                    setTestResults(null);
+                  }}
+                  disabled={testing}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleTestParse}
+                  disabled={!testFile || testing}
+                >
+                  {testing ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Testing...
+                    </>
+                  ) : (
+                    'Run Test'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
