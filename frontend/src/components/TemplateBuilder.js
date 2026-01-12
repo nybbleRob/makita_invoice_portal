@@ -32,12 +32,18 @@ const TemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
   // This includes mandatory fields plus optional fields like goodsAmount for invoices
   const REQUIRED_FIELDS = useMemo(() => {
     const available = getAvailableFields(templateType);
-    // Sort: documentType first, then mandatory/crucial fields, then optional fields
+    // Sort: supplierName first (for supplier matching), then documentType, then mandatory/crucial fields, then optional fields
     return available.sort((a, b) => {
+      // Supplier Name at very top (parsingOrder 1)
+      if (a.standardName === 'supplierName') return -1;
+      if (b.standardName === 'supplierName') return 1;
+      // Document Type second
       if (a.standardName === 'documentType') return -1;
       if (b.standardName === 'documentType') return 1;
+      // Then crucial fields
       if (a.isCrucial && !b.isCrucial) return -1;
       if (!a.isCrucial && b.isCrucial) return 1;
+      // Then mandatory fields
       if (a.isMandatory && !b.isMandatory) return -1;
       if (!a.isMandatory && b.isMandatory) return 1;
       return a.displayName.localeCompare(b.displayName);

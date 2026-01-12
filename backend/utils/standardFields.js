@@ -96,16 +96,18 @@ const STANDARD_FIELDS = {
     aliases: ['goods_amount', 'goods', 'goodsamount', 'subtotal', 'net_amount']
   },
   
-  // OPTIONAL FIELDS - Can be added but not required
+  // SUPPLIER MATCHING FIELD - Required for supplier document templates
   supplierName: {
     standardName: 'supplierName',
     displayName: 'Supplier Name',
-    description: 'Supplier/vendor name - used as fallback for supplier matching',
-    isCrucial: false,
-    isMandatory: false,
-    parsingOrder: 2, // Parse early for supplier matching
+    description: 'Supplier/vendor name - required for supplier document matching',
+    isCrucial: true,
+    isMandatory: true,
+    parsingOrder: 1, // Parse first for supplier matching
     aliases: ['supplier_name', 'vendor_name', 'vendor', 'supplier']
   },
+  
+  // OPTIONAL FIELDS - Can be added but not required
   customerName: {
     standardName: 'customerName',
     displayName: 'Customer Name',
