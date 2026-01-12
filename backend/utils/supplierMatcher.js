@@ -95,24 +95,42 @@ async function matchSupplierByName(name, threshold = 0.7) {
 
 /**
  * Find supplier from parsed document data
- * Tries code first, then falls back to name matching
- * @param {Object} parsedData - Parsed data from document (should contain supplierCode and/or supplierName)
+ * Tries code first (checking multiple possible field names), then falls back to name matching
+ * @param {Object} parsedData - Parsed data from document
  * @param {number} nameMatchThreshold - Threshold for fuzzy name matching (default 0.7)
- * @returns {Promise<{supplier: Object|null, matchMethod: string|null}>}
+ * @returns {Promise<{supplier: Object|null, matchMethod: string|null, error: string|null}>}
  */
 async function findSupplierFromParsedData(parsedData, nameMatchThreshold = 0.7) {
-  const { supplierCode, supplierName } = parsedData;
+  // Check multiple possible field names for supplier code
+  // accountNumber is the standard field that should match Supplier.code
+  const supplierCode = parsedData.supplierCode || 
+                       parsedData.accountNumber || 
+                       parsedData.account_number ||
+                       parsedData.accountNo ||
+                       parsedData.account_no ||
+                       parsedData.customerCode ||
+                       parsedData.customer_code;
+  
+  // Check multiple possible field names for supplier name
+  const supplierName = parsedData.supplierName || 
+                       parsedData.supplier_name ||
+                       parsedData.vendorName ||
+                       parsedData.vendor_name ||
+                       parsedData.companyName ||
+                       parsedData.company_name;
   
   let supplier = null;
   let matchMethod = null;
   
+  console.log(`🔍 Looking for supplier with code: "${supplierCode || 'N/A'}", name: "${supplierName || 'N/A'}"`);
+  
   // Try exact code match first
   if (supplierCode) {
-    supplier = await matchSupplierByCode(supplierCode);
+    supplier = await matchSupplierByCode(String(supplierCode));
     if (supplier) {
       matchMethod = 'code';
       console.log(`✅ Supplier matched by code: ${supplierCode} -> ${supplier.name} (ID: ${supplier.id})`);
-      return { supplier, matchMethod };
+      return { supplier, matchMethod, error: null };
     }
   }
   
@@ -122,13 +140,22 @@ async function findSupplierFromParsedData(parsedData, nameMatchThreshold = 0.7) 
     if (supplier) {
       matchMethod = 'name_fuzzy';
       console.log(`✅ Supplier matched by name: ${supplierName} -> ${supplier.name} (ID: ${supplier.id})`);
-      return { supplier, matchMethod };
+      return { supplier, matchMethod, error: null };
     }
   }
   
-  // No match found
-  console.log(`❌ No supplier match found. Code: "${supplierCode || 'N/A'}", Name: "${supplierName || 'N/A'}"`);
-  return { supplier: null, matchMethod: null };
+  // No match found - provide helpful error message
+  let error = 'Could not identify supplier from document';
+  if (supplierCode) {
+    error = `No supplier found with code "${supplierCode}". Please create a supplier with this code first.`;
+  } else if (supplierName) {
+    error = `No supplier found matching name "${supplierName}". Please create a supplier with this name first.`;
+  } else {
+    error = 'No account number or supplier name found in document. Please check the template configuration.';
+  }
+  
+  console.log(`❌ ${error}`);
+  return { supplier: null, matchMethod: null, error };
 }
 
 module.exports = {

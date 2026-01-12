@@ -103,18 +103,78 @@ async function processSupplierDocumentImport(job) {
       }
       console.log(`📋 [${importId}] Using provided supplier: ${supplier.name} (ID: ${supplier.id})`);
     } else {
-      // No supplier ID provided - try to auto-detect from document
+      // No supplier ID provided - need to auto-detect from document
+      // Strategy: First try to parse with any available template, then match by accountNumber
       console.log(`🔍 [${importId}] No supplier ID provided, attempting auto-detection...`);
       
-      // Build a pseudo-parsed data object from raw text for supplier matching
-      const pseudoParsedData = extractSupplierIdentifiersFromText(quickText);
-      extractedSupplierCode = pseudoParsedData.supplierCode;
-      extractedSupplierName = pseudoParsedData.supplierName;
+      // Step 1: Find ANY template that can parse this document type
+      const docType = detectedDocType || 'invoice';
+      const fileType = isPDF ? 'pdf' : 'excel';
+      
+      // Try to find a default template for this doc type (from any supplier or global)
+      let autoTemplate = await SupplierTemplate.findOne({
+        where: {
+          templateType: docType,
+          fileType: fileType,
+          isDefault: true,
+          enabled: true,
+          deletedAt: null
+        },
+        order: [['priority', 'DESC'], ['createdAt', 'DESC']]
+      });
+      
+      // If no default, try any enabled template for this doc type
+      if (!autoTemplate) {
+        autoTemplate = await SupplierTemplate.findOne({
+          where: {
+            templateType: docType,
+            fileType: fileType,
+            enabled: true,
+            deletedAt: null
+          },
+          order: [['priority', 'DESC'], ['createdAt', 'DESC']]
+        });
+      }
+      
+      let parsedDataForMatching = null;
+      
+      if (autoTemplate) {
+        console.log(`📋 [${importId}] Using template "${autoTemplate.name}" for auto-detection parsing`);
+        
+        // Step 2: Parse document using this template to extract accountNumber
+        try {
+          if (isPDF) {
+            const { Template } = require('../models');
+            parsedDataForMatching = await Template.extractFieldsFromCoordinates(fileBuffer, autoTemplate);
+          } else if (isExcel) {
+            const { extractFieldsFromExcel } = require('../utils/excelParser');
+            parsedDataForMatching = await extractFieldsFromExcel(filePath, autoTemplate);
+          }
+          
+          if (parsedDataForMatching) {
+            extractedSupplierCode = parsedDataForMatching.accountNumber || parsedDataForMatching.account_number;
+            extractedSupplierName = parsedDataForMatching.supplierName || parsedDataForMatching.vendorName;
+            console.log(`📋 [${importId}] Parsed accountNumber: "${extractedSupplierCode || 'not found'}"`);
+          }
+        } catch (parseErr) {
+          console.warn(`⚠️ [${importId}] Template parsing for auto-detect failed: ${parseErr.message}`);
+        }
+      } else {
+        console.log(`⚠️ [${importId}] No template found for ${docType}/${fileType}, trying raw text extraction`);
+        // Fallback: try to extract from raw text
+        const pseudoParsedData = extractSupplierIdentifiersFromText(quickText);
+        extractedSupplierCode = pseudoParsedData.supplierCode;
+        extractedSupplierName = pseudoParsedData.supplierName;
+      }
       
       console.log(`📋 [${importId}] Extracted identifiers - Code: "${extractedSupplierCode || 'not found'}", Name: "${extractedSupplierName || 'not found'}"`);
       
-      // Try to match supplier
-      const matchResult = await findSupplierFromParsedData(pseudoParsedData);
+      // Step 3: Try to match supplier using parsed data
+      const matchData = {
+        accountNumber: extractedSupplierCode,
+        supplierName: extractedSupplierName
+      };
+      const matchResult = await findSupplierFromParsedData(matchData);
       
       if (matchResult.supplier) {
         supplier = matchResult.supplier;
