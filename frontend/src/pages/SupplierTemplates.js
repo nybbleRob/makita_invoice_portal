@@ -124,44 +124,46 @@ const SupplierTemplates = () => {
   
   if (showBuilder) {
     return (
-      <div className="page-header d-print-none">
-        <div className="container-fluid">
-          <div className="row g-2 align-items-center">
-            <div className="col">
-              <div className="page-pretitle">Suppliers</div>
-              <h2 className="page-title">
-                {editingTemplate?.id ? 'Edit Template' : 'Create Template'}
-                {supplier && ` - ${supplier.name}`}
-              </h2>
-            </div>
-            <div className="col-auto ms-auto d-flex gap-2">
-              <button 
-                className="btn btn-info" 
-                onClick={() => templateBuilderRef.current?.handleTestParse()}
-                disabled={!builderState.hasFields}
-                title="Test the template against the uploaded PDF"
-              >
-                Test Parse
-              </button>
-              <button
-                className="btn btn-success"
-                onClick={() => templateBuilderRef.current?.handleSave()}
-                disabled={!builderState.hasName || !builderState.hasFields}
-              >
-                {builderState.isEditing ? 'Update Template' : 'Save Template'}
-              </button>
-              <button
-                className="btn btn-secondary"
-                onClick={handleBuilderClose}
-              >
-                Back to Templates
-              </button>
-              <button
-                className="btn btn-danger"
-                onClick={handleBuilderClose}
-              >
-                Cancel
-              </button>
+      <>
+        <div className="page-header d-print-none">
+          <div className="container-fluid">
+            <div className="row g-2 align-items-center">
+              <div className="col">
+                <div className="page-pretitle">Suppliers</div>
+                <h2 className="page-title">
+                  {editingTemplate?.id ? 'Edit Template' : 'Create Template'}
+                  {supplier && ` - ${supplier.name}`}
+                </h2>
+              </div>
+              <div className="col-auto ms-auto d-flex gap-2">
+                <button 
+                  className="btn btn-info" 
+                  onClick={() => templateBuilderRef.current?.handleTestParse()}
+                  disabled={!builderState.hasFields}
+                  title="Test the template against the uploaded PDF"
+                >
+                  Test Parse
+                </button>
+                <button
+                  className="btn btn-success"
+                  onClick={() => templateBuilderRef.current?.handleSave()}
+                  disabled={!builderState.hasName || !builderState.hasFields}
+                >
+                  {builderState.isEditing ? 'Update Template' : 'Save Template'}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={handleBuilderClose}
+                >
+                  Back to Templates
+                </button>
+                <button
+                  className="btn btn-danger"
+                  onClick={handleBuilderClose}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -185,7 +187,7 @@ const SupplierTemplates = () => {
             )}
           </div>
         </div>
-      </div>
+      </>
     );
   }
   
