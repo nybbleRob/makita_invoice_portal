@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useImperativeHandle, forwardRef } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import api from '../services/api';
 import toast from '../utils/toast';
@@ -18,7 +18,7 @@ if (typeof window !== 'undefined') {
   };
 }
 
-const TemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
+const TemplateBuilder = forwardRef(({ template, supplierId, onSave, onCancel }, ref) => {
   
   // Generate template code from name (same logic as backend)
   const generateTemplateCode = (name) => {
@@ -147,6 +147,24 @@ const TemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const renderTaskRef = useRef(null); // Track current render task to cancel if needed
+  
+  // Expose methods to parent via ref
+  useImperativeHandle(ref, () => ({
+    handleSave: () => handleSave(),
+    handleTestParse: () => {
+      if (pdfFile) {
+        setTestFile(pdfFile);
+      }
+      setShowTestModal(true);
+    },
+    canSave: () => templateData.name.trim() && templateData.fields.some(f => f.hasCoordinates),
+    canTest: () => templateData.fields.some(f => f.hasCoordinates),
+    getState: () => ({
+      hasName: !!templateData.name.trim(),
+      hasFields: templateData.fields.some(f => f.hasCoordinates),
+      isEditing: !!template?.id
+    })
+  }));
   
   // Render PDF page on canvas
   const renderPDF = async (pdf, pageNum = 1) => {
@@ -998,33 +1016,6 @@ const TemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
               </div>
             )}
             
-            {/* Action Buttons - Horizontal toolbar */}
-            <div className="mt-3 d-flex gap-2 flex-wrap">
-              <button
-                className="btn btn-success flex-fill"
-                onClick={handleSave}
-                disabled={!templateData.name.trim() || !templateData.fields.some(f => f.hasCoordinates)}
-              >
-                {template?.id ? 'Update Template' : 'Save Template'}
-              </button>
-              <button 
-                className="btn btn-info flex-fill" 
-                onClick={() => {
-                  // Auto-use the already uploaded PDF if available
-                  if (pdfFile) {
-                    setTestFile(pdfFile);
-                  }
-                  setShowTestModal(true);
-                }}
-                disabled={!templateData.fields.some(f => f.hasCoordinates)}
-                title="Test the template against the uploaded PDF"
-              >
-                Test Parse
-              </button>
-              <button className="btn btn-secondary" onClick={onCancel}>
-                Cancel
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -1478,6 +1469,6 @@ const TemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
       )}
     </div>
   );
-};
+});
 
 export default TemplateBuilder;

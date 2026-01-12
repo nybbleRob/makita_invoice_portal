@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import toast from '../utils/toast';
@@ -18,6 +18,22 @@ const SupplierTemplates = () => {
   const [showBuilder, setShowBuilder] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [builderType, setBuilderType] = useState(null); // 'excel' or 'pdf'
+  const [builderState, setBuilderState] = useState({ hasName: false, hasFields: false, isEditing: false });
+  const templateBuilderRef = useRef(null);
+  
+  // Update builder state periodically when builder is shown
+  const updateBuilderState = useCallback(() => {
+    if (templateBuilderRef.current?.getState) {
+      setBuilderState(templateBuilderRef.current.getState());
+    }
+  }, []);
+  
+  useEffect(() => {
+    if (showBuilder) {
+      const interval = setInterval(updateBuilderState, 500);
+      return () => clearInterval(interval);
+    }
+  }, [showBuilder, updateBuilderState]);
   
   const isGlobalAdmin = user?.role === 'global_admin' || user?.role === 'administrator';
   const suppliersEnabled = settings?.suppliersEnabled !== false;
@@ -119,11 +135,32 @@ const SupplierTemplates = () => {
               </h2>
             </div>
             <div className="col-auto ms-auto d-flex gap-2">
+              <button 
+                className="btn btn-info" 
+                onClick={() => templateBuilderRef.current?.handleTestParse()}
+                disabled={!builderState.hasFields}
+                title="Test the template against the uploaded PDF"
+              >
+                Test Parse
+              </button>
+              <button
+                className="btn btn-success"
+                onClick={() => templateBuilderRef.current?.handleSave()}
+                disabled={!builderState.hasName || !builderState.hasFields}
+              >
+                {builderState.isEditing ? 'Update Template' : 'Save Template'}
+              </button>
               <button
                 className="btn btn-secondary"
                 onClick={handleBuilderClose}
               >
                 Back to Templates
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={handleBuilderClose}
+              >
+                Cancel
               </button>
             </div>
           </div>
@@ -132,6 +169,7 @@ const SupplierTemplates = () => {
           <div className="container-fluid">
             {builderType === 'pdf' ? (
               <TemplateBuilder
+                ref={templateBuilderRef}
                 template={editingTemplate}
                 supplierId={supplierId}
                 onSave={handleBuilderClose}
