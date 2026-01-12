@@ -97,6 +97,15 @@ const STANDARD_FIELDS = {
   },
   
   // OPTIONAL FIELDS - Can be added but not required
+  supplierName: {
+    standardName: 'supplierName',
+    displayName: 'Supplier Name',
+    description: 'Supplier/vendor name - used as fallback for supplier matching',
+    isCrucial: false,
+    isMandatory: false,
+    parsingOrder: 2, // Parse early for supplier matching
+    aliases: ['supplier_name', 'vendor_name', 'vendor', 'supplier']
+  },
   customerName: {
     standardName: 'customerName',
     displayName: 'Customer Name',
