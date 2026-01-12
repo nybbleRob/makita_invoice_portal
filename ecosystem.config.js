@@ -19,7 +19,8 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
       watch: false, // Set to true for auto-restart on file changes (development)
-      max_memory_restart: '500M',
+      max_memory_restart: '2G', // Restart if exceeds 2GB (increased from 500M)
+      node_args: '--max-old-space-size=2048', // 2GB heap size for better performance
       env: {
         NODE_ENV: 'development',
         PORT: 5000
@@ -49,7 +50,8 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
       watch: false,
-      max_memory_restart: '1G',
+      max_memory_restart: '2G', // Restart if exceeds 2GB (increased from 1G)
+      node_args: '--max-old-space-size=2048', // 2GB heap for PDF processing
       env: {
         NODE_ENV: 'development'
       },
@@ -74,7 +76,8 @@ module.exports = {
       instances: 1,
       exec_mode: 'fork',
       watch: false,
-      max_memory_restart: '200M',
+      max_memory_restart: '512M', // Restart if exceeds 512MB (increased from 200M)
+      node_args: '--max-old-space-size=512', // 512MB heap for scheduler
       env: {
         NODE_ENV: 'development',
         TZ: 'UTC'
