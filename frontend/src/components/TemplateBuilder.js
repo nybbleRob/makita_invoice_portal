@@ -992,23 +992,30 @@ const TemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
               </div>
             )}
             
-            <div className="mt-3">
+            {/* Action Buttons - Horizontal toolbar */}
+            <div className="mt-3 d-flex gap-2 flex-wrap">
               <button
-                className="btn btn-success w-100"
+                className="btn btn-success flex-fill"
                 onClick={handleSave}
                 disabled={!templateData.name.trim() || !templateData.fields.some(f => f.hasCoordinates)}
               >
                 {template?.id ? 'Update Template' : 'Save Template'}
               </button>
               <button 
-                className="btn btn-info w-100 mt-2" 
-                onClick={() => setShowTestModal(true)}
+                className="btn btn-info flex-fill" 
+                onClick={() => {
+                  // Auto-use the already uploaded PDF if available
+                  if (pdfFile) {
+                    setTestFile(pdfFile);
+                  }
+                  setShowTestModal(true);
+                }}
                 disabled={!templateData.fields.some(f => f.hasCoordinates)}
-                title="Test the template against a PDF file"
+                title="Test the template against the uploaded PDF"
               >
                 Test Parse
               </button>
-              <button className="btn btn-secondary w-100 mt-2" onClick={onCancel}>
+              <button className="btn btn-secondary" onClick={onCancel}>
                 Cancel
               </button>
             </div>
@@ -1291,20 +1298,48 @@ const TemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
               </div>
               <div className="modal-body">
                 <div className="mb-4">
-                  <label className="form-label">Select a PDF file to test</label>
-                  <input
-                    type="file"
-                    className="form-control"
-                    accept=".pdf"
-                    onChange={(e) => {
-                      setTestFile(e.target.files[0]);
-                      setTestResults(null);
-                    }}
-                    disabled={testing}
-                  />
-                  <small className="text-muted">
-                    Upload a PDF file that matches this template format to test the extraction
-                  </small>
+                  <label className="form-label">PDF file to test</label>
+                  {testFile ? (
+                    <div className="d-flex align-items-center gap-2 mb-2">
+                      <span className="badge bg-success-lt">
+                        Using: {testFile.name || 'Template sample PDF'}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={() => setTestFile(null)}
+                        disabled={testing}
+                      >
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        type="file"
+                        className="form-control"
+                        accept=".pdf"
+                        onChange={(e) => {
+                          setTestFile(e.target.files[0]);
+                          setTestResults(null);
+                        }}
+                        disabled={testing}
+                      />
+                      <small className="text-muted">
+                        Select a PDF file to test the extraction, or use the template's sample PDF
+                      </small>
+                      {pdfFile && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-primary mt-2"
+                          onClick={() => setTestFile(pdfFile)}
+                          disabled={testing}
+                        >
+                          Use Template Sample PDF
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
                 
                 {testing && (

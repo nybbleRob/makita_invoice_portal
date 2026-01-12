@@ -118,7 +118,7 @@ const SupplierTemplates = () => {
                 {supplier && ` - ${supplier.name}`}
               </h2>
             </div>
-            <div className="col-auto ms-auto">
+            <div className="col-auto ms-auto d-flex gap-2">
               <button
                 className="btn btn-secondary"
                 onClick={handleBuilderClose}
