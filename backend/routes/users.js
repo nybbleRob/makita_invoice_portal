@@ -255,14 +255,24 @@ router.post('/', canManageUsers, async (req, res) => {
       return res.status(400).json({ message: 'Name is required' });
     }
     
+    // Validate name length
+    const trimmedName = name.trim();
+    if (trimmedName.length > 255) {
+      return res.status(400).json({ message: 'Name must be 255 characters or less' });
+    }
+    
     if (!email || typeof email !== 'string' || email.trim() === '') {
       return res.status(400).json({ message: 'Email is required' });
     }
     
-    // Validate email format
+    // Validate email format and length
+    const trimmedEmail = email.trim();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
+    if (!emailRegex.test(trimmedEmail)) {
       return res.status(400).json({ message: 'Invalid email format' });
+    }
+    if (trimmedEmail.length > 255) {
+      return res.status(400).json({ message: 'Email must be 255 characters or less' });
     }
     
     if (!role || typeof role !== 'string') {
@@ -277,16 +287,35 @@ router.post('/', canManageUsers, async (req, res) => {
       });
     }
     
-    // Check if user exists
-    const existingUser = await User.findOne({ where: { email: email.toLowerCase().trim() } });
-    if (existingUser) {
-      return res.status(400).json({ message: 'User with this email already exists' });
+    // Validate addedById (req.user.userId should exist from auth middleware, but double-check)
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+    const addedByIdValidation = validateUUID(req.user.userId, 'addedById');
+    if (!addedByIdValidation.valid) {
+      return res.status(400).json({ message: `Invalid user ID: ${addedByIdValidation.error}` });
     }
     
     // Generate temporary password if not provided
     const { generateReadableTemporaryPassword } = require('../utils/passwordGenerator');
     const tempPassword = password || generateReadableTemporaryPassword();
     const passwordWasGenerated = !password;
+    
+    // Validate password strength if provided
+    if (password) {
+      if (password.length < 8) {
+        return res.status(400).json({ message: 'Password must be at least 8 characters long' });
+      }
+      if (!/[A-Z]/.test(password)) {
+        return res.status(400).json({ message: 'Password must contain at least one uppercase letter' });
+      }
+      if (!/[a-z]/.test(password)) {
+        return res.status(400).json({ message: 'Password must contain at least one lowercase letter' });
+      }
+      if (!/[0-9]/.test(password)) {
+        return res.status(400).json({ message: 'Password must contain at least one number' });
+      }
+    }
     
     // Extract email preferences and company assignments
     const {
@@ -314,130 +343,196 @@ router.post('/', canManageUsers, async (req, res) => {
     // Validate company IDs BEFORE creating user (to avoid orphaned users on validation failure)
     let validatedCompanies = [];
     if (companyIds && Array.isArray(companyIds) && companyIds.length > 0) {
+      // Validate all company IDs are valid UUIDs
+      const invalidCompanyIds = [];
+      for (const companyId of companyIds) {
+        const uuidValidation = validateUUID(companyId, 'companyId');
+        if (!uuidValidation.valid) {
+          invalidCompanyIds.push(companyId);
+        }
+      }
+      if (invalidCompanyIds.length > 0) {
+        return res.status(400).json({ 
+          message: `Invalid company ID format: ${invalidCompanyIds.join(', ')}` 
+        });
+      }
+      
+      // Find companies, excluding soft-deleted ones
+      const whereClause = { 
+        id: { [Op.in]: companyIds }
+      };
+      // Check if Company model has deletedAt field (soft deletes)
+      const companyAttributes = Company.rawAttributes;
+      if (companyAttributes && companyAttributes.deletedAt) {
+        whereClause.deletedAt = null;
+      }
+      
       validatedCompanies = await Company.findAll({
-        where: { id: { [Op.in]: companyIds } }
+        where: whereClause
       });
       
       if (validatedCompanies.length !== companyIds.length) {
-        return res.status(400).json({ message: 'One or more company IDs are invalid' });
+        return res.status(400).json({ 
+          message: 'One or more company IDs are invalid or have been deleted' 
+        });
       }
     }
     
-    // Create user
-    const user = await User.create({
-      name,
-      email: email.toLowerCase().trim(),
-      password: tempPassword,
-      role,
-      addedById: req.user.userId,
-      mustChangePassword: passwordWasGenerated,
-      allCompanies: allCompanies || false,
-      sendInvoiceEmail: sendInvoiceEmail || false,
-      sendInvoiceAttachment: sendInvoiceAttachment || false,
-      sendStatementEmail: sendStatementEmail || false,
-      sendStatementAttachment: sendStatementAttachment || false,
-      sendEmailAsSummary: sendEmailAsSummary || false,
-      sendImportSummaryReport: sendImportSummaryReport || false
-    });
+    // Wrap all database operations in a transaction for atomicity
+    const transaction = await sequelize.transaction();
     
-    // Assign companies if provided (for ALL user roles) - already validated above
-    if (validatedCompanies.length > 0) {
-      await user.setCompanies(validatedCompanies);
-    }
-    
-    // Reload user with companies
-    await user.reload({
-      include: [{
-        model: Company,
-        as: 'companies',
-        attributes: ['id', 'name', 'referenceNo', 'type'],
-        through: { attributes: [] }
-      }]
-    });
-    
-    // Send welcome email if email provider is configured
-    const settings = await Settings.getSettings();
-    const { isEmailEnabled } = require('../utils/emailService');
-    if (isEmailEnabled(settings)) {
+    try {
+      // Create user (removed duplicate email check - let database unique constraint handle it)
+      const user = await User.create({
+        name: trimmedName,
+        email: trimmedEmail.toLowerCase(),
+        password: tempPassword,
+        role,
+        addedById: req.user.userId,
+        mustChangePassword: passwordWasGenerated,
+        allCompanies: Boolean(allCompanies),
+        sendInvoiceEmail: Boolean(sendInvoiceEmail),
+        sendInvoiceAttachment: Boolean(sendInvoiceAttachment),
+        sendStatementEmail: Boolean(sendStatementEmail),
+        sendStatementAttachment: Boolean(sendStatementAttachment),
+        sendEmailAsSummary: Boolean(sendEmailAsSummary),
+        sendImportSummaryReport: Boolean(sendImportSummaryReport)
+      }, { transaction });
+      
+      // Assign companies if provided (for ALL user roles) - already validated above
+      if (validatedCompanies.length > 0) {
+        await user.setCompanies(validatedCompanies, { transaction });
+      }
+      
+      // Reload user with companies
+      await user.reload({
+        include: [{
+          model: Company,
+          as: 'companies',
+          attributes: ['id', 'name', 'referenceNo', 'type'],
+          through: { attributes: [] }
+        }],
+        transaction
+      });
+      
+      // Commit transaction - all database operations succeeded
+      await transaction.commit();
+      
+      // Log user creation (outside transaction - uses Redis, not database)
       try {
-        const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
-        await sendTemplatedEmail(
-          'welcome',
-          user.email,
-          {
-            userName: user.name,
-            userEmail: user.email,
-            temporaryPassword: passwordWasGenerated ? tempPassword : null
+        await logActivity({
+          type: ActivityType.USER_CREATED,
+          userId: req.user.userId,
+          userEmail: req.user.email,
+          userRole: req.user.role,
+          action: `Created user ${user.name} (${user.email})`,
+          details: { 
+            createdUserId: user.id,
+            createdUserName: user.name,
+            createdUserEmail: user.email,
+            createdUserRole: user.role,
+            allCompanies: user.allCompanies,
+            passwordWasGenerated: passwordWasGenerated
           },
-          settings,
-          {
-            ipAddress: req.ip,
-            userAgent: req.get('user-agent'),
-            userId: req.user.userId
-          }
-        );
-      } catch (emailError) {
-        console.error('Error sending welcome email:', emailError);
-        // Don't fail user creation if email fails
+          companyId: null,
+          companyName: null,
+          ipAddress: req.ip || req.connection.remoteAddress,
+          userAgent: req.get('user-agent')
+        });
+      } catch (logError) {
+        console.error('Error logging user creation activity:', logError);
+        // Don't fail user creation if logging fails
       }
+      
+      // Send welcome email if email provider is configured (outside transaction - email is not critical)
+      const settings = await Settings.getSettings();
+      const { isEmailEnabled } = require('../utils/emailService');
+      if (isEmailEnabled(settings)) {
+        try {
+          const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
+          await sendTemplatedEmail(
+            'welcome',
+            user.email,
+            {
+              userName: user.name,
+              userEmail: user.email,
+              temporaryPassword: passwordWasGenerated ? tempPassword : null
+            },
+            settings,
+            {
+              ipAddress: req.ip,
+              userAgent: req.get('user-agent'),
+              userId: req.user.userId
+            }
+          );
+        } catch (emailError) {
+          console.error('Error sending welcome email:', emailError);
+          // Don't fail user creation if email fails
+        }
+      }
+      
+      // Return user without password
+      const userObj = user.toSafeObject ? user.toSafeObject() : user.toJSON();
+      delete userObj.password;
+      
+      // Include temporary password in response if it was auto-generated (so admin can share it)
+      const response = { ...userObj };
+      if (passwordWasGenerated) {
+        response.tempPassword = tempPassword;
+        response.message = 'User created successfully. Temporary password generated. User must change password on first login.';
+      }
+      
+      res.status(201).json(response);
+    } catch (dbError) {
+      // Rollback transaction on any error
+      await transaction.rollback();
+      throw dbError; // Re-throw to be handled by outer catch block
     }
-    
-    // Return user without password
-    const userObj = user.toSafeObject ? user.toSafeObject() : user.toJSON();
-    delete userObj.password;
-    
-    // Include temporary password in response if it was auto-generated (so admin can share it)
-    const response = { ...userObj };
-    if (passwordWasGenerated) {
-      response.tempPassword = tempPassword;
-      response.message = 'User created successfully. Temporary password generated. User must change password on first login.';
-    }
-    
-    // Log user creation
-    await logActivity({
-      type: ActivityType.USER_CREATED,
-      userId: req.user.userId,
-      userEmail: req.user.email,
-      userRole: req.user.role,
-      action: `Created user ${user.name} (${user.email})`,
-      details: { 
-        createdUserId: user.id,
-        createdUserName: user.name,
-        createdUserEmail: user.email,
-        createdUserRole: user.role,
-        allCompanies: user.allCompanies,
-        passwordWasGenerated: passwordWasGenerated
-      },
-      companyId: null,
-      companyName: null,
-      ipAddress: req.ip || req.connection.remoteAddress,
-      userAgent: req.get('user-agent')
-    });
-    
-    res.status(201).json(response);
   } catch (error) {
     console.error('Error creating user:', error);
     
     // Handle Sequelize validation errors
     if (error.name === 'SequelizeValidationError') {
       const validationErrors = error.errors.map(e => e.message).join(', ');
+      const fieldErrors = error.errors.map(e => ({ 
+        field: e.path || 'unknown', 
+        message: e.message 
+      }));
       return res.status(400).json({ 
         message: `Validation error: ${validationErrors}`,
-        errors: error.errors.map(e => ({ field: e.path, message: e.message }))
+        errors: fieldErrors
       });
     }
     
-    // Handle unique constraint violations (duplicate email)
+    // Handle unique constraint violations (duplicate email) - race condition protection
     if (error.name === 'SequelizeUniqueConstraintError') {
       if (error.errors && error.errors.some(e => e.path === 'email')) {
-        return res.status(400).json({ message: 'User with this email already exists' });
+        return res.status(400).json({ 
+          message: 'User with this email already exists',
+          field: 'email'
+        });
       }
+      // Handle other unique constraint violations
+      const constraintFields = error.errors.map(e => e.path).filter(Boolean);
+      return res.status(400).json({ 
+        message: `Duplicate value for field(s): ${constraintFields.join(', ')}`,
+        fields: constraintFields
+      });
+    }
+    
+    // Handle foreign key constraint violations
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+      return res.status(400).json({ 
+        message: 'Invalid reference: One or more related records do not exist',
+        details: error.message
+      });
     }
     
     // Handle other Sequelize errors
     if (error.name && error.name.startsWith('Sequelize')) {
       return res.status(400).json({ 
-        message: error.message || 'Database error occurred while creating user'
+        message: error.message || 'Database error occurred while creating user',
+        errorType: error.name
       });
     }
     
