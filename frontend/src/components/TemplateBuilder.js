@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useImperativeHandle, forwa
 import * as pdfjsLib from 'pdfjs-dist';
 import api from '../services/api';
 import toast from '../utils/toast';
-import { getRequiredFields, getOptionalFields, createCustomField } from '../utils/standardFields';
+import { getRequiredFields, getOptionalFields, createCustomField, getAvailableFields } from '../utils/standardFields';
 
 // Set up pdfjs worker - use local file from public folder
 pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL || ''}/pdf.worker.js`;
@@ -27,18 +27,37 @@ const TemplateBuilder = forwardRef(({ template, supplierId, onSave, onCancel }, 
   };
   
   const templateType = template?.templateType || 'invoice';
+  const isSupplierTemplate = !!supplierId;
   
-  // Get required fields (must be mapped before save)
+  // Get required fields (only for supplier templates - must be mapped before save)
   const REQUIRED_STANDARD_FIELDS = useMemo(() => {
+    if (!isSupplierTemplate) return [];
     return getRequiredFields().sort((a, b) => a.parsingOrder - b.parsingOrder);
-  }, []);
+  }, [isSupplierTemplate]);
   
-  // Get optional standard fields (pre-defined but not required)
+  // Get optional standard fields (pre-defined but not required) - only for supplier templates
   const OPTIONAL_STANDARD_FIELDS = useMemo(() => {
+    if (!isSupplierTemplate) return [];
     return getOptionalFields(templateType).sort((a, b) => a.parsingOrder - b.parsingOrder);
-  }, [templateType]);
+  }, [templateType, isSupplierTemplate]);
   
-  // Custom fields state (user-defined fields)
+  // For regular templates, get all available fields (old behavior)
+  const ALL_AVAILABLE_FIELDS = useMemo(() => {
+    if (isSupplierTemplate) return [];
+    const available = getAvailableFields(templateType);
+    // Sort: documentType first, then crucial fields, then mandatory fields, then optional fields
+    return available.sort((a, b) => {
+      if (a.standardName === 'documentType') return -1;
+      if (b.standardName === 'documentType') return 1;
+      if (a.isCrucial && !b.isCrucial) return -1;
+      if (!a.isCrucial && b.isCrucial) return 1;
+      if (a.isMandatory && !b.isMandatory) return -1;
+      if (!a.isMandatory && b.isMandatory) return 1;
+      return a.displayName.localeCompare(b.displayName);
+    });
+  }, [templateType, isSupplierTemplate]);
+  
+  // Custom fields state (user-defined fields) - only for supplier templates
   const [customFields, setCustomFields] = useState([]);
   const [showCustomFieldModal, setShowCustomFieldModal] = useState(false);
   const [newCustomFieldName, setNewCustomFieldName] = useState('');
@@ -65,8 +84,9 @@ const TemplateBuilder = forwardRef(({ template, supplierId, onSave, onCancel }, 
     return { hasCoordinates: false, coordinates: null };
   }, [template?.coordinates]);
   
-  // Initialize required fields
+  // Initialize required fields (supplier templates only)
   const initializeRequiredFields = useCallback(() => {
+    if (!isSupplierTemplate) return [];
     const templateCode = template?.code || generateTemplateCode(template?.name || '');
     return REQUIRED_STANDARD_FIELDS.map(field => {
       const { hasCoordinates, coordinates } = getFieldCoordinates(field.standardName, templateCode);
@@ -81,10 +101,11 @@ const TemplateBuilder = forwardRef(({ template, supplierId, onSave, onCancel }, 
         coordinates
       };
     });
-  }, [REQUIRED_STANDARD_FIELDS, template?.code, template?.name, getFieldCoordinates]);
+  }, [REQUIRED_STANDARD_FIELDS, template?.code, template?.name, getFieldCoordinates, isSupplierTemplate]);
   
-  // Initialize optional fields
+  // Initialize optional fields (supplier templates only)
   const initializeOptionalFields = useCallback(() => {
+    if (!isSupplierTemplate) return [];
     const templateCode = template?.code || generateTemplateCode(template?.name || '');
     return OPTIONAL_STANDARD_FIELDS.map(field => {
       const { hasCoordinates, coordinates } = getFieldCoordinates(field.standardName, templateCode);
@@ -99,16 +120,35 @@ const TemplateBuilder = forwardRef(({ template, supplierId, onSave, onCancel }, 
         coordinates
       };
     });
-  }, [OPTIONAL_STANDARD_FIELDS, template?.code, template?.name, getFieldCoordinates]);
+  }, [OPTIONAL_STANDARD_FIELDS, template?.code, template?.name, getFieldCoordinates, isSupplierTemplate]);
   
-  // Initialize custom fields from existing template
+  // Initialize all fields for regular templates (old behavior)
+  const initializeAllFields = useCallback(() => {
+    if (isSupplierTemplate) return [];
+    const templateCode = template?.code || generateTemplateCode(template?.name || '');
+    return ALL_AVAILABLE_FIELDS.map(field => {
+      const { hasCoordinates, coordinates } = getFieldCoordinates(field.standardName, templateCode);
+      return {
+        standardName: field.standardName,
+        label: field.displayName,
+        mapsTo: field.standardName,
+        required: field.isMandatory,
+        isCrucial: field.isCrucial,
+        isRequired: false, // Regular templates don't have required field enforcement
+        hasCoordinates,
+        coordinates
+      };
+    });
+  }, [ALL_AVAILABLE_FIELDS, template?.code, template?.name, getFieldCoordinates, isSupplierTemplate]);
+  
+  // Initialize custom fields from existing template (supplier templates only)
   const initializeCustomFields = useCallback(() => {
-    if (!template?.coordinates) return [];
+    if (!isSupplierTemplate || !template?.coordinates) return [];
     
     const templateCode = template?.code || generateTemplateCode(template?.name || '');
     const customFieldsList = [];
     
-    // Find custom fields (those starting with 'custom_' or not in standard fields)
+    // Find custom fields (those starting with 'custom_')
     Object.entries(template.coordinates).forEach(([key, coords]) => {
       // Remove template prefix if present
       let fieldName = key;
@@ -138,12 +178,16 @@ const TemplateBuilder = forwardRef(({ template, supplierId, onSave, onCancel }, 
     });
     
     return customFieldsList;
-  }, [template?.coordinates, template?.code, template?.name]);
+  }, [template?.coordinates, template?.code, template?.name, isSupplierTemplate]);
   
-  // Combine all field types for backwards compatibility
+  // Combine all field types based on template type
   const initializeFields = useCallback(() => {
-    return [...initializeRequiredFields(), ...initializeOptionalFields()];
-  }, [initializeRequiredFields, initializeOptionalFields]);
+    if (isSupplierTemplate) {
+      return [...initializeRequiredFields(), ...initializeOptionalFields()];
+    } else {
+      return initializeAllFields();
+    }
+  }, [isSupplierTemplate, initializeRequiredFields, initializeOptionalFields, initializeAllFields]);
   
   const initialFields = initializeFields();
   
@@ -364,13 +408,14 @@ const TemplateBuilder = forwardRef(({ template, supplierId, onSave, onCancel }, 
     }
   }, [template?.id, template?.samplePdfPath]);
   
-  // Initialize custom fields from existing template
+  // Initialize custom fields from existing template (supplier templates only)
   useEffect(() => {
+    if (!isSupplierTemplate) return;
     const existingCustomFields = initializeCustomFields();
     if (existingCustomFields.length > 0) {
       setCustomFields(existingCustomFields);
     }
-  }, [initializeCustomFields]);
+  }, [initializeCustomFields, isSupplierTemplate]);
   
   // Compute template code from current name (updates when name changes)
   // Use template code from template if available, otherwise generate from current name
@@ -383,8 +428,11 @@ const TemplateBuilder = forwardRef(({ template, supplierId, onSave, onCancel }, 
     f.standardName === 'documentType' && f.hasCoordinates
   );
   
-  // Check which required fields are mapped
+  // Check which required fields are mapped (supplier templates only)
   const requiredFieldsStatus = useMemo(() => {
+    if (!isSupplierTemplate) {
+      return { mapped: [], unmapped: [], allMapped: true }; // Not applicable for regular templates
+    }
     const requiredNames = REQUIRED_STANDARD_FIELDS.map(f => f.standardName);
     const mapped = [];
     const unmapped = [];
@@ -400,7 +448,7 @@ const TemplateBuilder = forwardRef(({ template, supplierId, onSave, onCancel }, 
     });
     
     return { mapped, unmapped, allMapped: unmapped.length === 0 };
-  }, [templateData.fields, REQUIRED_STANDARD_FIELDS]);
+  }, [templateData.fields, REQUIRED_STANDARD_FIELDS, isSupplierTemplate]);
   
   // Handle PDF file selection
   const handlePdfSelect = (e) => {
@@ -705,16 +753,22 @@ const TemplateBuilder = forwardRef(({ template, supplierId, onSave, onCancel }, 
     }
     
     // Ensure at least one field has coordinates
-    const allFields = [...templateData.fields, ...customFields];
+    const allFields = isSupplierTemplate ? [...templateData.fields, ...customFields] : templateData.fields;
     const fieldsWithCoordinates = allFields.filter(f => f.hasCoordinates);
     if (fieldsWithCoordinates.length === 0) {
       toast.error('Please define at least one field area');
       return;
     }
     
-    // Ensure ALL required fields are mapped (not just document_type)
-    if (!requiredFieldsStatus.allMapped) {
+    // For supplier templates: Ensure ALL required fields are mapped
+    if (isSupplierTemplate && !requiredFieldsStatus.allMapped) {
       toast.error(`All required fields must be mapped. Missing: ${requiredFieldsStatus.unmapped.join(', ')}`);
+      return;
+    }
+    
+    // For regular templates: Ensure document_type exists (old behavior)
+    if (!isSupplierTemplate && !hasDocumentType) {
+      toast.error('Document Type area is required. Please define it first.');
       return;
     }
     
@@ -777,13 +831,22 @@ const TemplateBuilder = forwardRef(({ template, supplierId, onSave, onCancel }, 
       }
     });
 
-    // Verify all required fields are in coordinates
-    const requiredStandardNames = REQUIRED_STANDARD_FIELDS.map(f => f.standardName);
-    for (const standardName of requiredStandardNames) {
-      const fieldId = saveTemplateCode ? `${saveTemplateCode}_${standardName}` : standardName;
-      if (!coordinates[fieldId]) {
-        const fieldDef = REQUIRED_STANDARD_FIELDS.find(f => f.standardName === standardName);
-        toast.error(`Required field "${fieldDef?.displayName || standardName}" is missing. Please define it first.`);
+    // Verify all required fields are in coordinates (supplier templates only)
+    if (isSupplierTemplate) {
+      const requiredStandardNames = REQUIRED_STANDARD_FIELDS.map(f => f.standardName);
+      for (const standardName of requiredStandardNames) {
+        const fieldId = saveTemplateCode ? `${saveTemplateCode}_${standardName}` : standardName;
+        if (!coordinates[fieldId]) {
+          const fieldDef = REQUIRED_STANDARD_FIELDS.find(f => f.standardName === standardName);
+          toast.error(`Required field "${fieldDef?.displayName || standardName}" is missing. Please define it first.`);
+          return;
+        }
+      }
+    } else {
+      // For regular templates, verify document_type exists (old behavior)
+      const docTypeFieldId = saveTemplateCode ? `${saveTemplateCode}_documentType` : 'documentType';
+      if (!coordinates[docTypeFieldId]) {
+        toast.error('Document Type area is missing. Please define it first.');
         return;
       }
     }
@@ -1013,69 +1076,345 @@ const TemplateBuilder = forwardRef(({ template, supplierId, onSave, onCancel }, 
             
             <h4 className="card-title mb-3">Field Mapper</h4>
             
-            {/* Required Fields Section */}
-            <div className="mb-4">
-              <h5 className="text-danger mb-2">
-                <i className="ti ti-alert-circle me-1"></i>
-                Required Fields
-                {!requiredFieldsStatus.allMapped && (
-                  <span className="badge bg-danger ms-2">{requiredFieldsStatus.unmapped.length} missing</span>
-                )}
-              </h5>
-              <p className="text-muted small mb-2">These fields must be mapped before saving the template.</p>
+            {isSupplierTemplate ? (
+              <>
+                {/* Required Fields Section - Supplier Templates Only */}
+                <div className="mb-4">
+                  <h5 className="text-danger mb-2">
+                    <i className="ti ti-alert-circle me-1"></i>
+                    Required Fields
+                    {!requiredFieldsStatus.allMapped && (
+                      <span className="badge bg-danger-lt ms-2">{requiredFieldsStatus.unmapped.length} missing</span>
+                    )}
+                  </h5>
+                  <p className="text-muted small mb-2">These fields must be mapped before saving the template.</p>
+                  <div className="table-responsive">
+                    <table className="table table-hover table-sm">
+                      <thead>
+                        <tr>
+                          <th>Field</th>
+                          <th>Status</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {templateData.fields.filter(f => f.isRequired).map((field) => {
+                          const fieldHasCoordinates = field.hasCoordinates;
+                          const isDefining = drawingMode && pendingFieldLabel === field.label;
+                          
+                          return (
+                            <tr key={field.standardName} className={!fieldHasCoordinates ? 'table-danger' : 'table-success'}>
+                              <td>
+                                <strong>{field.label}</strong>
+                                {field.hasCoordinates && field.coordinates?.page && (
+                                  <span className="badge bg-info-lt ms-2">Page {field.coordinates.page}</span>
+                                )}
+                              </td>
+                              <td>
+                                {fieldHasCoordinates ? (
+                                  <span className="badge bg-success-lt">Mapped</span>
+                                ) : (
+                                  <span className="badge bg-danger-lt">Not Set</span>
+                                )}
+                              </td>
+                              <td>
+                                {fieldHasCoordinates ? (
+                                  <button
+                                    className="btn btn-sm btn-outline-primary"
+                                    onClick={() => {
+                                      setPendingFieldLabel(field.label);
+                                      setDrawingMode(true);
+                                      if (field.coordinates?.page && field.coordinates.page !== currentPage) {
+                                        goToPage(field.coordinates.page);
+                                      }
+                                      setTemplateData(prev => ({
+                                        ...prev,
+                                        fields: prev.fields.map(f => 
+                                          f.standardName === field.standardName 
+                                            ? { ...f, hasCoordinates: false, coordinates: null }
+                                            : f
+                                        )
+                                      }));
+                                    }}
+                                    disabled={drawingMode || extractingRegion}
+                                    title="Redefine area"
+                                  >
+                                    Redefine
+                                  </button>
+                                ) : (
+                                  <button
+                                    className="btn btn-sm btn-primary"
+                                    onClick={() => {
+                                      setPendingFieldLabel(field.label);
+                                      setDrawingMode(true);
+                                    }}
+                                    disabled={!pdfDoc || drawingMode || extractingRegion}
+                                  >
+                                    {isDefining ? 'Drawing...' : 'Define Area'}
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                
+                {/* Optional Standard Fields Section - Supplier Templates Only */}
+                <div className="mb-4">
+                  <h5 className="text-primary mb-2">
+                    <i className="ti ti-list me-1"></i>
+                    Optional Standard Fields
+                  </h5>
+                  <p className="text-muted small mb-2">Pre-defined fields you can optionally map.</p>
+                  <div className="table-responsive">
+                    <table className="table table-hover table-sm">
+                      <thead>
+                        <tr>
+                          <th>Field</th>
+                          <th>Status</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {templateData.fields.filter(f => !f.isRequired).map((field) => {
+                          const fieldHasCoordinates = field.hasCoordinates;
+                          const isDefining = drawingMode && pendingFieldLabel === field.label;
+                          
+                          return (
+                            <tr key={field.standardName}>
+                              <td>
+                                <strong>{field.label}</strong>
+                                {field.hasCoordinates && field.coordinates?.page && (
+                                  <span className="badge bg-info-lt ms-2">Page {field.coordinates.page}</span>
+                                )}
+                              </td>
+                              <td>
+                                {fieldHasCoordinates ? (
+                                  <span className="badge bg-success-lt">Mapped</span>
+                                ) : (
+                                  <span className="badge bg-secondary-lt">Not Set</span>
+                                )}
+                              </td>
+                              <td>
+                                {fieldHasCoordinates ? (
+                                  <button
+                                    className="btn btn-sm btn-outline-primary"
+                                    onClick={() => {
+                                      setPendingFieldLabel(field.label);
+                                      setDrawingMode(true);
+                                      if (field.coordinates?.page && field.coordinates.page !== currentPage) {
+                                        goToPage(field.coordinates.page);
+                                      }
+                                      setTemplateData(prev => ({
+                                        ...prev,
+                                        fields: prev.fields.map(f => 
+                                          f.standardName === field.standardName 
+                                            ? { ...f, hasCoordinates: false, coordinates: null }
+                                            : f
+                                        )
+                                      }));
+                                    }}
+                                    disabled={drawingMode || extractingRegion}
+                                    title="Redefine area"
+                                  >
+                                    Redefine
+                                  </button>
+                                ) : (
+                                  <button
+                                    className="btn btn-sm btn-outline-primary"
+                                    onClick={() => {
+                                      setPendingFieldLabel(field.label);
+                                      setDrawingMode(true);
+                                    }}
+                                    disabled={!pdfDoc || drawingMode || extractingRegion}
+                                  >
+                                    {isDefining ? 'Drawing...' : 'Add Region'}
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                
+                {/* Custom Fields Section - Supplier Templates Only */}
+                <div className="mb-4">
+                  <h5 className="text-success mb-2">
+                    <i className="ti ti-plus me-1"></i>
+                    Custom Fields
+                    <span className="badge bg-secondary-lt ms-2">{customFields.length}</span>
+                  </h5>
+                  <p className="text-muted small mb-2">Create your own fields to capture additional data from documents.</p>
+                  
+                  {customFields.length > 0 && (
+                    <div className="table-responsive mb-3">
+                      <table className="table table-hover table-sm">
+                        <thead>
+                          <tr>
+                            <th>Field</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {customFields.map((field) => {
+                            const fieldHasCoordinates = field.hasCoordinates;
+                            const isDefining = drawingMode && pendingFieldLabel === field.label;
+                            
+                            return (
+                              <tr key={field.standardName}>
+                                <td>
+                                  <strong>{field.label}</strong>
+                                  {field.hasCoordinates && field.coordinates?.page && (
+                                    <span className="badge bg-info-lt ms-2">Page {field.coordinates.page}</span>
+                                  )}
+                                </td>
+                                <td>
+                                  {fieldHasCoordinates ? (
+                                    <span className="badge bg-success-lt">Mapped</span>
+                                  ) : (
+                                    <span className="badge bg-secondary-lt">Not Set</span>
+                                  )}
+                                </td>
+                                <td>
+                                  <div className="d-flex gap-1">
+                                    {fieldHasCoordinates ? (
+                                      <button
+                                        className="btn btn-sm btn-outline-primary"
+                                        onClick={() => {
+                                          setPendingFieldLabel(field.label);
+                                          setDrawingMode(true);
+                                          if (field.coordinates?.page && field.coordinates.page !== currentPage) {
+                                            goToPage(field.coordinates.page);
+                                          }
+                                          setCustomFields(prev => prev.map(f => 
+                                            f.standardName === field.standardName 
+                                              ? { ...f, hasCoordinates: false, coordinates: null }
+                                              : f
+                                          ));
+                                        }}
+                                        disabled={drawingMode || extractingRegion}
+                                        title="Redefine area"
+                                      >
+                                        Redefine
+                                      </button>
+                                    ) : (
+                                      <button
+                                        className="btn btn-sm btn-outline-primary"
+                                        onClick={() => {
+                                          setPendingFieldLabel(field.label);
+                                          setDrawingMode(true);
+                                        }}
+                                        disabled={!pdfDoc || drawingMode || extractingRegion}
+                                      >
+                                        {isDefining ? 'Drawing...' : 'Add Region'}
+                                      </button>
+                                    )}
+                                    <button
+                                      className="btn btn-sm btn-outline-danger"
+                                      onClick={() => {
+                                        if (window.confirm(`Delete custom field "${field.label}"?`)) {
+                                          setCustomFields(prev => prev.filter(f => f.standardName !== field.standardName));
+                                        }
+                                      }}
+                                      disabled={drawingMode}
+                                      title="Delete custom field"
+                                    >
+                                      <i className="ti ti-trash"></i>
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  
+                  <button
+                    className="btn btn-sm btn-success"
+                    onClick={() => setShowCustomFieldModal(true)}
+                    disabled={drawingMode}
+                  >
+                    <i className="ti ti-plus me-1"></i>
+                    Add Custom Field
+                  </button>
+                </div>
+              </>
+            ) : (
+              /* Regular Template UI - Old Behavior */
               <div className="table-responsive">
-                <table className="table table-hover table-sm">
+                <table className="table table-hover">
                   <thead>
                     <tr>
                       <th>Field</th>
-                      <th>Status</th>
-                      <th>Action</th>
+                      <th>Maps To</th>
+                      <th>Define Area</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {templateData.fields.filter(f => f.isRequired).map((field) => {
+                    {templateData.fields.map((field) => {
                       const fieldHasCoordinates = field.hasCoordinates;
                       const isDefining = drawingMode && pendingFieldLabel === field.label;
                       
                       return (
-                        <tr key={field.standardName} className={!fieldHasCoordinates ? 'table-danger' : 'table-success'}>
+                        <tr 
+                          key={field.standardName} 
+                          className={!fieldHasCoordinates && field.required ? 'table-warning' : ''}
+                        >
                           <td>
                             <strong>{field.label}</strong>
+                            {field.isCrucial && (
+                              <span className="badge bg-danger-lt ms-2" title="Crucial field - must parse correctly">Crucial</span>
+                            )}
+                            {field.required && !field.isCrucial && (
+                              <span className="badge bg-warning-lt ms-2" title="Required field">Required</span>
+                            )}
                             {field.hasCoordinates && field.coordinates?.page && (
-                              <span className="badge bg-info-lt ms-2">Page {field.coordinates.page}</span>
+                              <span className="badge bg-info-lt ms-2" title={`Extracted from page ${field.coordinates.page}`}>
+                                Page {field.coordinates.page}
+                              </span>
                             )}
                           </td>
                           <td>
-                            {fieldHasCoordinates ? (
-                              <span className="badge bg-success">Mapped</span>
-                            ) : (
-                              <span className="badge bg-danger">Not Set</span>
-                            )}
+                            <small className="text-muted">{field.mapsTo}</small>
                           </td>
                           <td>
                             {fieldHasCoordinates ? (
-                              <button
-                                className="btn btn-sm btn-outline-primary"
-                                onClick={() => {
-                                  setPendingFieldLabel(field.label);
-                                  setDrawingMode(true);
-                                  if (field.coordinates?.page && field.coordinates.page !== currentPage) {
-                                    goToPage(field.coordinates.page);
-                                  }
-                                  setTemplateData(prev => ({
-                                    ...prev,
-                                    fields: prev.fields.map(f => 
-                                      f.standardName === field.standardName 
-                                        ? { ...f, hasCoordinates: false, coordinates: null }
-                                        : f
-                                    )
-                                  }));
-                                }}
-                                disabled={drawingMode || extractingRegion}
-                                title="Redefine area"
-                              >
-                                Redefine
-                              </button>
+                              <div className="d-flex gap-2 align-items-center">
+                                <span className="badge bg-success-lt">Defined</span>
+                                <button
+                                  className="btn btn-sm btn-outline-primary"
+                                  onClick={() => {
+                                    setPendingFieldLabel(field.label);
+                                    setDrawingMode(true);
+                                    // Navigate to the page where this field is defined (if it has coordinates)
+                                    if (field.coordinates?.page && field.coordinates.page !== currentPage) {
+                                      goToPage(field.coordinates.page);
+                                    }
+                                    // Remove existing coordinates to allow redraw
+                                    setTemplateData(prev => ({
+                                      ...prev,
+                                      fields: prev.fields.map(f => 
+                                        f.standardName === field.standardName 
+                                          ? { ...f, hasCoordinates: false, coordinates: null }
+                                          : f
+                                      )
+                                    }));
+                                  }}
+                                  disabled={drawingMode || extractingRegion}
+                                  title="Redefine area"
+                                >
+                                  ↻
+                                </button>
+                              </div>
                             ) : (
                               <button
                                 className="btn btn-sm btn-primary"
@@ -1095,193 +1434,7 @@ const TemplateBuilder = forwardRef(({ template, supplierId, onSave, onCancel }, 
                   </tbody>
                 </table>
               </div>
-            </div>
-            
-            {/* Optional Standard Fields Section */}
-            <div className="mb-4">
-              <h5 className="text-primary mb-2">
-                <i className="ti ti-list me-1"></i>
-                Optional Standard Fields
-              </h5>
-              <p className="text-muted small mb-2">Pre-defined fields you can optionally map.</p>
-              <div className="table-responsive">
-                <table className="table table-hover table-sm">
-                  <thead>
-                    <tr>
-                      <th>Field</th>
-                      <th>Status</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {templateData.fields.filter(f => !f.isRequired).map((field) => {
-                      const fieldHasCoordinates = field.hasCoordinates;
-                      const isDefining = drawingMode && pendingFieldLabel === field.label;
-                      
-                      return (
-                        <tr key={field.standardName}>
-                          <td>
-                            <strong>{field.label}</strong>
-                            {field.hasCoordinates && field.coordinates?.page && (
-                              <span className="badge bg-info-lt ms-2">Page {field.coordinates.page}</span>
-                            )}
-                          </td>
-                          <td>
-                            {fieldHasCoordinates ? (
-                              <span className="badge bg-success-lt">Mapped</span>
-                            ) : (
-                              <span className="badge bg-secondary-lt">Not Set</span>
-                            )}
-                          </td>
-                          <td>
-                            {fieldHasCoordinates ? (
-                              <button
-                                className="btn btn-sm btn-outline-primary"
-                                onClick={() => {
-                                  setPendingFieldLabel(field.label);
-                                  setDrawingMode(true);
-                                  if (field.coordinates?.page && field.coordinates.page !== currentPage) {
-                                    goToPage(field.coordinates.page);
-                                  }
-                                  setTemplateData(prev => ({
-                                    ...prev,
-                                    fields: prev.fields.map(f => 
-                                      f.standardName === field.standardName 
-                                        ? { ...f, hasCoordinates: false, coordinates: null }
-                                        : f
-                                    )
-                                  }));
-                                }}
-                                disabled={drawingMode || extractingRegion}
-                                title="Redefine area"
-                              >
-                                Redefine
-                              </button>
-                            ) : (
-                              <button
-                                className="btn btn-sm btn-outline-primary"
-                                onClick={() => {
-                                  setPendingFieldLabel(field.label);
-                                  setDrawingMode(true);
-                                }}
-                                disabled={!pdfDoc || drawingMode || extractingRegion}
-                              >
-                                {isDefining ? 'Drawing...' : 'Add Region'}
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            
-            {/* Custom Fields Section */}
-            <div className="mb-4">
-              <h5 className="text-success mb-2">
-                <i className="ti ti-plus me-1"></i>
-                Custom Fields
-                <span className="badge bg-secondary ms-2">{customFields.length}</span>
-              </h5>
-              <p className="text-muted small mb-2">Create your own fields to capture additional data from documents.</p>
-              
-              {customFields.length > 0 && (
-                <div className="table-responsive mb-3">
-                  <table className="table table-hover table-sm">
-                    <thead>
-                      <tr>
-                        <th>Field</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {customFields.map((field) => {
-                        const fieldHasCoordinates = field.hasCoordinates;
-                        const isDefining = drawingMode && pendingFieldLabel === field.label;
-                        
-                        return (
-                          <tr key={field.standardName}>
-                            <td>
-                              <strong>{field.label}</strong>
-                              {field.hasCoordinates && field.coordinates?.page && (
-                                <span className="badge bg-info-lt ms-2">Page {field.coordinates.page}</span>
-                              )}
-                            </td>
-                            <td>
-                              {fieldHasCoordinates ? (
-                                <span className="badge bg-success-lt">Mapped</span>
-                              ) : (
-                                <span className="badge bg-secondary-lt">Not Set</span>
-                              )}
-                            </td>
-                            <td>
-                              <div className="d-flex gap-1">
-                                {fieldHasCoordinates ? (
-                                  <button
-                                    className="btn btn-sm btn-outline-primary"
-                                    onClick={() => {
-                                      setPendingFieldLabel(field.label);
-                                      setDrawingMode(true);
-                                      if (field.coordinates?.page && field.coordinates.page !== currentPage) {
-                                        goToPage(field.coordinates.page);
-                                      }
-                                      setCustomFields(prev => prev.map(f => 
-                                        f.standardName === field.standardName 
-                                          ? { ...f, hasCoordinates: false, coordinates: null }
-                                          : f
-                                      ));
-                                    }}
-                                    disabled={drawingMode || extractingRegion}
-                                    title="Redefine area"
-                                  >
-                                    Redefine
-                                  </button>
-                                ) : (
-                                  <button
-                                    className="btn btn-sm btn-outline-primary"
-                                    onClick={() => {
-                                      setPendingFieldLabel(field.label);
-                                      setDrawingMode(true);
-                                    }}
-                                    disabled={!pdfDoc || drawingMode || extractingRegion}
-                                  >
-                                    {isDefining ? 'Drawing...' : 'Add Region'}
-                                  </button>
-                                )}
-                                <button
-                                  className="btn btn-sm btn-outline-danger"
-                                  onClick={() => {
-                                    if (window.confirm(`Delete custom field "${field.label}"?`)) {
-                                      setCustomFields(prev => prev.filter(f => f.standardName !== field.standardName));
-                                    }
-                                  }}
-                                  disabled={drawingMode}
-                                  title="Delete custom field"
-                                >
-                                  <i className="ti ti-trash"></i>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              
-              <button
-                className="btn btn-sm btn-success"
-                onClick={() => setShowCustomFieldModal(true)}
-                disabled={drawingMode}
-              >
-                <i className="ti ti-plus me-1"></i>
-                Add Custom Field
-              </button>
-            </div>
+            )}
             
             {drawingMode && pendingFieldLabel && (
               <div className="alert alert-info mt-3">
