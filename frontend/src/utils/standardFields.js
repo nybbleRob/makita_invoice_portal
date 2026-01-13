@@ -200,3 +200,55 @@ export function getStandardField(standardName) {
   return STANDARD_FIELDS[standardName] || null;
 }
 
+/**
+ * Get required fields for supplier templates
+ * These must be mapped before saving a supplier template
+ */
+export function getRequiredFields() {
+  return Object.values(STANDARD_FIELDS).filter(field => field.isRequired);
+}
+
+/**
+ * Get optional standard fields (pre-defined but not required)
+ * Excludes required fields and customerName
+ * @param {string} templateType - 'invoice', 'credit_note', or 'statement'
+ */
+export function getOptionalFields(templateType = 'invoice') {
+  return Object.values(STANDARD_FIELDS).filter(field => {
+    // Exclude required fields
+    if (field.isRequired) return false;
+    // Exclude customerName (not relevant for supplier documents)
+    if (field.standardName === 'customerName') return false;
+    // Exclude fields restricted to other template types
+    if (field.templateTypes && !field.templateTypes.includes(templateType)) {
+      return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Generate a custom field definition
+ * @param {string} displayName - User-provided display name
+ * @returns {object} Field definition with generated standardName
+ */
+export function createCustomField(displayName) {
+  // Generate standardName from display name: "Order Reference" -> "custom_order_reference"
+  const slug = displayName
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, '_');
+  
+  return {
+    standardName: `custom_${slug}`,
+    displayName: displayName.trim(),
+    description: `Custom field: ${displayName.trim()}`,
+    isCrucial: false,
+    isMandatory: false,
+    isRequired: false,
+    isCustom: true,
+    parsingOrder: 100, // Custom fields parse last
+    aliases: []
+  };
+}
