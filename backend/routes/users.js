@@ -1,5 +1,5 @@
 const express = require('express');
-const { User, Company, UserCompany, Sequelize, sequelize } = require('../models');
+const { User, Company, UserCompany, Settings, Sequelize, sequelize } = require('../models');
 const { Op } = Sequelize;
 const { canManageUsers } = require('../middleware/roleCheck');
 const { canManageRole, getManageableRoles, getRoleLabel, ROLE_HIERARCHY } = require('../utils/roleHierarchy');
@@ -796,7 +796,6 @@ router.post('/:id/reset-password', canManageUsers, async (req, res) => {
     
     // Send email with temporary password
     try {
-      const Settings = require('../models/Settings');
       const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
       
       const settings = await Settings.getSettings();
