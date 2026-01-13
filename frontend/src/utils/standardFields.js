@@ -12,24 +12,27 @@ export const STANDARD_FIELDS = {
     description: 'Type of document (Invoice, Credit Note, Statement)',
     isCrucial: true,
     isMandatory: true,
+    isRequired: true, // Required for supplier templates - detect document type
     parsingOrder: 2, // Parse second - needed to determine document type
     aliases: ['document_type', 'documenttype', 'doc_type', 'type']
   },
   accountNumber: {
     standardName: 'accountNumber',
-    displayName: 'Account Number / Customer Number',
-    description: 'Customer account number for matching',
+    displayName: 'Account Number / Supplier Code',
+    description: 'Supplier account/code for primary matching',
     isCrucial: true,
     isMandatory: true,
+    isRequired: true, // Required for supplier templates - primary matching key
     parsingOrder: 3, // Parse third - needed for company matching
-    aliases: ['account_number', 'account_no', 'accountno', 'customer_number', 'customer_no', 'account']
+    aliases: ['account_number', 'account_no', 'accountno', 'customer_number', 'customer_no', 'account', 'supplier_code', 'vendor_code']
   },
   invoiceDate: {
     standardName: 'invoiceDate',
     displayName: 'Date / Tax Point',
-    description: 'Date of document or tax point date',
+    description: 'Date of document or tax point date - needed for retention',
     isCrucial: true,
     isMandatory: true,
+    isRequired: true, // Required for supplier templates - retention metric
     parsingOrder: 4, // Parse fourth - date validation
     aliases: ['date', 'invoice_date', 'tax_point', 'taxpoint', 'date_tax_point', 'invoiceDate', 'taxPoint', 'invoice_date', 'tax_point_date']
   },
@@ -98,9 +101,10 @@ export const STANDARD_FIELDS = {
   supplierName: {
     standardName: 'supplierName',
     displayName: 'Supplier Name',
-    description: 'Supplier/vendor name - required for supplier document matching',
+    description: 'Supplier/vendor name - fallback for supplier matching if Account Number fails',
     isCrucial: true,
     isMandatory: true,
+    isRequired: true, // Required for supplier templates - fallback matching
     parsingOrder: 1, // Parse first for supplier matching
     aliases: ['supplier_name', 'vendor_name', 'vendor', 'supplier']
   },
