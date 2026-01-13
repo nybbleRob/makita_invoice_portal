@@ -246,19 +246,8 @@ const SupplierView = () => {
             </div>
             <div className="col-auto ms-auto">
               <div className="btn-list">
-                {isGlobalAdmin && (
-                  <>
-                    <button
-                      className="btn btn-outline-secondary"
-                      onClick={() => navigate(`/suppliers/${id}/edit`)}
-                    >
-                      <i className="ti ti-edit me-1"></i>
-                      Edit
-                    </button>
-                  </>
-                )}
                 <button
-                  className="btn btn-outline-primary"
+                  className="btn btn-primary"
                   onClick={() => navigate('/suppliers')}
                 >
                   <i className="ti ti-arrow-left me-1"></i>
