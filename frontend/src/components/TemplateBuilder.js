@@ -276,7 +276,22 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
     if (template?.id && template?.samplePdfPath && !pdfFile && !pdfDoc) {
       api.get(`/api/templates/${template.id}/pdf`)
         .then(res => {
-          loadPDF(res.data.pdfData);
+          const dataUrl = res.data.pdfData; // Base64 data URL from backend
+          
+          // Convert base64 data URL to File object so we can use it for Test Parse
+          const base64Data = dataUrl.split(',')[1];
+          const binaryString = atob(base64Data);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          const blob = new Blob([bytes], { type: 'application/pdf' });
+          const fileName = template.name ? `${template.name.replace(/[^a-z0-9]/gi, '_')}.pdf` : 'template.pdf';
+          const file = new File([blob], fileName, { type: 'application/pdf' });
+          setPdfFile(file);
+          
+          // Also load it for display
+          loadPDF(dataUrl);
         })
         .catch(err => {
           console.warn('Could not load stored PDF:', err.response?.data?.message || err.message);
