@@ -821,8 +821,6 @@ const TemplateBuilder = forwardRef(({ template, supplierId, onSave, onCancel }, 
     try {
       // Debug: Log what we're sending
       console.log('Saving PDF template with coordinates:', coordinates);
-      console.log('Document Type field ID:', docTypeFieldId);
-      console.log('Has document_type in coordinates:', !!coordinates[docTypeFieldId]);
       console.log('Supplier ID:', supplierId);
       
       const baseEndpoint = supplierId ? '/api/supplier-templates' : '/api/templates';
