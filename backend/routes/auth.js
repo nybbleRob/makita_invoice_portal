@@ -291,9 +291,10 @@ router.post('/forgot-password', async (req, res) => {
       
       // Send email if email provider is configured
       const { isEmailEnabled, sendEmail } = require('../utils/emailService');
+      const { getResetPasswordUrl } = require('../utils/urlConfig');
       if (isEmailEnabled(settings)) {
         try {
-          const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+          const resetUrl = getResetPasswordUrl(resetToken);
           
           // Use systemEmail if set, otherwise use provider's fromEmail
           const fromEmail = settings.systemEmail || 
@@ -363,7 +364,7 @@ ${fromName}
         console.log('\n=== PASSWORD RESET TOKEN ===');
         console.log(`User: ${user.email}`);
         console.log(`Reset Token: ${resetToken}`);
-        console.log(`Reset URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`);
+        console.log(`Reset URL: ${getResetPasswordUrl(resetToken)}`);
         console.log('===========================\n');
       }
     }

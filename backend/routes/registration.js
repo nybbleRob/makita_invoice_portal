@@ -87,7 +87,8 @@ router.post('/submit', async (req, res) => {
     });
     
     // Send notification email to each admin
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const { getFrontendUrl } = require('../utils/urlConfig');
+    const frontendUrl = getFrontendUrl();
     const reviewUrl = `${frontendUrl}/users/pending-accounts/${registration.id}`;
     
     for (const admin of admins) {

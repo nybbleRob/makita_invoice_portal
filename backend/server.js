@@ -328,10 +328,27 @@ app.use(helmet({
 }));
 
 // CORS configuration - restrict to allowed origins
+// In production, CORS_ORIGINS must be set. In development, allow localhost if not set.
+const getCorsOrigins = () => {
+  if (process.env.CORS_ORIGINS) {
+    return process.env.CORS_ORIGINS.split(',').map(origin => origin.trim());
+  }
+  
+  // Only allow localhost fallback in development
+  if (process.env.NODE_ENV === 'development') {
+    return ['http://localhost:3000', 'http://localhost:5000'];
+  }
+  
+  // In production, require CORS_ORIGINS to be set
+  throw new Error(
+    'CORS_ORIGINS environment variable is required in production. ' +
+    'Please set it in your .env file. ' +
+    'Example: CORS_ORIGINS=https://edi.makitauk.com'
+  );
+};
+
 const corsOptions = {
-  origin: process.env.CORS_ORIGINS 
-    ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
-    : ['http://localhost:3000', 'http://localhost:5000'],
+  origin: getCorsOrigins(),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']

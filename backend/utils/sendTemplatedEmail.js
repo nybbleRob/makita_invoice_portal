@@ -140,6 +140,8 @@ function darkenColor(hex, percent = 10) {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
+const { getFrontendUrl, getBackendUrl, getLoginUrl } = require('./urlConfig');
+
 /**
  * Get branding variables from settings
  */
@@ -148,8 +150,8 @@ function getBrandingVariables(settings) {
   const primaryColorHover = darkenColor(primaryColor);
   const companyName = settings?.companyName || 'Makita Invoice Portal';
   const supportEmail = settings?.supportEmail || 'support@example.com';
-  const portalUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
-  const loginUrl = `${portalUrl}/login`;
+  const portalUrl = getFrontendUrl();
+  const loginUrl = getLoginUrl();
   
   // Build logo URL
   let logoUrl = '';
@@ -157,7 +159,7 @@ function getBrandingVariables(settings) {
     if (settings.logoLight.startsWith('http')) {
       logoUrl = settings.logoLight;
     } else {
-      const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'http://localhost:3000';
+      const backendUrl = getBackendUrl();
       logoUrl = `${backendUrl}/api/uploads/${settings.logoLight}`;
     }
   }

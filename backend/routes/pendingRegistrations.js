@@ -175,8 +175,9 @@ router.post('/:id/approve', async (req, res) => {
     
     // Get settings for email
     const settings = await Settings.getSettings();
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const loginUrl = `${frontendUrl}/login`;
+    const { getFrontendUrl, getLoginUrl } = require('../utils/urlConfig');
+    const frontendUrl = getFrontendUrl();
+    const loginUrl = getLoginUrl();
     
     // Send approval email to user
     try {

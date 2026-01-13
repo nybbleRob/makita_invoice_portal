@@ -273,7 +273,8 @@ router.post('/:documentType/:documentId', async (req, res) => {
     const documentTypeLabel = documentType === 'invoice' ? 'Invoice' : 
                               documentType === 'credit_note' ? 'Credit Note' : 'Statement';
     
-    const queryUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/${documentType}s/${documentId}/view`;
+    const { getDocumentUrl } = require('../utils/urlConfig');
+    const queryUrl = getDocumentUrl(`${documentType}s`, documentId);
     
     // Get settings for email branding
     const settings = await Settings.getSettings();
@@ -487,7 +488,8 @@ router.post('/:documentType/:documentId/reply', async (req, res) => {
           const documentTypeLabel = documentType === 'invoice' ? 'Invoice' : 
                                     documentType === 'credit_note' ? 'Credit Note' : 'Statement';
           
-          const queryUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/${documentType}s/${documentId}/view`;
+          const { getDocumentUrl } = require('../utils/urlConfig');
+          const queryUrl = getDocumentUrl(`${documentType}s`, documentId);
           
           // Get settings for email branding
           const settings = await Settings.getSettings();
@@ -640,7 +642,8 @@ router.post('/:documentType/:documentId/resolve', async (req, res) => {
           const documentTypeLabel = documentType === 'invoice' ? 'Invoice' : 
                                     documentType === 'credit_note' ? 'Credit Note' : 'Statement';
           
-          const queryUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/${documentType}s/${documentId}/view`;
+          const { getDocumentUrl } = require('../utils/urlConfig');
+          const queryUrl = getDocumentUrl(`${documentType}s`, documentId);
           
           // Get settings for email branding
           const settings = await Settings.getSettings();

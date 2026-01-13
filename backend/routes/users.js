@@ -901,7 +901,7 @@ router.post('/:id/reset-password', canManageUsers, async (req, res) => {
         {
           userName: user.name,
           tempPassword: tempPassword,
-          resetUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`,
+          resetUrl: require('../utils/urlConfig').getLoginUrl(),
           expiryTime: '24 hours'
         },
         settings,

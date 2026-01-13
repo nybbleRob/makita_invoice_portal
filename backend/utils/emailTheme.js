@@ -3,6 +3,8 @@
  * Provides themed email wrapper with logo and company colors
  */
 
+const { getFrontendUrl, getBackendUrl } = require('./urlConfig');
+
 /**
  * Get email theme configuration from settings
  * @param {Object} settings - Settings object
@@ -16,8 +18,8 @@ function getEmailTheme(settings) {
   
   // For emails, we need absolute URLs that work from email clients
   // The backend serves uploaded files, so use the backend URL
-  const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'https://edi.makitauk.com';
-  const frontendUrl = process.env.FRONTEND_URL || 'https://edi.makitauk.com';
+  const backendUrl = getBackendUrl();
+  const frontendUrl = getFrontendUrl();
   
   // Determine logo URL (prefer light logo, fallback to dark)
   // Logos are stored as paths like "/uploads/logo-xxx.png" and served directly at /uploads/

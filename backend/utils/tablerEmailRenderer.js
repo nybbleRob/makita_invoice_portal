@@ -75,6 +75,8 @@ function darkenColor(hex, percent = 10) {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
+const { getFrontendUrl, getBackendUrl } = require('./urlConfig');
+
 /**
  * Get branding variables from settings
  */
@@ -83,7 +85,7 @@ function getBrandingVariables(settings) {
   const primaryColorHover = darkenColor(primaryColor);
   const companyName = settings?.companyName || 'Invoice Portal';
   const supportEmail = settings?.supportEmail || 'support@example.com';
-  const portalUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+  const portalUrl = getFrontendUrl();
   
   // Build logo URL
   let logoUrl = '';
@@ -93,7 +95,7 @@ function getBrandingVariables(settings) {
       logoUrl = settings.logoLight;
     } else {
       // Construct URL from backend
-      const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'http://localhost:3000';
+      const backendUrl = getBackendUrl();
       logoUrl = `${backendUrl}/api/uploads/${settings.logoLight}`;
     }
   }

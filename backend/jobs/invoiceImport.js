@@ -1447,7 +1447,8 @@ async function processInvoiceImport(job) {
         });
         
         if (staffUsers.length > 0 && isEmailEnabled(settings)) {
-          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+          const { getFrontendUrl } = require('../utils/urlConfig');
+          const frontendUrl = getFrontendUrl();
           const reviewUrl = `${frontendUrl}/unallocated`; // Link to unallocated/duplicates page
           
           const emailSubject = `Duplicate File Detected: ${originalName || fileName}`;

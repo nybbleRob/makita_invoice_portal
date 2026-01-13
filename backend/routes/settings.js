@@ -745,14 +745,17 @@ router.post('/email-templates/:templateName/test', auth, globalAdmin, async (req
       ...data
     };
     
+    // Import URL config utilities
+    const { getFrontendUrl, getLoginUrl, getResetPasswordUrl, getDocumentUrl } = require('../utils/urlConfig');
+    
     // Add template-specific test data
     switch (templateName) {
       case 'welcome':
         testData.tempPassword = testData.temporaryPassword || 'TempPass123!';
-        testData.loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/login`;
+        testData.loginUrl = getLoginUrl();
         break;
       case 'password-reset':
-        testData.resetUrl = testData.resetUrl || `${process.env.FRONTEND_URL || 'http://localhost:3001'}/reset-password?token=test-token-123`;
+        testData.resetUrl = testData.resetUrl || getResetPasswordUrl('test-token-123');
         testData.expiryTime = '1 hour';
         break;
       case 'password-changed':
@@ -764,7 +767,7 @@ router.post('/email-templates/:templateName/test', auth, globalAdmin, async (req
         testData.documentDate = new Date().toLocaleDateString('en-GB');
         testData.documentAmount = '£1,234.56';
         testData.supplierName = 'Test Company Ltd';
-        testData.documentUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/invoices/test-id`;
+        testData.documentUrl = getDocumentUrl('invoices', 'test-id');
         testData.retentionPeriod = settings.documentRetentionPeriod || 90;
         break;
       case 'document-summary':
@@ -801,7 +804,7 @@ router.post('/email-templates/:templateName/test', auth, globalAdmin, async (req
         testData.statusTextColor = '#856404';
         testData.messageContent = 'This is a test query message to verify the email template is working correctly.';
         testData.senderName = 'Admin User';
-        testData.queryUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/invoices/test-id`;
+        testData.queryUrl = getDocumentUrl('invoices', 'test-id');
         testData.buttonText = 'View Query';
         testData.iconColor = settings.primaryColor || '#066FD1';
         break;
@@ -831,11 +834,11 @@ router.post('/email-templates/:templateName/test', auth, globalAdmin, async (req
         testData.applicantEmail = 'john.doe@example.com';
         testData.applicantCompanyName = 'Acme Corporation';
         testData.accountNumber = 'ACC-12345';
-        testData.reviewUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/users?tab=pending`;
+        testData.reviewUrl = `${getFrontendUrl()}/users?tab=pending`;
         testData.applicantName = 'John Doe';
         break;
       case 'registration-approved':
-        testData.loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/login`;
+        testData.loginUrl = getLoginUrl();
         break;
       case 'registration-rejected':
         testData.rejectionReason = 'Unable to verify account details. Please contact support for more information.';
@@ -904,7 +907,7 @@ router.post('/email-templates/bulk-test', auth, globalAdmin, async (req, res) =>
           documentDate: new Date().toLocaleDateString('en-GB'),
           documentAmount: `£${(Math.random() * 10000).toFixed(2)}`,
           supplierName: 'Bulk Test Company',
-          documentUrl: `${process.env.FRONTEND_URL || 'http://localhost:3001'}/invoices/bulk-test-${index}`,
+          documentUrl: getDocumentUrl('invoices', `bulk-test-${index}`),
           retentionPeriod: settings.documentRetentionPeriod || 90
         };
         

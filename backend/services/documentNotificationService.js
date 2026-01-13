@@ -215,7 +215,8 @@ async function queueDocumentNotifications(options) {
   
   const settings = await Settings.getSettings();
   const portalName = settings?.siteTitle || 'Invoice Portal';
-  const portalUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const { getFrontendUrl } = require('../utils/urlConfig');
+  const portalUrl = getFrontendUrl();
   
   const company = await Company.findByPk(companyId, {
     include: [{
