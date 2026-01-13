@@ -122,7 +122,16 @@ const SupplierTemplates = () => {
     return null;
   }
   
+  // #region agent log
+  React.useEffect(() => {
+    fetch('http://127.0.0.1:7244/ingest/a71118e4-5010-40f5-8a55-7b39cd0c3d75',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SupplierTemplates.js:render',message:'Component render state',data:{showBuilder,builderType,hasRef:!!templateBuilderRef.current,builderState,editingTemplateId:editingTemplate?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A-B-C'})}).catch(()=>{});
+  }, [showBuilder, builderState, builderType]);
+  // #endregion
+
   if (showBuilder) {
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/a71118e4-5010-40f5-8a55-7b39cd0c3d75',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SupplierTemplates.js:showBuilder-branch',message:'Entered showBuilder=true branch',data:{builderType,showBuilder,builderStateKeys:Object.keys(builderState)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     return (
       <>
         <div className="page-header d-print-none">
@@ -135,6 +144,9 @@ const SupplierTemplates = () => {
                   {supplier && ` - ${supplier.name}`}
                 </h2>
               </div>
+              {/* #region agent log */}
+              {(() => { fetch('http://127.0.0.1:7244/ingest/a71118e4-5010-40f5-8a55-7b39cd0c3d75',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SupplierTemplates.js:buttons-render',message:'Rendering buttons section',data:{builderState,hasRef:!!templateBuilderRef.current},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B-C'})}).catch(()=>{}); return null; })()}
+              {/* #endregion */}
               <div className="col-auto ms-auto d-flex gap-2">
                 <button 
                   className="btn btn-info" 
@@ -196,6 +208,10 @@ const SupplierTemplates = () => {
     credit_note: templates.filter(t => t.templateType === 'credit_note'),
     statement: templates.filter(t => t.templateType === 'statement')
   };
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7244/ingest/a71118e4-5010-40f5-8a55-7b39cd0c3d75',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SupplierTemplates.js:non-builder-view',message:'Rendering NON-BUILDER view (templates list)',data:{showBuilder,supplierId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   
   return (
     <div className="page-header d-print-none">
