@@ -453,7 +453,7 @@ module.exports = (sequelize, DataTypes) => {
         }
         
         // Validate crucial fields IMMEDIATELY after Phase 1
-        const validation = validateCrucialFields(crucialExtracted);
+        const validation = validateCrucialFields(crucialExtracted, template);
         if (!validation.isValid) {
           console.warn(`\n⚠️  CRUCIAL FIELDS VALIDATION FAILED: ${validation.missing.join(', ')}`);
           console.warn(`   Early exit: Skipping remaining field extraction to save time`);
@@ -638,7 +638,7 @@ module.exports = (sequelize, DataTypes) => {
       
       // Final validation (only if we didn't early exit)
       if (!extracted._earlyExit) {
-        const finalValidation = validateCrucialFields(extracted);
+        const finalValidation = validateCrucialFields(extracted, template);
         if (!finalValidation.isValid) {
           console.warn('⚠️  Missing crucial fields after full extraction:', finalValidation.missing.join(', '));
           extracted._validationErrors = finalValidation.errors;

@@ -275,12 +275,40 @@ function mapToStandardName(fieldName) {
 /**
  * Validate that crucial fields are present in parsed data
  */
-function validateCrucialFields(parsedData) {
+function validateCrucialFields(parsedData, template = null) {
   const crucialFields = getCrucialFields();
   const missing = [];
   const errors = [];
   
+  // Get template coordinates to check which fields are actually defined
+  const templateCoordinates = template?.coordinates || {};
+  
+  // Build set of standard field names that are defined in template
+  const templateFieldNames = new Set();
+  for (const [fieldId, coords] of Object.entries(templateCoordinates)) {
+    if (coords && (coords.normalized || coords.x !== undefined)) {
+      const standardName = mapToStandardName(fieldId) || fieldId;
+      templateFieldNames.add(standardName);
+    }
+  }
+  
   for (const field of crucialFields) {
+    // For supplierName: only require it if it's actually defined in the template
+    // Regular (customer) templates don't have supplierName, so don't require it
+    if (field.standardName === 'supplierName') {
+      // Check if supplierName is in template coordinates
+      const hasSupplierNameInTemplate = templateFieldNames.has('supplierName') ||
+        Array.from(Object.keys(templateCoordinates)).some(key => {
+          const mapped = mapToStandardName(key);
+          return mapped === 'supplierName';
+        });
+      
+      // Only require supplierName if it's defined in the template
+      if (!hasSupplierNameInTemplate) {
+        continue; // Skip validation for supplierName if not in template
+      }
+    }
+    
     const value = parsedData[field.standardName];
     if (!value || (typeof value === 'string' && value.trim() === '')) {
       missing.push(field.displayName);
