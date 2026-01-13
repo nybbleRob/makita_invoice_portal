@@ -456,7 +456,7 @@ router.post('/', canManageUsers, async (req, res) => {
             {
               userName: user.name,
               userEmail: user.email,
-              temporaryPassword: passwordWasGenerated ? tempPassword : null
+              tempPassword: passwordWasGenerated ? tempPassword : null
             },
             settings,
             {
