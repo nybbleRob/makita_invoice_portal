@@ -112,7 +112,11 @@ const ActivityType = {
   LOGS_BULK_DELETED: 'logs_bulk_deleted',
   FILE_PURGE: 'file_purge',
   IMPORT_BATCH_COMPLETE: 'import_batch_complete',
-  IMPORT_BATCH_NOTIFICATION: 'import_batch_notification'
+  IMPORT_BATCH_NOTIFICATION: 'import_batch_notification',
+  ACCOUNT_LOCKED: 'account_locked',
+  ACCOUNT_UNLOCKED: 'account_unlocked',
+  ACCOUNT_LOCKED_MANUAL: 'account_locked_manual',
+  BRUTE_FORCE_DETECTED: 'brute_force_detected'
 };
 
 /**

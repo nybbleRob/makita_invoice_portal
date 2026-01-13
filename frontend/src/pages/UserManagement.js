@@ -521,6 +521,18 @@ const UserManagement = () => {
     }
   };
 
+  const handleUnlockAccount = async (userId) => {
+    if (!window.confirm('Are you sure you want to unlock this account?')) return;
+    
+    try {
+      await api.post(`/api/users/${userId}/unlock`);
+      toast.success('Account unlocked successfully!');
+      fetchUsers(); // Refresh user list
+    } catch (error) {
+      toast.error('Error unlocking account: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
   const handleToggleUserStatus = async (userId, currentStatus) => {
     const newStatus = !currentStatus;
     const action = newStatus ? 'activate' : 'deactivate';
@@ -953,6 +965,7 @@ const UserManagement = () => {
                       <th>Role</th>
                       <th>Assigned Companies</th>
                       <th>Status</th>
+                      <th>Lockout</th>
                       <th>2FA</th>
                       <th>Actions</th>
                     </tr>
@@ -960,7 +973,7 @@ const UserManagement = () => {
                   <tbody>
                     {filteredUsers.length === 0 ? (
                       <tr>
-                        <td colSpan="8" className="text-center text-muted py-4">
+                        <td colSpan="9" className="text-center text-muted py-4">
                           {users.length === 0 ? 'No users found' : 'No users match your filters'}
                         </td>
                       </tr>
@@ -1003,6 +1016,24 @@ const UserManagement = () => {
                             </span>
                           </td>
                           <td>
+                            {user.accountLockedUntil ? (() => {
+                              const lockedUntil = new Date(user.accountLockedUntil);
+                              const now = new Date();
+                              const isLocked = lockedUntil > now;
+                              if (isLocked) {
+                                const remainingMinutes = Math.ceil((lockedUntil - now) / (1000 * 60));
+                                return (
+                                  <span className="badge bg-warning-lt" title={`Locked until ${lockedUntil.toLocaleString()}. Reason: ${user.lockReason || 'brute_force'}`}>
+                                    Locked ({remainingMinutes}m)
+                                  </span>
+                                );
+                              }
+                              return <span className="badge bg-secondary-lt">Unlocked</span>;
+                            })() : (
+                              <span className="badge bg-secondary-lt">Unlocked</span>
+                            )}
+                          </td>
+                          <td>
                             {user.twoFactorEnabled ? (
                               <span className="badge bg-success-lt">Enabled</span>
                             ) : (
@@ -1023,6 +1054,22 @@ const UserManagement = () => {
                               >
                                 Edit
                               </button>
+                              {user.id !== currentUser?.id && user.accountLockedUntil && (() => {
+                                const lockedUntil = new Date(user.accountLockedUntil);
+                                const now = new Date();
+                                if (lockedUntil > now) {
+                                  return (
+                                    <button
+                                      className="btn btn-sm btn-success"
+                                      onClick={() => handleUnlockAccount(user.id)}
+                                      title="Unlock Account"
+                                    >
+                                      Unlock
+                                    </button>
+                                  );
+                                }
+                                return null;
+                              })()}
                               {user.id !== currentUser?.id && (
                                 <button
                                   className={`btn btn-sm ${user.isActive ? 'btn-warning' : 'btn-success'}`}

@@ -153,6 +153,26 @@ router.get('/', async (req, res) => {
       };
     }
     
+    // Ensure lockout settings exist (for backward compatibility)
+    if (settingsObj.accountLockoutEnabled === undefined || settingsObj.accountLockoutEnabled === null) {
+      settingsObj.accountLockoutEnabled = true;
+    }
+    if (settingsObj.maxFailedLoginAttempts === undefined || settingsObj.maxFailedLoginAttempts === null) {
+      settingsObj.maxFailedLoginAttempts = 5;
+    }
+    if (settingsObj.lockoutDurationMinutes === undefined || settingsObj.lockoutDurationMinutes === null) {
+      settingsObj.lockoutDurationMinutes = 30;
+    }
+    if (!settingsObj.lockoutDurationOptions || !Array.isArray(settingsObj.lockoutDurationOptions)) {
+      settingsObj.lockoutDurationOptions = [
+        { value: 15, label: '15 minutes' },
+        { value: 30, label: '30 minutes' },
+        { value: 60, label: '1 hour' },
+        { value: 120, label: '2 hours' },
+        { value: null, label: 'Indefinite (admin unlock only)' }
+      ];
+    }
+    
     res.json(settingsObj);
   } catch (error) {
     console.error('Error fetching settings:', error);
@@ -295,6 +315,40 @@ router.put('/', globalAdmin, async (req, res) => {
       }
       
       settings.passwordExpiryDays = expiryDays;
+    }
+    
+    // Update account lockout settings
+    if (req.body.accountLockoutEnabled !== undefined) {
+      settings.accountLockoutEnabled = req.body.accountLockoutEnabled === true || req.body.accountLockoutEnabled === 'true';
+    }
+    
+    if (req.body.maxFailedLoginAttempts !== undefined) {
+      const maxAttempts = parseInt(req.body.maxFailedLoginAttempts);
+      if (isNaN(maxAttempts) || maxAttempts < 1 || maxAttempts > 10) {
+        return res.status(400).json({ message: 'Max failed login attempts must be between 1 and 10' });
+      }
+      settings.maxFailedLoginAttempts = maxAttempts;
+    }
+    
+    if (req.body.lockoutDurationMinutes !== undefined) {
+      // Allow null for indefinite lockout
+      const duration = req.body.lockoutDurationMinutes === '' || req.body.lockoutDurationMinutes === null || req.body.lockoutDurationMinutes === 'null'
+        ? null
+        : parseInt(req.body.lockoutDurationMinutes);
+      
+      if (duration !== null && (isNaN(duration) || duration < 1 || duration > 1440)) {
+        return res.status(400).json({ message: 'Lockout duration must be between 1 and 1440 minutes, or null for indefinite' });
+      }
+      
+      settings.lockoutDurationMinutes = duration;
+    }
+    
+    if (req.body.lockoutDurationOptions !== undefined) {
+      // Validate it's an array
+      if (!Array.isArray(req.body.lockoutDurationOptions)) {
+        return res.status(400).json({ message: 'Lockout duration options must be an array' });
+      }
+      settings.lockoutDurationOptions = req.body.lockoutDurationOptions;
     }
     
     // Update document status restriction setting

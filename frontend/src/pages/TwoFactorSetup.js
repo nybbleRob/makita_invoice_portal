@@ -104,8 +104,18 @@ const TwoFactorSetup = () => {
         // Refresh auth context to pick up the new token
         await refreshUser();
         
-        // Redirect to dashboard
-        navigate('/');
+        // Redirect to intended destination or home
+        // Validate redirect path to prevent open redirect attacks
+        const redirectPath = location.state?.from || '/';
+        const isValidPath = redirectPath && 
+          typeof redirectPath === 'string' &&
+          redirectPath.startsWith('/') &&
+          !/^https?:\/\//i.test(redirectPath) &&
+          !redirectPath.startsWith('//') &&
+          !/^(javascript|data):/i.test(redirectPath) &&
+          !redirectPath.includes('../');
+        
+        navigate(isValidPath ? redirectPath : '/');
       } else {
         // Fallback: redirect to login if token not provided
         console.error('No token in response:', response.data);

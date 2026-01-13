@@ -76,8 +76,19 @@ const ChangePassword = () => {
         // Password changed successfully
         if (isFirstTime) {
           // After first-time password change, user needs to login again
+          // Preserve the redirect destination (validated in Login.js)
+          const redirectPath = location.state?.from || '/';
+          // Validate redirect path to prevent open redirect attacks
+          const isValidPath = redirectPath && 
+            typeof redirectPath === 'string' &&
+            redirectPath.startsWith('/') &&
+            !/^https?:\/\//i.test(redirectPath) &&
+            !redirectPath.startsWith('//') &&
+            !/^(javascript|data):/i.test(redirectPath) &&
+            !redirectPath.includes('../');
+          
           alert('Password changed successfully! Please login with your new password.');
-          navigate('/login');
+          navigate('/login', { state: { from: isValidPath ? redirectPath : '/' } });
         } else {
           // Regular password change - redirect to profile or dashboard
           alert('Password changed successfully!');

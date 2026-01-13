@@ -282,6 +282,40 @@ module.exports = (sequelize) => {
       allowNull: true,
       defaultValue: null,
       comment: 'Company ID to use for unallocated documents in test mode - allows testing email notifications for documents without a company'
+    },
+    accountLockoutEnabled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      comment: 'Enable/disable account lockout after failed login attempts'
+    },
+    maxFailedLoginAttempts: {
+      type: DataTypes.INTEGER,
+      defaultValue: 5,
+      validate: {
+        min: 1,
+        max: 10
+      },
+      comment: 'Maximum number of failed login attempts before account lockout (1-10)'
+    },
+    lockoutDurationMinutes: {
+      type: DataTypes.INTEGER,
+      defaultValue: 30,
+      validate: {
+        min: 1,
+        max: 1440 // 24 hours max
+      },
+      comment: 'Account lockout duration in minutes (1-1440, null = indefinite)'
+    },
+    lockoutDurationOptions: {
+      type: DataTypes.JSONB,
+      defaultValue: [
+        { value: 15, label: '15 minutes' },
+        { value: 30, label: '30 minutes' },
+        { value: 60, label: '1 hour' },
+        { value: 120, label: '2 hours' },
+        { value: null, label: 'Indefinite (admin unlock only)' }
+      ],
+      comment: 'Predefined lockout duration options for UI dropdown'
     }
   }, {
     tableName: 'settings',

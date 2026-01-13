@@ -5,6 +5,7 @@ const { User, Settings, Sequelize } = require('../models');
 const { Op } = Sequelize;
 const auth = require('../middleware/auth');
 const { logActivity, ActivityType } = require('../services/activityLogger');
+const recaptchaMiddleware = require('../middleware/recaptcha');
 const router = express.Router();
 
 // Register
@@ -49,7 +50,7 @@ router.post('/register', async (req, res) => {
 });
 
 // Login
-router.post('/login', async (req, res) => {
+router.post('/login', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -91,6 +92,36 @@ router.post('/login', async (req, res) => {
       });
     }
 
+    // Check account lockout status BEFORE password verification
+    const { checkAccountLockout, incrementFailedAttempts, resetFailedAttempts } = require('../utils/accountLockout');
+    const lockoutStatus = await checkAccountLockout(user);
+    
+    if (lockoutStatus.isLocked) {
+      const remainingMinutes = Math.ceil((lockoutStatus.lockedUntil - new Date()) / (1000 * 60));
+      await logActivity({
+        type: ActivityType.LOGIN_FAILED,
+        userId: user.id,
+        userEmail: user.email,
+        userRole: user.role,
+        action: 'Failed login attempt - account locked',
+        details: { 
+          reason: 'Account is locked',
+          lockReason: lockoutStatus.reason,
+          lockedUntil: lockoutStatus.lockedUntil.toISOString(),
+          remainingMinutes: remainingMinutes
+        },
+        ipAddress: req.ip || req.connection.remoteAddress,
+        userAgent: req.get('user-agent')
+      });
+      
+      return res.status(423).json({ 
+        message: `Account is locked. Please try again in ${remainingMinutes} minute(s) or contact an administrator.`,
+        accountLocked: true,
+        lockedUntil: lockoutStatus.lockedUntil.toISOString(),
+        remainingMinutes: remainingMinutes
+      });
+    }
+
     // Check if user has a password set
     if (!user.password) {
       return res.status(401).json({ 
@@ -102,8 +133,71 @@ router.post('/login', async (req, res) => {
     // Check password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      // Increment failed login attempts
+      const lockoutResult = await incrementFailedAttempts(
+        user,
+        req.ip || req.connection.remoteAddress,
+        req.get('user-agent')
+      );
+      
+      // Log failed login attempt
+      await logActivity({
+        type: ActivityType.LOGIN_FAILED,
+        userId: user.id,
+        userEmail: user.email,
+        userRole: user.role,
+        action: 'Failed login attempt - invalid password',
+        details: { 
+          reason: 'Invalid password',
+          failedAttempts: user.failedLoginAttempts,
+          attemptsRemaining: lockoutResult.attemptsRemaining,
+          wasLocked: lockoutResult.wasLocked
+        },
+        ipAddress: req.ip || req.connection.remoteAddress,
+        userAgent: req.get('user-agent')
+      });
+      
+      // Track for security monitoring
+      const { trackFailedLogin, trackAccountLockout } = require('../services/securityMonitor');
+      await trackFailedLogin(user.email, req.ip || req.connection.remoteAddress, req.get('user-agent'));
+      
+      // If account was just locked, track it
+      if (lockoutResult.wasLocked) {
+        await trackAccountLockout(user, req.ip || req.connection.remoteAddress, req.get('user-agent'), 'brute_force');
+      }
+      
+      // If account was just locked, return lockout message
+      if (lockoutResult.wasLocked) {
+        await logActivity({
+          type: ActivityType.ACCOUNT_LOCKED,
+          userId: user.id,
+          userEmail: user.email,
+          userRole: user.role,
+          action: 'Account locked due to failed login attempts',
+          details: { 
+            reason: 'brute_force',
+            failedAttempts: user.failedLoginAttempts,
+            lockedUntil: lockoutResult.lockedUntil.toISOString()
+          },
+          ipAddress: req.ip || req.connection.remoteAddress,
+          userAgent: req.get('user-agent')
+        });
+        
+        const remainingMinutes = Math.ceil((lockoutResult.lockedUntil - new Date()) / (1000 * 60));
+        return res.status(423).json({ 
+          message: `Account has been locked due to too many failed login attempts. Please try again in ${remainingMinutes} minute(s) or contact an administrator.`,
+          accountLocked: true,
+          lockedUntil: lockoutResult.lockedUntil.toISOString(),
+          remainingMinutes: remainingMinutes
+        });
+      }
+      
+      // Return generic error (don't reveal if account exists)
       return res.status(401).json({ message: 'Invalid credentials' });
     }
+    
+    // Password is correct - reset failed attempts
+    await resetFailedAttempts(user);
 
     // Check if user must change password (first time login or admin reset)
     if (user.mustChangePassword) {
@@ -207,10 +301,6 @@ router.post('/login', async (req, res) => {
     user.lastLogin = new Date();
     await user.save();
 
-    // Update last login
-    user.lastLogin = new Date();
-    await user.save();
-
     // Generate token (expiration configurable via environment)
     const token = jwt.sign(
       { userId: user.id, role: user.role },
@@ -263,7 +353,7 @@ router.get('/me', auth, async (req, res) => {
 });
 
 // Forgot password - Request password reset
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) => {
   try {
     const { email } = req.body;
 

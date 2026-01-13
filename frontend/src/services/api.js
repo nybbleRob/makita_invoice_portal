@@ -37,7 +37,9 @@ api.interceptors.response.use(
       
       if (!isAuthPage) {
         localStorage.removeItem('token');
-        window.location.href = '/login';
+        // Preserve the current URL so user can be redirected back after login
+        const currentPath = window.location.pathname + window.location.search;
+        window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
       }
     }
     return Promise.reject(error);

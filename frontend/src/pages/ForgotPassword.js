@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useSettings } from '../context/SettingsContext';
 import api, { API_BASE_URL } from '../services/api';
@@ -11,20 +11,82 @@ const ForgotPassword = () => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const recaptchaSiteKey = process.env.REACT_APP_RECAPTCHA_SITE_KEY || '';
+  const recaptchaLoaded = useRef(false);
   // Navigate available if needed: const navigate = useNavigate();
+
+  // Load reCAPTCHA script
+  useEffect(() => {
+    if (!recaptchaSiteKey || recaptchaSiteKey === '') {
+      return; // Skip if site key not set
+    }
+
+    if (recaptchaLoaded.current || window.grecaptcha) {
+      return; // Already loaded
+    }
+
+    const script = document.createElement('script');
+    script.src = `https://www.google.com/recaptcha/api.js?render=${recaptchaSiteKey}`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      recaptchaLoaded.current = true;
+      if (window.grecaptcha) {
+        window.grecaptcha.ready(() => {
+          console.log('✅ reCAPTCHA v3 loaded');
+        });
+      }
+    };
+    document.body.appendChild(script);
+
+    return () => {
+      // Cleanup if needed
+    };
+  }, [recaptchaSiteKey]);
+
+  // Execute reCAPTCHA and get token
+  const executeRecaptcha = async () => {
+    if (!recaptchaSiteKey || recaptchaSiteKey === '') {
+      return null; // Skip if site key not set
+    }
+
+    if (!window.grecaptcha || !window.grecaptcha.ready) {
+      console.warn('reCAPTCHA not loaded yet');
+      return null;
+    }
+
+    try {
+      const token = await window.grecaptcha.execute(recaptchaSiteKey, { action: 'forgot_password' });
+      return token;
+    } catch (error) {
+      console.error('reCAPTCHA execution error:', error);
+      return null;
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      await api.post('/api/auth/forgot-password', { email });
+      // Execute reCAPTCHA and get token
+      const recaptchaToken = await executeRecaptcha();
+      
+      await api.post('/api/auth/forgot-password', { 
+        email,
+        recaptchaToken: recaptchaToken
+      });
       setError('');
       setSuccess(true);
       toast.success('Password reset email sent! Please check your inbox.');
     } catch (err) {
       console.error('Forgot password error:', err);
-      const errorMessage = err.response?.data?.message || 'An error occurred. Please try again.';
+      let errorMessage = err.response?.data?.message || 'An error occurred. Please try again.';
+      if (err.response?.status === 400 && err.response?.data?.recaptchaRequired) {
+        errorMessage = 'reCAPTCHA verification required. Please refresh the page and try again.';
+      } else if (err.response?.status === 400 && err.response?.data?.recaptchaFailed) {
+        errorMessage = 'reCAPTCHA verification failed. Please refresh the page and try again.';
+      }
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {

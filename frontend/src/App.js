@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Layout from './components/Layout/Layout';
 import Dashboard from './pages/Dashboard';
 import Reports from './pages/Reports';
@@ -47,6 +47,7 @@ import './App.css';
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
+  const location = useLocation();
   
   // Wait for auth check to complete before redirecting
   if (loading) {
@@ -63,7 +64,9 @@ const ProtectedRoute = ({ children }) => {
     );
   }
   
-  return isAuthenticated ? children : <Navigate to="/login" />;
+  // If not authenticated, redirect to login with the current location as state
+  // This allows the login page to redirect back after successful authentication
+  return isAuthenticated ? children : <Navigate to="/login" state={{ from: location }} replace />;
 };
 
 // Admin Route Component - restricts access to specific roles (legacy, use PermissionRoute)

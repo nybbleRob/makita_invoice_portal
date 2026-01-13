@@ -3,6 +3,7 @@ const { PendingRegistration, Settings, User, Company } = require('../models');
 const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const { Op } = require('sequelize');
+const recaptchaMiddleware = require('../middleware/recaptcha');
 const router = express.Router();
 
 // Get registration form configuration (public) - kept for backwards compatibility
@@ -18,7 +19,7 @@ router.get('/form-config', async (req, res) => {
 });
 
 // Submit registration (public)
-router.post('/submit', async (req, res) => {
+router.post('/submit', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) => {
   try {
     const { firstName, lastName, companyName, accountNumber, email } = req.body;
     

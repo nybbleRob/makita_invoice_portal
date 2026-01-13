@@ -543,6 +543,85 @@ router.post('/', canManageUsers, async (req, res) => {
   }
 });
 
+// Unlock user account (MUST come before /:id route)
+router.post('/:id/unlock', canManageUsers, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    
+    // Validate userId
+    const validation = validateUUID(userId, 'user ID');
+    if (!validation.valid) {
+      return res.status(400).json({ message: validation.error });
+    }
+    
+    const validatedUserId = validation.value;
+    
+    // Validate req.user.userId exists
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+    
+    const user = await User.findByPk(validatedUserId);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Check if current user can manage this user
+    if (!canManageRole(req.user.role, user.role)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    
+    // Check if account is actually locked
+    const { checkAccountLockout, unlockAccount } = require('../utils/accountLockout');
+    const lockoutStatus = await checkAccountLockout(user);
+    
+    if (!lockoutStatus.isLocked) {
+      return res.status(400).json({ message: 'Account is not locked' });
+    }
+    
+    // Unlock the account
+    await unlockAccount(user, req.user.userId);
+    
+    // Log unlock action
+    await logActivity({
+      type: ActivityType.ACCOUNT_UNLOCKED,
+      userId: req.user.userId,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: `Unlocked account for user ${user.name} (${user.email})`,
+      details: { 
+        unlockedUserId: user.id,
+        unlockedUserName: user.name,
+        unlockedUserEmail: user.email,
+        previousLockReason: user.lockReason,
+        previousLockedUntil: lockoutStatus.lockedUntil ? lockoutStatus.lockedUntil.toISOString() : null
+      },
+      companyId: null,
+      companyName: null,
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    });
+    
+    // Reload user to get fresh data
+    await user.reload();
+    
+    const userObj = user.toSafeObject ? user.toSafeObject() : user.toJSON();
+    delete userObj.password;
+    delete userObj.twoFactorSecret;
+    delete userObj.resetPasswordToken;
+    delete userObj.resetPasswordExpires;
+    
+    res.json({
+      message: 'Account unlocked successfully',
+      user: userObj
+    });
+  } catch (error) {
+    console.error('Error unlocking account:', error);
+    res.status(500).json({ message: error.message || 'An error occurred while unlocking the account' });
+  }
+});
+
 // Toggle user active status (MUST come before /:id route)
 router.put('/:id/status', canManageUsers, async (req, res) => {
   try {

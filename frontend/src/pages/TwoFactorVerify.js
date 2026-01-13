@@ -52,7 +52,18 @@ const TwoFactorVerify = () => {
         localStorage.setItem('user', JSON.stringify(response.data.user));
         
         toast.success('Login successful!');
-        window.location.href = '/'; // Force full reload to update auth context
+        // Redirect to intended destination or home
+        // Validate redirect path to prevent open redirect attacks
+        const redirectPath = location.state?.from || '/';
+        const isValidPath = redirectPath && 
+          typeof redirectPath === 'string' &&
+          redirectPath.startsWith('/') &&
+          !/^https?:\/\//i.test(redirectPath) &&
+          !redirectPath.startsWith('//') &&
+          !/^(javascript|data):/i.test(redirectPath) &&
+          !redirectPath.includes('../');
+        
+        window.location.href = isValidPath ? redirectPath : '/'; // Force full reload to update auth context
       }
     } catch (err) {
       const errorMessage = err.response?.data?.message || 'Invalid verification code. Please try again.';

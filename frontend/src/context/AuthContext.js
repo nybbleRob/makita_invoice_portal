@@ -40,9 +40,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (email, password, skip2FA = false) => {
+  const login = async (email, password, recaptchaToken = null, skip2FA = false) => {
     try {
-      const response = await api.post('/api/auth/login', { email, password });
+      const requestBody = { email, password };
+      if (recaptchaToken) {
+        requestBody.recaptchaToken = recaptchaToken;
+      }
+      const response = await api.post('/api/auth/login', requestBody);
       
       // Check if 2FA setup is required
       if (response.data.requires2FASetup) {

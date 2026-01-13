@@ -140,6 +140,31 @@ module.exports = (sequelize) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
       comment: 'Receive import summary report emails (for Global Admins and Administrators only)'
+    },
+    failedLoginAttempts: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      comment: 'Number of consecutive failed login attempts'
+    },
+    accountLockedUntil: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'Timestamp when account lockout expires (null if not locked)'
+    },
+    lastFailedLoginAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'Timestamp of last failed login attempt'
+    },
+    lockedBy: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      comment: 'Admin user ID who manually locked the account (null if auto-locked)'
+    },
+    lockReason: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Reason for lockout (e.g., "brute_force", "manual")'
     }
   }, {
     tableName: 'users',
@@ -160,6 +185,12 @@ module.exports = (sequelize) => {
       },
       {
         fields: ['addedById']
+      },
+      {
+        fields: ['accountLockedUntil']
+      },
+      {
+        fields: ['failedLoginAttempts']
       }
     ],
     hooks: {
