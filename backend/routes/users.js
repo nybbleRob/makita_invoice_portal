@@ -250,6 +250,25 @@ router.post('/', canManageUsers, async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
     
+    // Validate required fields
+    if (!name || typeof name !== 'string' || name.trim() === '') {
+      return res.status(400).json({ message: 'Name is required' });
+    }
+    
+    if (!email || typeof email !== 'string' || email.trim() === '') {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      return res.status(400).json({ message: 'Invalid email format' });
+    }
+    
+    if (!role || typeof role !== 'string') {
+      return res.status(400).json({ message: 'Role is required' });
+    }
+    
     // Validate role - global admins can create any role including other global admins
     const manageableRoles = getManageableRoles(req.user.role);
     if (!manageableRoles.includes(role)) {
@@ -397,7 +416,35 @@ router.post('/', canManageUsers, async (req, res) => {
     
     res.status(201).json(response);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Error creating user:', error);
+    
+    // Handle Sequelize validation errors
+    if (error.name === 'SequelizeValidationError') {
+      const validationErrors = error.errors.map(e => e.message).join(', ');
+      return res.status(400).json({ 
+        message: `Validation error: ${validationErrors}`,
+        errors: error.errors.map(e => ({ field: e.path, message: e.message }))
+      });
+    }
+    
+    // Handle unique constraint violations (duplicate email)
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      if (error.errors && error.errors.some(e => e.path === 'email')) {
+        return res.status(400).json({ message: 'User with this email already exists' });
+      }
+    }
+    
+    // Handle other Sequelize errors
+    if (error.name && error.name.startsWith('Sequelize')) {
+      return res.status(400).json({ 
+        message: error.message || 'Database error occurred while creating user'
+      });
+    }
+    
+    // Generic error
+    res.status(400).json({ 
+      message: error.message || 'An error occurred while creating the user'
+    });
   }
 });
 
