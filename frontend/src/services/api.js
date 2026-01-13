@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-// Empty base URL - all paths already include /api prefix
-// This ensures relative requests work on any domain (production uses Nginx proxy)
-export const API_BASE_URL = '';
+// Use REACT_APP_API_URL if set, otherwise use empty string for relative URLs
+// This allows configuration via .env files while maintaining relative URL fallback
+export const API_BASE_URL = process.env.REACT_APP_API_URL || '';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
