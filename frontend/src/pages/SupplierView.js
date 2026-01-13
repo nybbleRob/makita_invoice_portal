@@ -5,7 +5,7 @@ import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import ExcelTemplateBuilder from '../components/ExcelTemplateBuilder';
-import TemplateBuilder from '../components/TemplateBuilder';
+import SupplierTemplateBuilder from '../components/SupplierTemplateBuilder';
 
 const SupplierView = () => {
   const { id } = useParams();
@@ -180,7 +180,7 @@ const SupplierView = () => {
         <div className="page-body">
           <div className="container-fluid">
             {builderType === 'pdf' ? (
-              <TemplateBuilder
+              <SupplierTemplateBuilder
                 ref={templateBuilderRef}
                 template={editingTemplate}
                 supplierId={id}

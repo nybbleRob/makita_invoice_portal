@@ -182,8 +182,12 @@ export function getAvailableFields(templateType = 'invoice') {
     }
     
     // Exclude customerName - not needed for template creation
-    // (supplierName IS included - needed for supplier matching on supplier documents)
     if (field.standardName === 'customerName') {
+      return false;
+    }
+    
+    // Exclude supplierName - only needed for supplier templates, not regular templates
+    if (field.standardName === 'supplierName') {
       return false;
     }
     
