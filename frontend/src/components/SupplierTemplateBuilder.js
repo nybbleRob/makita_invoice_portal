@@ -70,9 +70,13 @@ const SupplierTemplateBuilder = forwardRef(({ template, supplierId, onSave, onCa
     const templateCode = template?.code || generateTemplateCode(template?.name || '');
     return REQUIRED_STANDARD_FIELDS.map(field => {
       const { hasCoordinates, coordinates } = getFieldCoordinates(field.standardName, templateCode);
+      // Override label for accountNumber to show "Account Number / Supplier Code" for supplier templates
+      const displayLabel = field.standardName === 'accountNumber' 
+        ? 'Account Number / Supplier Code' 
+        : field.displayName;
       return {
         standardName: field.standardName,
-        label: field.displayName,
+        label: displayLabel,
         mapsTo: field.standardName,
         required: true,
         isCrucial: field.isCrucial,

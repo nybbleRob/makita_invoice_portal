@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
@@ -13,6 +13,22 @@ const Templates = () => {
   const [showBuilder, setShowBuilder] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [builderType, setBuilderType] = useState(null); // 'excel' or 'pdf'
+  const [builderState, setBuilderState] = useState({ hasName: false, hasFields: false, isEditing: false });
+  const templateBuilderRef = useRef(null);
+  
+  // Update builder state periodically when builder is shown
+  const updateBuilderState = useCallback(() => {
+    if (templateBuilderRef.current?.getState) {
+      setBuilderState(templateBuilderRef.current.getState());
+    }
+  }, []);
+  
+  useEffect(() => {
+    if (showBuilder && builderType === 'pdf') {
+      const interval = setInterval(updateBuilderState, 500);
+      return () => clearInterval(interval);
+    }
+  }, [showBuilder, builderType, updateBuilderState]);
 
   useEffect(() => {
     if (user?.role === 'global_admin') {
@@ -75,7 +91,7 @@ const Templates = () => {
           <div className="row g-2 align-items-center">
             <div className="col">
               <div className="page-pretitle">Access Denied</div>
-              <h2 className="page-title">Templates</h2>
+              <h2 className="page-title">Customer Templates</h2>
             </div>
           </div>
         </div>
@@ -109,17 +125,42 @@ const Templates = () => {
         <div className="container-fluid">
           <div className="row g-2 align-items-center">
             <div className="col">
-              <div className="page-pretitle">Templates</div>
+              <div className="page-pretitle">Customer Templates</div>
               <h2 className="page-title">
                 {editingTemplate?.id ? 'Edit Template' : 'Create Template'}
               </h2>
             </div>
-            <div className="col-auto ms-auto">
+            <div className="col-auto ms-auto d-flex gap-2">
+              {builderType === 'pdf' && (
+                <>
+                  <button 
+                    className="btn btn-info" 
+                    onClick={() => templateBuilderRef.current?.handleTestParse()}
+                    disabled={!builderState.hasFields}
+                    title="Test the template against the uploaded PDF"
+                  >
+                    Test Parse
+                  </button>
+                  <button
+                    className="btn btn-success"
+                    onClick={() => templateBuilderRef.current?.handleSave()}
+                    disabled={!builderState.hasName || !builderState.hasFields}
+                  >
+                    {builderState.isEditing ? 'Update Template' : 'Save Template'}
+                  </button>
+                </>
+              )}
               <button
                 className="btn btn-secondary"
                 onClick={handleBuilderClose}
               >
-                Back to Templates
+                Back to Customer Templates
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={handleBuilderClose}
+              >
+                Cancel
               </button>
             </div>
           </div>
@@ -128,6 +169,7 @@ const Templates = () => {
           <div className="container-fluid">
             {builderType === 'pdf' ? (
               <TemplateBuilder
+                ref={templateBuilderRef}
                 template={editingTemplate}
                 onSave={handleBuilderClose}
                 onCancel={handleBuilderClose}
@@ -157,7 +199,7 @@ const Templates = () => {
         <div className="row g-2 align-items-center">
           <div className="col">
             <div className="page-pretitle">Document Parsing</div>
-            <h2 className="page-title">Templates</h2>
+            <h2 className="page-title">Customer Templates</h2>
           </div>
         </div>
       </div>

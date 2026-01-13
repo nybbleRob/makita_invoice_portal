@@ -28,7 +28,7 @@ const getPageTitleFromPath = (pathname) => {
     '/settings': 'Settings',
     '/profile': 'My Profile',
     '/import': 'Import Data',
-    '/templates': 'Templates',
+    '/templates': 'Customer Templates',
     '/activity-logs': 'Activity Logs',
     '/unallocated': 'Unallocated Documents',
     '/reports': 'Reports'

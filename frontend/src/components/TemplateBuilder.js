@@ -134,24 +134,7 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const renderTaskRef = useRef(null); // Track current render task to cancel if needed
-  
-  // Expose methods to parent via ref
-  useImperativeHandle(ref, () => ({
-    handleSave: () => handleSave(),
-    handleTestParse: () => {
-      if (pdfFile) {
-        setTestFile(pdfFile);
-      }
-      setShowTestModal(true);
-    },
-    canSave: () => templateData.name.trim() && templateData.fields.some(f => f.hasCoordinates),
-    canTest: () => templateData.fields.some(f => f.hasCoordinates),
-    getState: () => ({
-      hasName: !!templateData.name.trim(),
-      hasFields: templateData.fields.some(f => f.hasCoordinates),
-      isEditing: !!template?.id
-    })
-  }));
+  const handleTestParseRef = useRef(null); // Store handleTestParse function reference
   
   // Render PDF page on canvas
   const renderPDF = async (pdf, pageNum = 1) => {
@@ -725,9 +708,11 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
   };
   
   // Test parse handler
-  const handleTestParse = async () => {
-    if (!testFile) {
-      toast.error('Please select a PDF file to test');
+  const handleTestParse = useCallback(async () => {
+    // Auto-use pdfFile if available, otherwise use testFile
+    const fileToTest = pdfFile || testFile;
+    if (!fileToTest) {
+      toast.error('Please upload a PDF file first');
       return;
     }
     
@@ -786,7 +771,7 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
       
       // Create form data with the test file and template configuration
       const formData = new FormData();
-      formData.append('file', testFile);
+      formData.append('file', fileToTest);
       formData.append('parser', 'local');
       formData.append('template', JSON.stringify({
         code: testTemplateCode,
@@ -823,7 +808,38 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
     } finally {
       setTesting(false);
     }
-  };
+  }, [pdfFile, testFile, templateData, template, pdfPage, pdfDimensions, generateTemplateCode]);
+  
+  // Store handleTestParse in ref so it can be called from useImperativeHandle
+  useEffect(() => {
+    handleTestParseRef.current = handleTestParse;
+  }, [handleTestParse]);
+  
+  // Expose methods to parent via ref
+  useImperativeHandle(ref, () => ({
+    handleSave: () => handleSave(),
+    handleTestParse: () => {
+      if (!pdfFile) {
+        toast.error('Please upload a PDF file first');
+        return;
+      }
+      setTestFile(pdfFile);
+      setShowTestModal(true);
+      // Auto-start test parse after modal opens
+      setTimeout(() => {
+        if (handleTestParseRef.current) {
+          handleTestParseRef.current();
+        }
+      }, 300);
+    },
+    canSave: () => templateData.name.trim() && templateData.fields.some(f => f.hasCoordinates),
+    canTest: () => templateData.fields.some(f => f.hasCoordinates),
+    getState: () => ({
+      hasName: !!templateData.name.trim(),
+      hasFields: templateData.fields.some(f => f.hasCoordinates),
+      isEditing: !!template?.id
+    })
+  }), [pdfFile, templateData, template]);
   
   // Re-render when scale or currentPage changes
   useEffect(() => {
@@ -994,37 +1010,6 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
                 </button>
               </div>
             )}
-            
-            {/* Action Buttons - Horizontal toolbar */}
-            <div className="mt-3 d-flex gap-2 flex-wrap">
-              <button
-                className="btn btn-success flex-fill"
-                onClick={handleSave}
-                disabled={!templateData.name.trim() || !templateData.fields.some(f => f.hasCoordinates)}
-              >
-                {template?.id ? 'Update Template' : 'Save Template'}
-              </button>
-              <button 
-                className="btn btn-info flex-fill" 
-                onClick={() => {
-                  // Auto-use the already uploaded PDF if available
-                  if (pdfFile) {
-                    setTestFile(pdfFile);
-                  }
-                  setShowTestModal(true);
-                }}
-                disabled={!templateData.fields.some(f => f.hasCoordinates)}
-                title="Test the template against the uploaded PDF"
-              >
-                Test Parse
-              </button>
-              <button 
-                className="btn btn-secondary" 
-                onClick={onCancel}
-              >
-                Cancel
-              </button>
-            </div>
             
           </div>
         </div>
@@ -1304,50 +1289,24 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
                 ></button>
               </div>
               <div className="modal-body">
-                <div className="mb-4">
-                  <label className="form-label">PDF file to test</label>
-                  {testFile ? (
+                {!pdfFile && !testFile ? (
+                  <div className="alert alert-warning">
+                    <strong>No PDF available</strong>
+                    <p className="mb-0">Please upload a PDF file in the template builder first.</p>
+                  </div>
+                ) : (
+                  <div className="mb-4">
+                    <label className="form-label">PDF file to test</label>
                     <div className="d-flex align-items-center gap-2 mb-2">
                       <span className="badge bg-success-lt">
-                        Using: {testFile.name || 'Template sample PDF'}
+                        Using: {(pdfFile || testFile)?.name || 'Template sample PDF'}
                       </span>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-secondary"
-                        onClick={() => setTestFile(null)}
-                        disabled={testing}
-                      >
-                        Change
-                      </button>
                     </div>
-                  ) : (
-                    <>
-                      <input
-                        type="file"
-                        className="form-control"
-                        accept=".pdf"
-                        onChange={(e) => {
-                          setTestFile(e.target.files[0]);
-                          setTestResults(null);
-                        }}
-                        disabled={testing}
-                      />
-                      <small className="text-muted">
-                        Select a PDF file to test the extraction, or use the template's sample PDF
-                      </small>
-                      {pdfFile && (
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-primary mt-2"
-                          onClick={() => setTestFile(pdfFile)}
-                          disabled={testing}
-                        >
-                          Use Template Sample PDF
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
+                    <small className="text-muted">
+                      Testing against the uploaded PDF file
+                    </small>
+                  </div>
+                )}
                 
                 {testing && (
                   <div className="text-center p-4">
@@ -1461,7 +1420,7 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
                   type="button"
                   className="btn btn-primary"
                   onClick={handleTestParse}
-                  disabled={!testFile || testing}
+                  disabled={!pdfFile && !testFile || testing}
                 >
                   {testing ? (
                     <>

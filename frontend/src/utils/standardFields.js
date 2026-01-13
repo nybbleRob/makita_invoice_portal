@@ -18,7 +18,7 @@ export const STANDARD_FIELDS = {
   },
   accountNumber: {
     standardName: 'accountNumber',
-    displayName: 'Account Number / Supplier Code',
+    displayName: 'Account Number',
     description: 'Supplier account/code for primary matching',
     isCrucial: true,
     isMandatory: true,

@@ -367,7 +367,7 @@ const Layout = () => {
                   <Link to="/settings" className="dropdown-item">Settings</Link>
                 )}
                 {hasPermission('TEMPLATES_VIEW') && (
-                  <Link to="/templates" className="dropdown-item">Templates</Link>
+                  <Link to="/templates" className="dropdown-item">Customer Templates</Link>
                 )}
                 <div className="dropdown-divider"></div>
                 <button onClick={handleLogout} className="dropdown-item">Logout</button>
