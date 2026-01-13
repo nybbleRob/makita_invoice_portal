@@ -52,8 +52,7 @@ router.get('/dashboard', async (req, res) => {
     try {
       const creditNoteCount = await CreditNote.count({
         where: {
-          ...companyFilter,
-          deletedAt: null
+          ...companyFilter
         }
       });
       console.log(`📊 Dashboard Stats - Credit Note count: ${creditNoteCount}`);
@@ -72,8 +71,7 @@ router.get('/dashboard', async (req, res) => {
         // Count users with roles the current user can manage
         const userCount = await User.count({
           where: {
-            role: { [Op.in]: manageableRoles },
-            deletedAt: null
+            role: { [Op.in]: manageableRoles }
           }
         });
         console.log(`📊 Dashboard Stats - User count: ${userCount}`);
@@ -93,9 +91,7 @@ router.get('/dashboard', async (req, res) => {
         
         // If user has full access (accessibleCompanyIds is null), count all
         if (req.accessibleCompanyIds === null) {
-          companyCount = await Company.count({
-            where: { deletedAt: null }
-          });
+          companyCount = await Company.count();
         } else {
           // Otherwise count only accessible companies
           companyCount = req.accessibleCompanyIds.length;
