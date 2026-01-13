@@ -129,9 +129,6 @@ const SupplierView = () => {
   }
   
   if (showBuilder) {
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/a71118e4-5010-40f5-8a55-7b39cd0c3d75',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SupplierView.js:showBuilder',message:'Builder rendering in SupplierView',data:{showBuilder,builderType,builderState,hasTemplateRef:!!templateBuilderRef.current,editingTemplateId:editingTemplate?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'VERIFY'})}).catch(()=>{});
-    // #endregion
     return (
       <>
         <div className="page-header d-print-none">
@@ -145,9 +142,6 @@ const SupplierView = () => {
                 </h2>
               </div>
               <div className="col-auto ms-auto d-flex gap-2">
-                {/* #region agent log */}
-                {(() => { fetch('http://127.0.0.1:7244/ingest/a71118e4-5010-40f5-8a55-7b39cd0c3d75',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SupplierView.js:buttonArea',message:'Button area rendering',data:{builderType,isPdf:builderType==='pdf'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'VERIFY'})}).catch(()=>{}); return null; })()}
-                {/* #endregion */}
                 {builderType === 'pdf' && (
                   <>
                     <button 
