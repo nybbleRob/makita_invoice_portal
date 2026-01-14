@@ -9,16 +9,16 @@ module.exports = (sequelize) => {
     },
     companyName: {
       type: DataTypes.STRING,
-      defaultValue: 'Makita Invoice Portal'
+      defaultValue: 'Makita EDI Portal'
     },
     siteTitle: {
       type: DataTypes.STRING,
-      defaultValue: 'Makita Invoice Portal',
-      comment: 'Site title (e.g., Makita Invoice Portal) - previously siteName'
+      defaultValue: 'Makita EDI Portal',
+      comment: 'Site title (e.g., Makita EDI Portal) - previously siteName'
     },
     siteName: {
       type: DataTypes.STRING,
-      defaultValue: 'Makita Invoice Portal',
+      defaultValue: 'Makita EDI Portal',
       comment: 'Deprecated: Use siteTitle instead. Kept for backward compatibility.'
     },
     systemEmail: {
@@ -72,7 +72,7 @@ module.exports = (sequelize) => {
       defaultValue: {
         enabled: false,
         required: false,
-        issuer: 'Makita Invoice Portal'
+        issuer: 'Makita EDI Portal'
       }
     },
     emailProvider: {
@@ -90,7 +90,7 @@ module.exports = (sequelize) => {
             password: ''
           },
           fromEmail: '',
-          fromName: 'Makita Invoice Portal',
+          fromName: 'Makita EDI Portal',
           rejectUnauthorized: true // Reject unauthorized SSL certificates
         },
         office365: {
@@ -119,7 +119,7 @@ module.exports = (sequelize) => {
             password: ''
           },
           fromEmail: '',
-          fromName: 'Makita Invoice Portal',
+          fromName: 'Makita EDI Portal',
           rejectUnauthorized: false
         },
         testMode: {

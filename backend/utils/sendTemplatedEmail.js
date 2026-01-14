@@ -148,7 +148,7 @@ const { getFrontendUrl, getBackendUrl, getLoginUrl } = require('./urlConfig');
 function getBrandingVariables(settings) {
   const primaryColor = settings?.primaryColor || '#066FD1';
   const primaryColorHover = darkenColor(primaryColor);
-  const companyName = settings?.companyName || 'Makita Invoice Portal';
+  const companyName = settings?.companyName || 'Makita EDI Portal';
   const supportEmail = settings?.supportEmail || 'support@example.com';
   const portalUrl = getFrontendUrl();
   const loginUrl = getLoginUrl();

@@ -115,7 +115,7 @@ const ValidateEmailChange = () => {
                     style={{ maxHeight: '60px', marginBottom: '1rem' }}
                   />
                 )}
-                <h1 className="mb-2">Makita Invoice Portal</h1>
+                <h1 className="mb-2">Makita EDI Portal</h1>
               </div>
               <div className="alert alert-danger login-alert" role="alert">
                 {error || 'Invalid or expired validation token'}
@@ -150,7 +150,7 @@ const ValidateEmailChange = () => {
                     style={{ maxHeight: '60px', marginBottom: '1rem' }}
                   />
                 )}
-                <h1 className="mb-2">Makita Invoice Portal</h1>
+                <h1 className="mb-2">Makita EDI Portal</h1>
               </div>
               <div className="alert alert-success login-alert" role="alert">
                 Email change validated successfully! Please login with your new email address.

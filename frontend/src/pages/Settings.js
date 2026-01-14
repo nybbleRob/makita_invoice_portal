@@ -450,7 +450,7 @@ const Settings = () => {
               host: 'sandbox.smtp.mailtrap.io',
               port: 2525,
               secure: false,
-              fromName: 'Makita Invoice Portal',
+              fromName: 'Makita EDI Portal',
               ...settings.emailProvider?.mailtrap, // User values override defaults
               // Ensure auth is preserved
               auth: settings.emailProvider?.mailtrap?.auth || {}
@@ -947,7 +947,7 @@ const Settings = () => {
                               handleInputChange('siteName', e.target.value);
                               handleInputChange('companyName', e.target.value);
                             }}
-                            placeholder="Makita Invoice Portal"
+                            placeholder="Makita EDI Portal"
                           />
                           <small className="form-hint">The title displayed in the browser tab, emails, and throughout the application</small>
                         </div>
@@ -2413,9 +2413,9 @@ const Settings = () => {
                         <input
                           type="text"
                           className="form-control"
-                          value={settings.twoFactorAuth?.issuer || 'Makita Invoice Portal'}
+                          value={settings.twoFactorAuth?.issuer || 'Makita EDI Portal'}
                           onChange={(e) => handleNestedChange('twoFactorAuth', 'issuer', e.target.value)}
-                          placeholder="Makita Invoice Portal"
+                          placeholder="Makita EDI Portal"
                         />
                         <small className="form-hint">This name will appear in authenticator apps</small>
                       </div>
@@ -2656,9 +2656,9 @@ const Settings = () => {
                                 <input
                                   type="text"
                                   className="form-control"
-                                  value={settings.emailProvider?.smtp?.fromName || 'Makita Invoice Portal'}
+                                  value={settings.emailProvider?.smtp?.fromName || 'Makita EDI Portal'}
                                   onChange={(e) => handleEmailProviderNestedChange('smtp', 'fromName', e.target.value)}
-                                  placeholder="Makita Invoice Portal"
+                                  placeholder="Makita EDI Portal"
                                   disabled={!settings.emailProvider?.enabled}
                                 />
                               </div>
@@ -2792,9 +2792,9 @@ const Settings = () => {
                               <input
                                 type="text"
                                 className="form-control"
-                                value={settings.emailProvider?.resend?.fromName || 'Makita Invoice Portal'}
+                                value={settings.emailProvider?.resend?.fromName || 'Makita EDI Portal'}
                                 onChange={(e) => handleEmailProviderNestedChange('resend', 'fromName', e.target.value)}
-                                placeholder="Makita Invoice Portal"
+                                placeholder="Makita EDI Portal"
                                 disabled={!settings.emailProvider?.enabled}
                               />
                             </div>
@@ -2841,9 +2841,9 @@ const Settings = () => {
                               <input
                                 type="text"
                                 className="form-control"
-                                value={settings.emailProvider?.smtp2go?.fromName || 'Makita Invoice Portal'}
+                                value={settings.emailProvider?.smtp2go?.fromName || 'Makita EDI Portal'}
                                 onChange={(e) => handleEmailProviderNestedChange('smtp2go', 'fromName', e.target.value)}
-                                placeholder="Makita Invoice Portal"
+                                placeholder="Makita EDI Portal"
                                 disabled={!settings.emailProvider?.enabled}
                               />
                             </div>
@@ -2928,9 +2928,9 @@ const Settings = () => {
                                 <input
                                   type="text"
                                   className="form-control"
-                                  value={settings.emailProvider?.mailtrap?.fromName || 'Makita Invoice Portal'}
+                                  value={settings.emailProvider?.mailtrap?.fromName || 'Makita EDI Portal'}
                                   onChange={(e) => handleEmailProviderNestedChange('mailtrap', 'fromName', e.target.value)}
-                                  placeholder="Makita Invoice Portal"
+                                  placeholder="Makita EDI Portal"
                                   disabled={!settings.emailProvider?.enabled}
                                 />
                               </div>

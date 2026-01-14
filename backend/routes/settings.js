@@ -64,7 +64,7 @@ router.get('/', async (req, res) => {
             password: ''
           },
           fromEmail: '',
-          fromName: 'Makita Invoice Portal',
+          fromName: 'Makita EDI Portal',
           rejectUnauthorized: true
         },
         office365: {
@@ -723,7 +723,7 @@ router.post('/test-email', auth, globalAdmin, async (req, res) => {
     // Queue the test email (this will create EmailLog entry and show in logs)
     await queueEmail({
       to: testEmail,
-      subject: 'Test Email from Makita Invoice Portal',
+      subject: 'Test Email from Makita EDI Portal',
       html: '<p>This is a test email to verify your email provider configuration.</p><p>If you received this, your email settings are working correctly!</p>',
       text: 'This is a test email to verify your email provider configuration. If you received this, your email settings are working correctly!',
       metadata: {
@@ -795,7 +795,7 @@ router.post('/email-templates/:templateName/test', auth, globalAdmin, async (req
     const testData = {
       userName: req.user?.name || 'Test User',
       userEmail: recipientEmail,
-      companyName: settings.companyName || 'Makita Invoice Portal',
+      companyName: settings.companyName || 'Makita EDI Portal',
       ...data
     };
     
@@ -1800,7 +1800,7 @@ router.post('/email-stress-test', auth, async (req, res) => {
     
     const theme = getEmailTheme(settings);
     const primaryColor = theme.primaryColor;
-    const portalName = settings.portalName || settings.siteTitle || 'Makita Invoice Portal';
+    const portalName = settings.portalName || settings.siteTitle || 'Makita EDI Portal';
     const recipientEmail = currentUser.email;
     const recipientName = currentUser.name || currentUser.email;
     

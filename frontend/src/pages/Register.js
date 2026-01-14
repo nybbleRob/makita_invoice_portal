@@ -185,7 +185,7 @@ const Register = () => {
                   style={{ maxHeight: '60px', marginBottom: '1rem' }}
                 />
               )}
-              <h1 className="mb-2">Makita Invoice Portal</h1>
+              <h1 className="mb-2">Makita EDI Portal</h1>
             </div>
             
             {error && (

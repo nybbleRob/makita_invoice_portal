@@ -156,7 +156,7 @@ const TwoFactorSetup = () => {
                   style={{ maxHeight: '60px', marginBottom: '1rem' }}
                 />
               )}
-              <h1 className="mb-2">Makita Invoice Portal</h1>
+              <h1 className="mb-2">Makita EDI Portal</h1>
             </div>
 
             <h2 className="card-title text-center mb-4">Secure Your Account</h2>

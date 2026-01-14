@@ -397,7 +397,7 @@ router.post('/forgot-password', recaptchaMiddleware({ minScore: 0.5 }), async (r
             settings.emailProvider?.smtp?.fromName || 
             settings.emailProvider?.resend?.fromName ||
             settings.emailProvider?.smtp2go?.fromName ||
-            'Makita Invoice Portal';
+            'Makita EDI Portal';
           
           // Calculate expiry time for email (1 hour = 3600000ms)
           const expiryMs = user.resetPasswordExpires - Date.now();

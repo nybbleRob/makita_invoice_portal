@@ -11,7 +11,7 @@ const { getFrontendUrl, getBackendUrl } = require('./urlConfig');
  * @returns {Object} - Theme configuration
  */
 function getEmailTheme(settings) {
-  const companyName = settings?.companyName || settings?.portalName || settings?.siteTitle || 'Makita Invoice Portal';
+  const companyName = settings?.companyName || settings?.portalName || settings?.siteTitle || 'Makita EDI Portal';
   const primaryColor = settings?.primaryColor || '#066fd1';
   const logoLight = settings?.logoLight;
   const logoDark = settings?.logoDark;
