@@ -583,7 +583,7 @@ const UserManagement = () => {
       return true;
     }
     
-    // Administrator can manage roles below their level
+    // Administrator can manage other Administrators and roles below their level
     if (currentRole === 'administrator') {
       const ROLE_HIERARCHY = {
         global_admin: 7,
@@ -596,7 +596,7 @@ const UserManagement = () => {
       };
       const currentLevel = ROLE_HIERARCHY[currentRole] || 0;
       const targetLevel = ROLE_HIERARCHY[targetRole] || 0;
-      return currentLevel > targetLevel;
+      return currentLevel >= targetLevel;
     }
     
     return false;
@@ -1571,32 +1571,39 @@ const UserManagement = () => {
                   {/* Two-Factor Authentication Section */}
                   {selectedUser && 
                    (currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') &&
-                   canManageUserRole(selectedUser.role) &&
-                   selectedUser.twoFactorEnabled && (
+                   canManageUserRole(selectedUser.role) && (
                     <>
                       <hr className="my-4" />
                       <h4 className="mb-3">Two-Factor Authentication</h4>
                       <div className="mb-3">
                         <label className="form-label">Status</label>
                         <div className="mb-2">
-                          <span className="badge bg-success-lt">Enabled</span>
+                          {selectedUser.twoFactorEnabled ? (
+                            <span className="badge bg-success-lt">Enabled</span>
+                          ) : (
+                            <span className="badge bg-secondary-lt">Disabled</span>
+                          )}
                         </div>
-                        <button
-                          type="button"
-                          className="btn btn-warning btn-sm"
-                          onClick={handleReset2FA}
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="me-1">
-                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
-                            <path d="M21 3v5h-5"></path>
-                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
-                            <path d="M3 21v-5h5"></path>
-                          </svg>
-                          Reset 2FA
-                        </button>
-                        <small className="form-hint d-block mt-2">
-                          Resetting 2FA will clear the user's 2FA configuration. They will need to set up 2FA again on their next login.
-                        </small>
+                        {selectedUser.twoFactorEnabled && (
+                          <button
+                            type="button"
+                            className="btn btn-warning btn-sm"
+                            onClick={handleReset2FA}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="me-1">
+                              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                              <path d="M21 3v5h-5"></path>
+                              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                              <path d="M3 21v-5h5"></path>
+                            </svg>
+                            Reset 2FA
+                          </button>
+                        )}
+                        {selectedUser.twoFactorEnabled && (
+                          <small className="form-hint d-block mt-2">
+                            Resetting 2FA will clear the user's 2FA configuration. They will need to set up 2FA again on their next login.
+                          </small>
+                        )}
                       </div>
                     </>
                   )}
