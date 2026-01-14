@@ -435,7 +435,7 @@ router.get('/export', auth, async (req, res) => {
     }
 
     // Get all companies with parent and primary contact
-    const companies = await Company.findAll({
+    const companiesResult = await Company.findAll({
       include: [
         {
           model: Company,
@@ -450,10 +450,18 @@ router.get('/export', auth, async (req, res) => {
           attributes: ['id', 'email']
         }
       ],
-      order: [
-        [Sequelize.literal("CASE WHEN type = 'CORP' THEN 1 WHEN type = 'SUB' THEN 2 WHEN type = 'BRANCH' THEN 3 ELSE 4 END"), 'ASC'],
-        ['name', 'ASC']
-      ]
+      order: [['name', 'ASC']]
+    });
+    
+    // Sort companies by type (CORP first, then SUB, then BRANCH), then by name
+    const typeOrder = { 'CORP': 1, 'SUB': 2, 'BRANCH': 3 };
+    const companies = companiesResult.sort((a, b) => {
+      const aTypeOrder = typeOrder[a.type] || 4;
+      const bTypeOrder = typeOrder[b.type] || 4;
+      if (aTypeOrder !== bTypeOrder) {
+        return aTypeOrder - bTypeOrder;
+      }
+      return a.name.localeCompare(b.name);
     });
 
     // Get all users assigned to companies for contact_emails
