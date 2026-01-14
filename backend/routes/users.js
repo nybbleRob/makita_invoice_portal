@@ -1974,8 +1974,15 @@ router.post('/import', canManageUsers, upload.single('file'), async (req, res) =
 
           // Handle email change
           if (emailChanged) {
-            // Check if new email is already in use
-            const emailInUse = await User.findOne({ where: { email } });
+            // Check if new email is already in use (check both email and pendingEmail columns)
+            const emailInUse = await User.findOne({ 
+              where: { 
+                [Op.or]: [
+                  { email: email },
+                  { pendingEmail: email }
+                ]
+              }
+            });
             if (emailInUse && emailInUse.id !== existingUser.id) {
               results.errors.push(`Row ${rowNum}: Email ${email} is already in use by another user`);
               continue;
@@ -2029,7 +2036,11 @@ router.post('/import', canManageUsers, upload.single('file'), async (req, res) =
             await existingUser.setCompanies([]);
           }
 
-          processedEmails.add(emailChanged ? oldEmail : email);
+          // Track both old and new email to prevent duplicates in import file
+          processedEmails.add(email);
+          if (emailChanged) {
+            processedEmails.add(oldEmail);
+          }
           results.updated++;
           results.details.push({
             rowNum,
@@ -2042,8 +2053,15 @@ router.post('/import', canManageUsers, upload.single('file'), async (req, res) =
         } else {
           // CREATE new user
           
-          // Check if email already exists
-          const emailExists = await User.findOne({ where: { email } });
+          // Check if email already exists (check both email and pendingEmail columns)
+          const emailExists = await User.findOne({ 
+            where: { 
+              [Op.or]: [
+                { email: email },
+                { pendingEmail: email }
+              ]
+            }
+          });
           if (emailExists) {
             results.errors.push(`Row ${rowNum}: Email ${email} already exists`);
             continue;
