@@ -98,6 +98,42 @@ const Profile = () => {
       await fetchProfile();
     } catch (error) {
       toast.error('Error requesting email change: ' + (error.response?.data?.message || error.message));
+      // If there's a pending email in the error response, update state
+      if (error.response?.data?.pendingEmail) {
+        setEmailChangeData(prev => ({ ...prev, pendingEmail: error.response.data.pendingEmail }));
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancelEmailChange = async () => {
+    if (!window.confirm('Are you sure you want to cancel the pending email change?')) {
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.post('/api/profile/cancel-email-change');
+      toast.success('Pending email change cancelled successfully.');
+      setEmailChangeData({
+        newEmail: '',
+        pendingEmail: null
+      });
+      await fetchProfile();
+    } catch (error) {
+      toast.error('Error cancelling email change: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResendEmailChange = async () => {
+    setSaving(true);
+    try {
+      await api.post('/api/profile/resend-email-change');
+      toast.success('Validation email resent successfully. Please check your email.');
+    } catch (error) {
+      toast.error('Error resending email: ' + (error.response?.data?.message || error.message));
     } finally {
       setSaving(false);
     }
@@ -229,9 +265,27 @@ const Profile = () => {
                                   value={formData.email}
                                   disabled
                                 />
-                                <small className="form-hint text-warning">
+                                <small className="form-hint text-warning d-block mb-2">
                                   Pending: {emailChangeData.pendingEmail} - Please check your email and click the validation link.
                                 </small>
+                                <div className="btn-group" role="group">
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-primary"
+                                    onClick={handleResendEmailChange}
+                                    disabled={saving}
+                                  >
+                                    Resend Email
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-danger"
+                                    onClick={handleCancelEmailChange}
+                                    disabled={saving}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
                               </>
                             ) : (
                               <>

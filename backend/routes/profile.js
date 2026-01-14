@@ -199,6 +199,115 @@ router.post('/avatar', auth, upload.single('avatar'), async (req, res) => {
   }
 });
 
+// Cancel pending email change
+router.post('/cancel-email-change', auth, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    if (!user.pendingEmail) {
+      return res.status(400).json({ message: 'No pending email change to cancel' });
+    }
+    
+    const cancelledEmail = user.pendingEmail;
+    
+    // Clear pending email change
+    user.pendingEmail = null;
+    user.emailChangeToken = null;
+    user.emailChangeExpires = null;
+    await user.save();
+    
+    // Log activity
+    const { logActivity, ActivityType } = require('../services/activityLogger');
+    await logActivity({
+      type: ActivityType.EMAIL_CHANGE_REQUESTED,
+      userId: user.id,
+      userEmail: user.email,
+      userRole: user.role,
+      action: `Cancelled pending email change to ${cancelledEmail}`,
+      details: {
+        cancelledEmail: cancelledEmail
+      },
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    });
+    
+    res.json({ message: 'Pending email change cancelled successfully' });
+  } catch (error) {
+    console.error('Cancel email change error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Resend email change validation email
+router.post('/resend-email-change', auth, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    if (!user.pendingEmail || !user.emailChangeToken) {
+      return res.status(400).json({ message: 'No pending email change found' });
+    }
+    
+    // Check if token is expired
+    if (user.emailChangeExpires && new Date(user.emailChangeExpires) < new Date()) {
+      return res.status(400).json({ message: 'Email change token has expired. Please request a new email change.' });
+    }
+    
+    // Get settings for email configuration
+    const Settings = require('../models/Settings');
+    const settings = await Settings.getSettings();
+    const { isEmailEnabled } = require('../utils/emailService');
+    const { getEmailChangeValidationUrl } = require('../utils/urlConfig');
+    const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
+    
+    if (!isEmailEnabled(settings)) {
+      return res.status(400).json({ message: 'Email service is not configured' });
+    }
+    
+    // We need to generate a new token since we only store the hash
+    const crypto = require('crypto');
+    const changeToken = crypto.randomBytes(32).toString('hex');
+    const changeTokenHash = crypto.createHash('sha256').update(changeToken).digest('hex');
+    
+    // Update token and extend expiration (30 minutes from now)
+    user.emailChangeToken = changeTokenHash;
+    user.emailChangeExpires = Date.now() + 1800000; // 30 minutes
+    await user.save();
+    
+    // Send validation email
+    const validationUrl = getEmailChangeValidationUrl(changeToken);
+    const expiryMs = user.emailChangeExpires - Date.now();
+    const expiryMinutes = Math.floor(expiryMs / (1000 * 60));
+    const expiryTime = expiryMinutes === 1 ? '1 minute' : `${expiryMinutes} minutes`;
+    
+    await sendTemplatedEmail(
+      'email-change-validation',
+      user.pendingEmail.toLowerCase(),
+      {
+        userName: user.name || user.email,
+        oldEmail: user.email,
+        newEmail: user.pendingEmail.toLowerCase(),
+        validationUrl: validationUrl,
+        expiryTime: expiryTime
+      },
+      settings
+    );
+    
+    res.json({ 
+      message: 'Validation email resent successfully. Please check your email.',
+      pendingEmail: user.pendingEmail.toLowerCase()
+    });
+  } catch (error) {
+    console.error('Resend email change error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Request email change
 router.post('/request-email-change', auth, async (req, res) => {
   try {
@@ -229,6 +338,14 @@ router.post('/request-email-change', auth, async (req, res) => {
     const existingUser = await User.findOne({ where: { email: newEmail.toLowerCase() } });
     if (existingUser && existingUser.id !== user.id) {
       return res.status(400).json({ message: 'Email is already in use' });
+    }
+    
+    // Check if there's already a pending email change
+    if (user.pendingEmail) {
+      return res.status(400).json({ 
+        message: 'You already have a pending email change. Please cancel it first or wait for it to expire.',
+        pendingEmail: user.pendingEmail
+      });
     }
     
     // Generate token
@@ -297,7 +414,13 @@ router.post('/request-email-change', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Request email change error:', error);
-    res.status(500).json({ message: error.message });
+    console.error('Error stack:', error.stack);
+    // Provide more detailed error message for debugging
+    const errorMessage = error.message || 'An error occurred while requesting email change';
+    res.status(500).json({ 
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
