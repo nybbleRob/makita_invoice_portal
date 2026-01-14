@@ -113,7 +113,6 @@ router.put('/password', auth, async (req, res) => {
     
     // Send password changed email notification
     try {
-      const Settings = require('../models/Settings');
       const settings = await Settings.getSettings();
       
       const { isEmailEnabled } = require('../utils/emailService');
