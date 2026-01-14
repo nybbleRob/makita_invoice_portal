@@ -102,13 +102,22 @@ router.post('/:id/approve', async (req, res) => {
       });
     }
     
-    const { role, companyIds, rejectionReason } = req.body;
+    const { 
+      role = 'external_user', 
+      companyIds = [], 
+      allCompanies = false,
+      sendInvoiceEmail = false,
+      sendInvoiceAttachment = false,
+      sendStatementEmail = false,
+      sendStatementAttachment = false,
+      sendEmailAsSummary = false,
+      sendImportSummaryReport = false
+    } = req.body;
     
-    // Validate role
-    const allowedRoles = ['external_user', 'staff', 'manager'];
-    if (!role || !allowedRoles.includes(role)) {
+    // Validate role - pending registrations are always external_user
+    if (role !== 'external_user') {
       return res.status(400).json({ 
-        message: `Role must be one of: ${allowedRoles.join(', ')}` 
+        message: 'Pending registrations can only be approved as external_user' 
       });
     }
     
@@ -145,16 +154,17 @@ router.post('/:id/approve', async (req, res) => {
       role: role,
       addedById: req.user.userId,
       mustChangePassword: true,
-      allCompanies: false,
-      sendInvoiceEmail: false,
-      sendInvoiceAttachment: false,
-      sendStatementEmail: false,
-      sendStatementAttachment: false,
-      sendEmailAsSummary: false
+      allCompanies: allCompanies || false,
+      sendInvoiceEmail: sendInvoiceEmail || false,
+      sendInvoiceAttachment: sendInvoiceAttachment || false,
+      sendStatementEmail: sendStatementEmail || false,
+      sendStatementAttachment: sendStatementAttachment || false,
+      sendEmailAsSummary: sendEmailAsSummary || false,
+      sendImportSummaryReport: sendImportSummaryReport || false
     });
     
-    // Assign companies if provided
-    if (companyIds && Array.isArray(companyIds) && companyIds.length > 0) {
+    // Assign companies if not using "All Companies"
+    if (!allCompanies && companyIds && Array.isArray(companyIds) && companyIds.length > 0) {
       const companies = await Company.findAll({
         where: { id: { [Op.in]: companyIds } }
       });

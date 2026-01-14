@@ -4,6 +4,7 @@ import api from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import PageTitle from '../components/PageTitle';
+import HierarchicalCompanyFilter from '../components/HierarchicalCompanyFilter';
 
 const PendingAccounts = () => {
   const { user } = useAuth();
@@ -19,9 +20,18 @@ const PendingAccounts = () => {
   const [totalPages, setTotalPages] = useState(1);
   
   // Approval form state
-  const [role, setRole] = useState('external_user');
-  const [companyIds, setCompanyIds] = useState([]);
-  const [availableCompanies, setAvailableCompanies] = useState([]);
+  const [formData, setFormData] = useState({
+    allCompanies: false,
+    companyIds: [],
+    sendInvoiceEmail: false,
+    sendInvoiceAttachment: false,
+    sendStatementEmail: false,
+    sendStatementAttachment: false,
+    sendEmailAsSummary: false,
+    sendImportSummaryReport: false
+  });
+  const [showCompanyAssignmentModal, setShowCompanyAssignmentModal] = useState(false);
+  const [userAssignedCompanyObjects, setUserAssignedCompanyObjects] = useState([]);
   const [rejectionReason, setRejectionReason] = useState('');
   
   useEffect(() => {
@@ -72,25 +82,83 @@ const PendingAccounts = () => {
   const fetchCompanies = async () => {
     try {
       const response = await api.get('/api/companies');
-      setAvailableCompanies(response.data || []);
+      const companies = response.data?.data || response.data?.companies || response.data || [];
+      setUserAssignedCompanyObjects(Array.isArray(companies) ? companies : []);
     } catch (error) {
       console.error('Error fetching companies:', error);
     }
   };
   
-  const handleApprove = async () => {
-    if (!selectedRegistration) return;
+  const handleInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
     
-    if (!role) {
-      toast.error('Please select a role');
+    // Handle conditional checkboxes
+    if (name === 'sendInvoiceEmail' && !checked) {
+      setFormData(prev => {
+        const updated = { 
+          ...prev, 
+          [name]: checked,
+          sendInvoiceAttachment: false 
+        };
+        if (!prev.sendStatementEmail) {
+          updated.sendEmailAsSummary = false;
+        }
+        return updated;
+      });
       return;
     }
+    if (name === 'sendStatementEmail' && !checked) {
+      setFormData(prev => {
+        const updated = { 
+          ...prev, 
+          [name]: checked,
+          sendStatementAttachment: false 
+        };
+        if (!prev.sendInvoiceEmail) {
+          updated.sendEmailAsSummary = false;
+        }
+        return updated;
+      });
+      return;
+    }
+    
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleAllCompaniesToggle = (e) => {
+    const isEnabled = e.target.checked;
+    setFormData(prev => ({
+      ...prev,
+      allCompanies: isEnabled,
+      companyIds: isEnabled ? [] : prev.companyIds
+    }));
+  };
+
+  const handleCompanyAssignmentChange = (selectedIds) => {
+    setFormData(prev => ({
+      ...prev,
+      companyIds: selectedIds
+    }));
+  };
+
+  const handleApprove = async () => {
+    if (!selectedRegistration) return;
     
     setApproving(true);
     try {
       await api.post(`/api/pending-registrations/${selectedRegistration.id}/approve`, {
-        role,
-        companyIds
+        role: 'external_user', // Always external_user for pending registrations
+        allCompanies: formData.allCompanies,
+        companyIds: formData.allCompanies ? [] : formData.companyIds,
+        sendInvoiceEmail: formData.sendInvoiceEmail,
+        sendInvoiceAttachment: formData.sendInvoiceAttachment,
+        sendStatementEmail: formData.sendStatementEmail,
+        sendStatementAttachment: formData.sendStatementAttachment,
+        sendEmailAsSummary: formData.sendEmailAsSummary,
+        sendImportSummaryReport: formData.sendImportSummaryReport
       });
       
       toast.success('Registration approved and user created successfully');
@@ -142,6 +210,7 @@ const PendingAccounts = () => {
     // Detail view
     
     return (
+      <>
       <div className="page">
         <PageTitle title="Review Registration" />
         <div className="page-header">
@@ -224,42 +293,199 @@ const PendingAccounts = () => {
                 {selectedRegistration.status === 'pending' && (
                   <div className="card">
                     <div className="card-header">
-                      <h3 className="card-title">Actions</h3>
+                      <h3 className="card-title">Account Setup</h3>
                     </div>
                     <div className="card-body">
-                      <div className="mb-3">
-                        <label className="form-label">User Role</label>
-                        <select
-                          className="form-select"
-                          value={role}
-                          onChange={(e) => setRole(e.target.value)}
-                        >
-                          <option value="external_user">External User</option>
-                          <option value="staff">Staff</option>
-                          <option value="manager">Manager</option>
-                        </select>
+                      <div className="row">
+                        <div className="col-12">
+                          <div className="mb-3">
+                            <label className="form-label">User Role</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              value="External User"
+                              disabled
+                            />
+                            <small className="form-hint">All pending registrations are created as External Users</small>
+                          </div>
+                        </div>
                       </div>
                       
-                      <div className="mb-3">
-                        <label className="form-label">Assign to Companies</label>
-                        <select
-                          className="form-select"
-                          multiple
-                          value={companyIds}
-                          onChange={(e) => {
-                            const selected = Array.from(e.target.selectedOptions, option => option.value);
-                            setCompanyIds(selected);
-                          }}
-                          size={5}
-                        >
-                          {availableCompanies.map(company => (
-                            <option key={company.id} value={company.id}>
-                              {company.name} {company.referenceNo ? `(${company.referenceNo})` : ''}
-                            </option>
-                          ))}
-                        </select>
-                        <small className="form-hint">Hold Ctrl/Cmd to select multiple companies</small>
+                      <div className="row">
+                        <div className="col-12 d-flex flex-column">
+                          {/* Email Notifications - Compact Grid Layout */}
+                          <div className="mb-4">
+                            <label className="form-label">Email Notifications</label>
+                            <div className="row g-2">
+                              <div className="col-6">
+                                <label className="row g-0 p-2 border" style={{ cursor: 'pointer' }}>
+                                  <span className="col small">Upload Email</span>
+                                  <span className="col-auto">
+                                    <label className="form-check form-check-single form-switch mb-0">
+                                      <input
+                                        type="checkbox"
+                                        className="form-check-input"
+                                        name="sendInvoiceEmail"
+                                        checked={formData.sendInvoiceEmail || false}
+                                        onChange={handleInputChange}
+                                      />
+                                    </label>
+                                  </span>
+                                </label>
+                              </div>
+                              <div className="col-6">
+                                <label 
+                                  className="row g-0 p-2 border" 
+                                  style={{ cursor: formData.sendInvoiceEmail ? 'pointer' : 'default', opacity: formData.sendInvoiceEmail ? 1 : 0.5 }}
+                                >
+                                  <span className="col small">With Attachment</span>
+                                  <span className="col-auto">
+                                    <label className="form-check form-check-single form-switch mb-0">
+                                      <input
+                                        type="checkbox"
+                                        className="form-check-input"
+                                        name="sendInvoiceAttachment"
+                                        checked={formData.sendInvoiceAttachment || false}
+                                        onChange={handleInputChange}
+                                        disabled={!formData.sendInvoiceEmail}
+                                      />
+                                    </label>
+                                  </span>
+                                </label>
+                              </div>
+                              <div className="col-6">
+                                <label className="row g-0 p-2 border" style={{ cursor: 'pointer' }}>
+                                  <span className="col small">Statement Email</span>
+                                  <span className="col-auto">
+                                    <label className="form-check form-check-single form-switch mb-0">
+                                      <input
+                                        type="checkbox"
+                                        className="form-check-input"
+                                        name="sendStatementEmail"
+                                        checked={formData.sendStatementEmail || false}
+                                        onChange={handleInputChange}
+                                      />
+                                    </label>
+                                  </span>
+                                </label>
+                              </div>
+                              <div className="col-6">
+                                <label 
+                                  className="row g-0 p-2 border" 
+                                  style={{ cursor: formData.sendStatementEmail ? 'pointer' : 'default', opacity: formData.sendStatementEmail ? 1 : 0.5 }}
+                                >
+                                  <span className="col small">With Attachment</span>
+                                  <span className="col-auto">
+                                    <label className="form-check form-check-single form-switch mb-0">
+                                      <input
+                                        type="checkbox"
+                                        className="form-check-input"
+                                        name="sendStatementAttachment"
+                                        checked={formData.sendStatementAttachment || false}
+                                        onChange={handleInputChange}
+                                        disabled={!formData.sendStatementEmail}
+                                      />
+                                    </label>
+                                  </span>
+                                </label>
+                              </div>
+                              <div className="col-12">
+                                <label 
+                                  className="row g-0 p-2 border" 
+                                  style={{ cursor: (formData.sendInvoiceEmail || formData.sendStatementEmail) ? 'pointer' : 'default', opacity: (formData.sendInvoiceEmail || formData.sendStatementEmail) ? 1 : 0.5 }}
+                                >
+                                  <span className="col small">Send as Summary</span>
+                                  <span className="col-auto">
+                                    <label className="form-check form-check-single form-switch mb-0">
+                                      <input
+                                        type="checkbox"
+                                        className="form-check-input"
+                                        name="sendEmailAsSummary"
+                                        checked={formData.sendEmailAsSummary || false}
+                                        onChange={handleInputChange}
+                                        disabled={!formData.sendInvoiceEmail && !formData.sendStatementEmail}
+                                      />
+                                    </label>
+                                  </span>
+                                </label>
+                              </div>
+                            </div>
+                            <small className="form-hint mt-1">Receive one summary email per import instead of individual emails</small>
+                          </div>
+                          
+                          {/* Company Assignment */}
+                          <h4 className="mb-3">Company Assignment</h4>
+                          
+                          {/* All Companies Toggle */}
+                          <div className="mb-3">
+                            <label className="row">
+                              <span className="col">All Companies</span>
+                              <span className="col-auto">
+                                <label className="form-check form-check-single form-switch">
+                                  <input
+                                    className="form-check-input"
+                                    type="checkbox"
+                                    name="allCompanies"
+                                    checked={formData.allCompanies || false}
+                                    onChange={handleAllCompaniesToggle}
+                                  />
+                                </label>
+                              </span>
+                            </label>
+                            {formData.allCompanies && (
+                              <small className="text-muted d-block mt-2">
+                                When enabled, this user can view all invoices, credit notes, and statements from all companies in the database, including any new companies added in the future. Individual company assignments are disabled.
+                              </small>
+                            )}
+                          </div>
+                          
+                          {!formData.allCompanies && (
+                            <>
+                              <button
+                                type="button"
+                                className={`btn w-100 mb-3 ${formData.companyIds?.length > 0 ? 'btn-primary' : 'btn-outline-secondary'}`}
+                                onClick={() => setShowCompanyAssignmentModal(true)}
+                              >
+                                {formData.companyIds?.length > 0 
+                                  ? `${formData.companyIds.length} Compan${formData.companyIds.length !== 1 ? 'ies' : 'y'} Selected` 
+                                  : 'Select Companies...'}
+                              </button>
+                              
+                              {/* Show selected company names */}
+                              {formData.companyIds?.length > 0 && formData.companyIds.length <= 10 && userAssignedCompanyObjects.length > 0 && (
+                                <div className="d-flex flex-wrap gap-1 mb-2">
+                                  {userAssignedCompanyObjects
+                                    .filter(c => formData.companyIds.includes(c.id))
+                                    .map(company => (
+                                      <span key={company.id} className="badge bg-primary-lt">
+                                        {company.name} {company.referenceNo && `(${company.referenceNo})`}
+                                      </span>
+                                    ))}
+                                </div>
+                              )}
+                              
+                              {formData.companyIds?.length > 10 && (
+                                <div className="mb-2">
+                                  <small className="text-muted">
+                                    {formData.companyIds.length} companies selected
+                                  </small>
+                                </div>
+                              )}
+                            </>
+                          )}
+                          
+                          {formData.allCompanies && (
+                            <div className="flex-grow-1 d-flex align-items-center justify-content-center" style={{ minHeight: '250px', maxHeight: '300px', border: '1px solid #dee2e6', borderRadius: '4px', padding: '20px' }}>
+                              <div className="text-center text-muted">
+                                <p className="mb-0">All companies are assigned to this user.</p>
+                                <p className="mb-0 small mt-2">Disable "All Companies" to assign specific companies.</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
+                      
+                      <hr className="my-4" />
                       
                       <div className="d-flex gap-2">
                         <button
@@ -293,7 +519,17 @@ const PendingAccounts = () => {
           </div>
         </div>
       </div>
-    );
+      {/* Company Assignment Modal */}
+      {showCompanyAssignmentModal && (
+        <HierarchicalCompanyFilter
+          selectedCompanyIds={formData.companyIds || []}
+          onSelectionChange={handleCompanyAssignmentChange}
+          onClose={() => setShowCompanyAssignmentModal(false)}
+          onApply={() => setShowCompanyAssignmentModal(false)}
+        />
+      )}
+    </>
+  );
   }
   
   // List view
@@ -416,6 +652,15 @@ const PendingAccounts = () => {
           </div>
         </div>
       </div>
+      {/* Company Assignment Modal */}
+      {showCompanyAssignmentModal && (
+        <HierarchicalCompanyFilter
+          selectedCompanyIds={formData.companyIds || []}
+          onSelectionChange={handleCompanyAssignmentChange}
+          onClose={() => setShowCompanyAssignmentModal(false)}
+          onApply={() => setShowCompanyAssignmentModal(false)}
+        />
+      )}
     </div>
   );
 };
