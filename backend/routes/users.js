@@ -99,7 +99,7 @@ router.get('/', canManageUsers, async (req, res) => {
     const { count, rows: users } = await User.findAndCountAll({
       where,
       attributes: { 
-        exclude: ['password', 'twoFactorSecret', 'resetPasswordToken', 'resetPasswordExpires'],
+        exclude: ['password', 'twoFactorSecret', 'resetPasswordToken', 'resetPasswordExpires', 'emailChangeToken'],
         include: [
           // Add company count as a subquery
           [
@@ -213,7 +213,7 @@ router.get('/:id', canManageUsers, async (req, res) => {
     }
     
     const user = await User.findByPk(userId, {
-      attributes: { exclude: ['password', 'twoFactorSecret', 'resetPasswordToken', 'resetPasswordExpires'] },
+      attributes: { exclude: ['password', 'twoFactorSecret', 'resetPasswordToken', 'resetPasswordExpires', 'emailChangeToken'] },
       include: [
         {
           model: User,
@@ -789,9 +789,40 @@ router.put('/:id', canManageUsers, async (req, res) => {
       return res.status(400).json({ message: 'Cannot send summary emails without enabling at least invoice or statement emails' });
     }
     
+    // Track email change for notification
+    const oldEmail = user.email;
+    let emailChanged = false;
+    
     // Update fields
     if (req.body.name !== undefined) user.name = req.body.name;
-    if (req.body.email !== undefined) user.email = req.body.email;
+    if (req.body.email !== undefined) {
+      const newEmail = req.body.email.trim().toLowerCase();
+      
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(newEmail)) {
+        return res.status(400).json({ message: 'Invalid email format' });
+      }
+      
+      // Check if email is the same
+      if (user.email.toLowerCase() === newEmail) {
+        // Email unchanged, no need to update
+      } else {
+        // Check if email is already in use by another user
+        const existingUser = await User.findOne({ where: { email: newEmail } });
+        if (existingUser && existingUser.id !== user.id) {
+          return res.status(400).json({ message: 'Email is already in use' });
+        }
+        
+        user.email = newEmail;
+        emailChanged = true;
+        
+        // Clear any pending email change tokens
+        user.pendingEmail = null;
+        user.emailChangeToken = null;
+        user.emailChangeExpires = null;
+      }
+    }
     if (req.body.role !== undefined) user.role = req.body.role;
     if (req.body.isActive !== undefined) user.isActive = req.body.isActive;
     if (allCompanies !== undefined) user.allCompanies = allCompanies;
@@ -803,6 +834,52 @@ router.put('/:id', canManageUsers, async (req, res) => {
     if (sendImportSummaryReport !== undefined) user.sendImportSummaryReport = sendImportSummaryReport;
     
     await user.save();
+    
+    // Send email notification if email was changed by admin
+    if (emailChanged) {
+      try {
+        const Settings = require('../models/Settings');
+        const settings = await Settings.getSettings();
+        
+        const { isEmailEnabled } = require('../utils/emailService');
+        if (isEmailEnabled(settings)) {
+          const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
+          await sendTemplatedEmail(
+            'email-change-admin',
+            user.email,
+            {
+              userName: user.name || user.email,
+              newEmail: user.email,
+              oldEmail: oldEmail,
+              changedBy: req.user.email || 'Administrator'
+            },
+            settings
+          );
+        }
+      } catch (emailError) {
+        // Don't fail the update if email fails
+        console.warn('Failed to send email change notification:', emailError.message);
+      }
+      
+      // Log email change activity
+      await logActivity({
+        type: ActivityType.EMAIL_CHANGE_ADMIN,
+        userId: req.user.userId,
+        userEmail: req.user.email,
+        userRole: req.user.role,
+        action: `Changed email for user ${user.name} from ${oldEmail} to ${user.email}`,
+        details: {
+          targetUserId: user.id,
+          targetUserName: user.name,
+          oldEmail: oldEmail,
+          newEmail: user.email
+        },
+        companyId: null,
+        companyName: null,
+        ipAddress: req.ip || req.connection.remoteAddress,
+        userAgent: req.get('user-agent')
+      });
+    }
     
     // Log user update
     await logActivity({
@@ -1071,6 +1148,12 @@ router.delete('/:id', requirePermission('USERS_DELETE'), async (req, res) => {
     if (!canManage) {
       console.error('[Delete User] Access denied: Cannot manage this user');
       return res.status(403).json({ message: 'Access denied' });
+    }
+    
+    // Only Global Admins can delete Administrators
+    if (user.role === 'administrator' && req.user.role !== 'global_admin') {
+      console.error('[Delete User] Access denied: Only Global Administrators can delete Administrators');
+      return res.status(403).json({ message: 'Only Global Administrators can delete Administrators' });
     }
     
     // Store user info before deletion for logging

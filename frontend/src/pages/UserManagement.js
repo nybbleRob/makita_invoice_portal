@@ -391,6 +391,18 @@ const UserManagement = () => {
   const handleCreateUser = async (e) => {
     e.preventDefault();
     try {
+      // Validate password if provided
+      if (passwordData.password) {
+        if (passwordData.password !== passwordData.confirmPassword) {
+          toast.error('Passwords do not match');
+          return;
+        }
+        if (!isPasswordValid()) {
+          toast.error('Password does not meet requirements');
+          return;
+        }
+      }
+      
       // Validate email preferences
       if (formData.sendInvoiceAttachment && !formData.sendInvoiceEmail) {
         toast.error('Cannot send invoice attachments without enabling invoice emails');
@@ -405,7 +417,13 @@ const UserManagement = () => {
         return;
       }
       
-      await api.post('/api/users', formData);
+      // Use password from passwordData if provided, otherwise use empty string (will create temporary password)
+      const userData = {
+        ...formData,
+        password: passwordData.password || ''
+      };
+      
+      await api.post('/api/users', userData);
       toast.success('User created successfully!');
       setShowModal(false);
       resetForm();
@@ -429,6 +447,17 @@ const UserManagement = () => {
       sendEmailAsSummary: false,
       sendImportSummaryReport: false,
       companyIds: []
+    });
+    setPasswordData({
+      password: '',
+      confirmPassword: ''
+    });
+    setPasswordRequirements({
+      minLength: false,
+      hasUpperCase: false,
+      hasLowerCase: false,
+      hasNumber: false,
+      hasSymbol: false
     });
     setUserAssignedCompanyObjects([]);
   };
@@ -466,6 +495,17 @@ const UserManagement = () => {
     setShowPasswordModal(false);
     setSelectedUser(null);
     setUserAssignedCompanyObjects([]);
+    setPasswordData({
+      password: '',
+      confirmPassword: ''
+    });
+    setPasswordRequirements({
+      minLength: false,
+      hasUpperCase: false,
+      hasLowerCase: false,
+      hasNumber: false,
+      hasSymbol: false
+    });
     resetForm();
   };
 
@@ -530,6 +570,52 @@ const UserManagement = () => {
       fetchUsers(); // Refresh user list
     } catch (error) {
       toast.error('Error unlocking account: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  // Helper function to check if current user can manage target user's role
+  const canManageUserRole = (targetRole) => {
+    if (!currentUser) return false;
+    const currentRole = currentUser.role;
+    
+    // Global Admin can manage all roles (including other Global Admins)
+    if (currentRole === 'global_admin') {
+      return true;
+    }
+    
+    // Administrator can manage roles below their level
+    if (currentRole === 'administrator') {
+      const ROLE_HIERARCHY = {
+        global_admin: 7,
+        administrator: 6,
+        manager: 5,
+        credit_senior: 4,
+        credit_controller: 3,
+        external_user: 2,
+        notification_contact: 1
+      };
+      const currentLevel = ROLE_HIERARCHY[currentRole] || 0;
+      const targetLevel = ROLE_HIERARCHY[targetRole] || 0;
+      return currentLevel > targetLevel;
+    }
+    
+    return false;
+  };
+
+  const handleReset2FA = async () => {
+    if (!selectedUser) return;
+    
+    const confirmMessage = `Are you sure you want to reset 2FA for ${selectedUser.name}? They will need to set up 2FA again on their next login.`;
+    if (!window.confirm(confirmMessage)) return;
+    
+    try {
+      await api.delete(`/api/users/${selectedUser.id}/two-factor`);
+      toast.success('2FA reset successfully!');
+      fetchUsers(); // Refresh user list to reflect the change
+      // Update selectedUser state to reflect 2FA is now disabled
+      setSelectedUser({ ...selectedUser, twoFactorEnabled: false, twoFactorVerified: false });
+    } catch (error) {
+      toast.error('Error resetting 2FA: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -936,6 +1022,14 @@ const UserManagement = () => {
                       onClick={() => {
                         setSelectedUser(null);
                         setFormData({ name: '', email: '', password: '', role: 'external_user' });
+                        setPasswordData({ password: '', confirmPassword: '' });
+                        setPasswordRequirements({
+                          minLength: false,
+                          hasUpperCase: false,
+                          hasLowerCase: false,
+                          hasNumber: false,
+                          hasSymbol: false
+                        });
                         setShowModal(true);
                       }}
                     >
@@ -1079,7 +1173,9 @@ const UserManagement = () => {
                                   {user.isActive ? 'Deactivate' : 'Activate'}
                                 </button>
                               )}
-                              {user.id !== currentUser?.id && (
+                              {user.id !== currentUser?.id && 
+                               // Only Global Admins can delete Administrators
+                               !(user.role === 'administrator' && currentUser?.role === 'administrator') && (
                                 <button
                                   className="btn btn-sm btn-danger"
                                   onClick={() => handleDeleteUser(user.id)}
@@ -1183,7 +1279,6 @@ const UserManagement = () => {
                       value={formData.email || ''}
                       onChange={handleInputChange}
                       required
-                      disabled={!!selectedUser}
                     />
                   </div>
                   <div className="mb-3">
@@ -1202,20 +1297,130 @@ const UserManagement = () => {
                       ))}
                     </select>
                   </div>
-                  {/* Password field for new users - hidden for notification_contact role */}
+                  {/* Password Management Section for new users - hidden for notification_contact role */}
                   {!selectedUser && formData.role !== 'notification_contact' && (
-                    <div className="mb-3">
-                      <label className="form-label">Password</label>
-                      <input
-                        type="password"
-                        className="form-control"
-                        name="password"
-                        value={formData.password || ''}
-                        onChange={handleInputChange}
-                        placeholder="Leave empty for temporary password"
-                        autoComplete="new-password"
-                      />
-                    </div>
+                    <>
+                      <hr className="my-4" />
+                      <h4 className="mb-3">Password Management</h4>
+                      <div className="mb-3">
+                        <label className="form-label">Password</label>
+                        <div className="input-group">
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            className="form-control"
+                            name="password"
+                            value={passwordData.password || ''}
+                            onChange={handlePasswordDataChange}
+                            autoComplete="new-password"
+                            placeholder="Leave empty to create user with temporary password"
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-outline-secondary"
+                            onClick={() => setShowPassword(!showPassword)}
+                            title={showPassword ? 'Hide password' : 'Show password'}
+                          >
+                            {showPassword ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                                <line x1="1" y1="1" x2="23" y2="23"></line>
+                              </svg>
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                              </svg>
+                            )}
+                          </button>
+                          {passwordData.password && (
+                            <button
+                              type="button"
+                              className="btn btn-outline-secondary"
+                              onClick={copyPassword}
+                              title="Copy password"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-info mb-2"
+                            onClick={generatePassword}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="me-1">
+                              <path d="M21 12v1a10 10 0 1 1-9-10"></path>
+                              <path d="M12 3v9"></path>
+                              <path d="M21 12h-9"></path>
+                            </svg>
+                            Generate Password
+                          </button>
+                          {passwordData.password && (
+                            <div className="d-flex flex-wrap gap-2">
+                              <div className={`badge ${passwordRequirements.minLength ? 'bg-success-lt' : 'bg-secondary-lt'}`}>
+                                {passwordRequirements.minLength ? '✓' : '✗'} 8+ Characters
+                              </div>
+                              <div className={`badge ${passwordRequirements.hasUpperCase ? 'bg-success-lt' : 'bg-secondary-lt'}`}>
+                                {passwordRequirements.hasUpperCase ? '✓' : '✗'} Uppercase
+                              </div>
+                              <div className={`badge ${passwordRequirements.hasLowerCase ? 'bg-success-lt' : 'bg-secondary-lt'}`}>
+                                {passwordRequirements.hasLowerCase ? '✓' : '✗'} Lowercase
+                              </div>
+                              <div className={`badge ${passwordRequirements.hasNumber ? 'bg-success-lt' : 'bg-secondary-lt'}`}>
+                                {passwordRequirements.hasNumber ? '✓' : '✗'} Number
+                              </div>
+                              <div className={`badge ${passwordRequirements.hasSymbol ? 'bg-success-lt' : 'bg-secondary-lt'}`}>
+                                {passwordRequirements.hasSymbol ? '✓' : '✗'} Symbol
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mb-3">
+                        <label className="form-label">Confirm Password</label>
+                        <div className="input-group">
+                          <input
+                            type={showConfirmPassword ? 'text' : 'password'}
+                            className="form-control"
+                            name="confirmPassword"
+                            value={passwordData.confirmPassword || ''}
+                            onChange={handlePasswordDataChange}
+                            autoComplete="new-password"
+                            placeholder="Confirm password"
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-outline-secondary"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                          >
+                            {showConfirmPassword ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                                <line x1="1" y1="1" x2="23" y2="23"></line>
+                              </svg>
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                        {passwordData.confirmPassword && passwordData.password !== passwordData.confirmPassword && (
+                          <small className="text-danger">Passwords do not match</small>
+                        )}
+                      </div>
+                      <div className="mb-3">
+                        <small className="form-hint d-block">
+                          Leave password field empty to create the user with a temporary password. They will be forced to change this on first time login.
+                        </small>
+                      </div>
+                    </>
                   )}
                   {!selectedUser && formData.role === 'notification_contact' && (
                     <div className="alert alert-info mb-3">
@@ -1359,6 +1564,38 @@ const UserManagement = () => {
                         </button>
                         <small className="form-hint d-block mt-2">
                           Reset Password: Set a new password manually. Reset With Temporary Password: Generates a temporary password and sends it via email.
+                        </small>
+                      </div>
+                    </>
+                  )}
+                  {/* Two-Factor Authentication Section */}
+                  {selectedUser && 
+                   (currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') &&
+                   canManageUserRole(selectedUser.role) &&
+                   selectedUser.twoFactorEnabled && (
+                    <>
+                      <hr className="my-4" />
+                      <h4 className="mb-3">Two-Factor Authentication</h4>
+                      <div className="mb-3">
+                        <label className="form-label">Status</label>
+                        <div className="mb-2">
+                          <span className="badge bg-success-lt">Enabled</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-warning btn-sm"
+                          onClick={handleReset2FA}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="me-1">
+                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                            <path d="M21 3v5h-5"></path>
+                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                            <path d="M3 21v-5h5"></path>
+                          </svg>
+                          Reset 2FA
+                        </button>
+                        <small className="form-hint d-block mt-2">
+                          Resetting 2FA will clear the user's 2FA configuration. They will need to set up 2FA again on their next login.
                         </small>
                       </div>
                     </>

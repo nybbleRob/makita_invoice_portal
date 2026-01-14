@@ -481,6 +481,44 @@ ${fromName}
   }
 });
 
+// Validate email change token
+router.get('/validate-email-change', async (req, res) => {
+  try {
+    const { token } = req.query;
+    const crypto = require('crypto');
+    
+    if (!token) {
+      return res.status(400).json({ message: 'Validation token is required' });
+    }
+    
+    // Hash the token
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    
+    // Find user with matching token and valid expiration
+    const user = await User.findOne({
+      where: {
+        emailChangeToken: tokenHash,
+        emailChangeExpires: {
+          [require('sequelize').Op.gt]: new Date()
+        }
+      }
+    });
+    
+    if (!user || !user.pendingEmail) {
+      return res.status(400).json({ message: 'Invalid or expired validation token' });
+    }
+    
+    res.json({ 
+      valid: true,
+      message: 'Token is valid',
+      pendingEmail: user.pendingEmail
+    });
+  } catch (error) {
+    console.error('Validate email change token error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Validate reset token
 router.get('/validate-reset-token', async (req, res) => {
   try {

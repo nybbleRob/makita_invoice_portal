@@ -15,6 +15,10 @@ const Profile = () => {
     name: '',
     email: ''
   });
+  const [emailChangeData, setEmailChangeData] = useState({
+    newEmail: '',
+    pendingEmail: null
+  });
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -38,6 +42,10 @@ const Profile = () => {
         name: response.data.name,
         email: response.data.email
       });
+      setEmailChangeData({
+        newEmail: '',
+        pendingEmail: response.data.pendingEmail || null
+      });
       // Set assigned companies if available
       if (response.data.companies) {
         setAssignedCompanies(response.data.companies);
@@ -59,6 +67,37 @@ const Profile = () => {
       toast.success('Profile updated successfully!');
     } catch (error) {
       toast.error('Error updating profile: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEmailChangeRequest = async (e) => {
+    e.preventDefault();
+    if (!emailChangeData.newEmail) {
+      toast.error('Please enter a new email address');
+      return;
+    }
+    
+    if (emailChangeData.newEmail.toLowerCase() === formData.email.toLowerCase()) {
+      toast.error('New email must be different from current email');
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      const response = await api.post('/api/profile/request-email-change', {
+        newEmail: emailChangeData.newEmail
+      });
+      toast.success(`Validation email sent to ${response.data.pendingEmail}. Please check your email and click the validation link.`);
+      setEmailChangeData({
+        newEmail: '',
+        pendingEmail: response.data.pendingEmail
+      });
+      // Refresh profile to get updated pendingEmail
+      await fetchProfile();
+    } catch (error) {
+      toast.error('Error requesting email change: ' + (error.response?.data?.message || error.message));
     } finally {
       setSaving(false);
     }
@@ -182,14 +221,57 @@ const Profile = () => {
                           </div>
                           <div className="col-md-6">
                             <div className="form-label">Email</div>
-                            <input
-                              type="email"
-                              className="form-control"
-                              value={formData.email}
-                              disabled
-                            />
-                            <small className="form-hint">Email cannot be changed</small>
+                            {emailChangeData.pendingEmail ? (
+                              <>
+                                <input
+                                  type="email"
+                                  className="form-control"
+                                  value={formData.email}
+                                  disabled
+                                />
+                                <small className="form-hint text-warning">
+                                  Pending: {emailChangeData.pendingEmail} - Please check your email and click the validation link.
+                                </small>
+                              </>
+                            ) : (
+                              <>
+                                <input
+                                  type="email"
+                                  className="form-control"
+                                  value={formData.email}
+                                  disabled
+                                />
+                                <small className="form-hint">To change your email, use the form below</small>
+                              </>
+                            )}
                           </div>
+                        </div>
+                        {!emailChangeData.pendingEmail && (
+                          <div className="row g-3 mt-0">
+                            <div className="col-md-12">
+                              <div className="form-label">Change Email Address</div>
+                              <div className="input-group">
+                                <input
+                                  type="email"
+                                  className="form-control"
+                                  placeholder="Enter new email address"
+                                  value={emailChangeData.newEmail}
+                                  onChange={(e) => setEmailChangeData({ ...emailChangeData, newEmail: e.target.value })}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  onClick={handleEmailChangeRequest}
+                                  disabled={saving || !emailChangeData.newEmail}
+                                >
+                                  Request Change
+                                </button>
+                              </div>
+                              <small className="form-hint">A validation email will be sent to your new email address. The link expires in 30 minutes.</small>
+                            </div>
+                          </div>
+                        )}
+                        <div className="row g-3 mt-0">
                         </div>
                         <div className="row g-3 mt-0">
                           <div className="col-md-6">

@@ -90,6 +90,21 @@ module.exports = (sequelize) => {
       type: DataTypes.DATE,
       allowNull: true
     },
+    pendingEmail: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'New email address pending validation'
+    },
+    emailChangeToken: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Hashed token for email change validation'
+    },
+    emailChangeExpires: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'Expiration timestamp for email change token (30 minutes)'
+    },
     twoFactorSecret: {
       type: DataTypes.STRING,
       allowNull: true
@@ -242,6 +257,7 @@ module.exports = (sequelize) => {
     delete user.twoFactorSecret;
     delete user.resetPasswordToken;
     delete user.resetPasswordExpires;
+    delete user.emailChangeToken;
     return user;
   };
 

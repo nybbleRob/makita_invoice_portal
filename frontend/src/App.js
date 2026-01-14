@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import ValidateEmailChange from './pages/ValidateEmailChange';
 import TwoFactorSetup from './pages/TwoFactorSetup';
 import TwoFactorVerify from './pages/TwoFactorVerify';
 import ChangePassword from './pages/ChangePassword';
@@ -140,6 +141,7 @@ function AppRoutes() {
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/validate-email-change" element={<ValidateEmailChange />} />
       <Route path="/two-factor-setup" element={<TwoFactorSetup />} />
       <Route path="/two-factor-verify" element={<TwoFactorVerify />} />
       <Route path="/change-password" element={<ChangePassword />} />

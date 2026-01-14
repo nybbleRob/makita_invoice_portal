@@ -41,18 +41,27 @@ const PORTAL_ACCESS_ROLES = ['global_admin', 'administrator', 'manager', 'credit
 /**
  * Check if user can manage another user based on roles
  * Global admins can manage all roles including other global admins
+ * Administrators can manage other Administrators and roles below
  */
 function canManageRole(userRole, targetRole) {
   // Global admins can manage all roles including other global admins
   if (userRole === 'global_admin') {
     return true;
   }
+  
+  // Administrators can manage other Administrators and roles below
+  if (userRole === 'administrator') {
+    return ROLE_HIERARCHY[userRole] >= ROLE_HIERARCHY[targetRole];
+  }
+  
+  // Other roles can only manage roles below their level
   return ROLE_HIERARCHY[userRole] > ROLE_HIERARCHY[targetRole];
 }
 
 /**
  * Get all roles a user can manage (create/edit)
  * Global admins can manage all roles including other global admins
+ * Administrators can manage other Administrators and roles below
  */
 function getManageableRoles(userRole) {
   // Global admins can manage all roles including other global admins
@@ -60,6 +69,15 @@ function getManageableRoles(userRole) {
     return Object.keys(ROLE_HIERARCHY);
   }
   
+  // Administrators can manage other Administrators and roles below
+  if (userRole === 'administrator') {
+    const userLevel = ROLE_HIERARCHY[userRole];
+    return Object.keys(ROLE_HIERARCHY).filter(
+      role => ROLE_HIERARCHY[role] <= userLevel
+    );
+  }
+  
+  // Other roles can only manage roles below their level
   const userLevel = ROLE_HIERARCHY[userRole];
   return Object.keys(ROLE_HIERARCHY).filter(
     role => ROLE_HIERARCHY[role] < userLevel

@@ -85,6 +85,15 @@ function getResetPasswordUrl(token) {
 }
 
 /**
+ * Get the email change validation URL with token
+ * @param {string} token - Email change validation token
+ * @returns {string} Email change validation URL
+ */
+function getEmailChangeValidationUrl(token) {
+  return `${getFrontendUrl()}/validate-email-change?token=${token}`;
+}
+
+/**
  * Get a document view URL
  * @param {string} documentType - Document type (invoices, credit-notes, statements)
  * @param {string} documentId - Document ID
@@ -99,5 +108,6 @@ module.exports = {
   getBackendUrl,
   getLoginUrl,
   getResetPasswordUrl,
+  getEmailChangeValidationUrl,
   getDocumentUrl
 };
