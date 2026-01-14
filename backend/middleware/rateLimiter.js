@@ -126,6 +126,16 @@ const rateLimiters = {
     },
   }),
 
+  // Rate limiter for registration
+  registration: createRateLimiter({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 5, // 5 registration attempts per hour
+    message: 'Too many registration attempts, please try again later.',
+    keyGenerator: (req) => {
+      return req.body?.email || req.ip || 'unknown';
+    },
+  }),
+
   // Rate limiter for 2FA
   twoFactor: createRateLimiter({
     windowMs: 5 * 60 * 1000, // 5 minutes

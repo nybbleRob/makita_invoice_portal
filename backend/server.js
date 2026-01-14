@@ -514,7 +514,7 @@ app.use('/api/suppliers', require('./routes/suppliers'));
 app.use('/api/supplier-templates', require('./routes/supplierTemplates'));
 app.use('/api/supplier-documents', require('./routes/supplierDocuments'));
 app.use('/api/activity-logs', require('./routes/activityLogs'));
-app.use('/api/registration', require('./routes/registration'));
+app.use('/api/registration', rateLimiters.registration, require('./routes/registration'));
 app.use('/api/pending-registrations', require('./routes/pendingRegistrations'));
 app.use('/api/users/import', require('./routes/userImport'));
 app.use('/api/import-settings', require('./routes/importSettings'));
