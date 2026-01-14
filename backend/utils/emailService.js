@@ -76,11 +76,24 @@ function getPooledTransporter(smtpConfig) {
   // For localhost/MailHog, disable TLS certificate validation
   const isLocalhost = host === '127.0.0.1' || host === 'localhost';
   
+  // Determine secure flag based on port (safety check)
+  // Port 25 = unencrypted, Port 587 = STARTTLS (secure: false), Port 465 = SSL/TLS (secure: true)
+  const port = smtpConfig.port || 587;
+  let secure = smtpConfig.secure || false;
+  if (port === 25) {
+    // Port 25 is always unencrypted - force secure to false
+    secure = false;
+  } else if (port === 465) {
+    // Port 465 requires SSL/TLS - force secure to true
+    secure = true;
+  }
+  // Port 587 and others use STARTTLS (secure: false, but TLS is negotiated)
+  
   // Create pooled transporter
   const transporter = nodemailer.createTransport({
     host: host,
-    port: smtpConfig.port || 587,
-    secure: smtpConfig.secure || false, // true for 465, false for other ports
+    port: port,
+    secure: secure,
     ...authConfig,
     tls: {
       rejectUnauthorized: isLocalhost ? false : (smtpConfig.rejectUnauthorized !== false)
@@ -199,13 +212,28 @@ function getEmailProviderConfig(settings) {
   if (provider === 'smtp') {
     // Use env vars for credentials, database for other config
     const dbConfig = settings?.emailProvider?.smtp || {};
+    const port = parseInt(process.env.SMTP_PORT || dbConfig.port || '587');
+    
+    // Automatically set secure based on port: 465 = SSL/TLS, others = STARTTLS or unencrypted
+    // Port 25 is unencrypted, port 587 uses STARTTLS (secure: false), port 465 uses SSL (secure: true)
+    let secure = false;
+    if (process.env.SMTP_SECURE === 'true') {
+      secure = true;
+    } else if (dbConfig.secure === true) {
+      secure = true;
+    } else if (port === 465) {
+      secure = true; // Port 465 requires SSL/TLS
+    } else {
+      secure = false; // Port 25, 587, etc. use STARTTLS or are unencrypted
+    }
+    
     return {
       enabled: settings?.emailProvider?.enabled || (process.env.SMTP_HOST ? true : false),
       provider: 'smtp',
       smtp: {
         host: process.env.SMTP_HOST || dbConfig.host || '',
-        port: parseInt(process.env.SMTP_PORT || dbConfig.port || '587'),
-        secure: process.env.SMTP_SECURE === 'true' || dbConfig.secure || false,
+        port: port,
+        secure: secure,
         auth: {
           user: process.env.SMTP_USER || dbConfig.auth?.user || '',
           password: process.env.SMTP_PASSWORD || dbConfig.auth?.password || '' // Env var takes priority
