@@ -2609,11 +2609,12 @@ const Settings = () => {
                                   onChange={(e) => handleEmailProviderNestedChange('smtp', 'port', parseInt(e.target.value))}
                                   disabled={!settings.emailProvider?.enabled}
                                 />
+                                <small className="form-hint">Common ports: 25 (unencrypted), 587 (STARTTLS), 465 (SSL/TLS)</small>
                               </div>
                             </div>
                             <div className="row g-3 mt-0">
                               <div className="col-md-6">
-                                <label className="form-label">Username</label>
+                                <label className="form-label">Username <span className="text-muted">(Optional)</span></label>
                                 <input
                                   type="text"
                                   className="form-control"
@@ -2622,9 +2623,10 @@ const Settings = () => {
                                   placeholder="your-email@example.com"
                                   disabled={!settings.emailProvider?.enabled}
                                 />
+                                <small className="form-hint">Leave blank if your SMTP server doesn't require authentication</small>
                               </div>
                               <div className="col-md-6">
-                                <label className="form-label">Password</label>
+                                <label className="form-label">Password <span className="text-muted">(Optional)</span></label>
                                 <input
                                   type="password"
                                   className="form-control"
@@ -2634,6 +2636,7 @@ const Settings = () => {
                                   autoComplete="new-password"
                                   disabled={!settings.emailProvider?.enabled}
                                 />
+                                <small className="form-hint">Leave blank if your SMTP server doesn't require authentication</small>
                               </div>
                             </div>
                             <div className="row g-3 mt-0">
@@ -2669,8 +2672,9 @@ const Settings = () => {
                                   onChange={(e) => handleEmailProviderNestedChange('smtp', 'secure', e.target.checked)}
                                   disabled={!settings.emailProvider?.enabled}
                                 />
-                                <span className="form-check-label">Use SSL/TLS (Port 465)</span>
+                                <span className="form-check-label">Use SSL/TLS (Required for port 465, not needed for port 25)</span>
                               </label>
+                              <small className="form-hint d-block mt-1">Port 25 is standard unencrypted SMTP. Port 465 requires SSL/TLS. Port 587 uses STARTTLS (handled automatically).</small>
                             </div>
                           </div>
                         </div>

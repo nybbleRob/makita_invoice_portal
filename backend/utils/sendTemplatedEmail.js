@@ -154,13 +154,15 @@ function getBrandingVariables(settings) {
   const loginUrl = getLoginUrl();
   
   // Build logo URL
+  // Logos are stored as paths like "/uploads/logo-xxx.png" and served directly at /uploads/
   let logoUrl = '';
   if (settings?.logoLight) {
     if (settings.logoLight.startsWith('http')) {
       logoUrl = settings.logoLight;
     } else {
       const backendUrl = getBackendUrl();
-      logoUrl = `${backendUrl}/api/uploads/${settings.logoLight}`;
+      // Logo path already includes /uploads/, so just append to backend URL
+      logoUrl = `${backendUrl}${settings.logoLight.startsWith('/') ? '' : '/'}${settings.logoLight}`;
     }
   }
   

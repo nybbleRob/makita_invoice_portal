@@ -399,6 +399,17 @@ router.post('/forgot-password', recaptchaMiddleware({ minScore: 0.5 }), async (r
             settings.emailProvider?.smtp2go?.fromName ||
             'Makita Invoice Portal';
           
+          // Calculate expiry time for email (1 hour = 3600000ms)
+          const expiryMs = user.resetPasswordExpires - Date.now();
+          const expiryHours = Math.floor(expiryMs / (1000 * 60 * 60));
+          const expiryMinutes = Math.floor((expiryMs % (1000 * 60 * 60)) / (1000 * 60));
+          let expiryTime = '1 hour'; // Default
+          if (expiryHours > 0) {
+            expiryTime = expiryHours === 1 ? '1 hour' : `${expiryHours} hours`;
+          } else if (expiryMinutes > 0) {
+            expiryTime = expiryMinutes === 1 ? '1 minute' : `${expiryMinutes} minutes`;
+          }
+          
           // Try to use email template, fallback to hardcoded if template not found
           try {
             const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
@@ -408,7 +419,8 @@ router.post('/forgot-password', recaptchaMiddleware({ minScore: 0.5 }), async (r
               {
                 userName: user.name,
                 userEmail: user.email,
-                resetUrl: resetUrl
+                resetUrl: resetUrl,
+                expiryTime: expiryTime
               },
               settings
             );
