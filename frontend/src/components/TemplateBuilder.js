@@ -1435,7 +1435,7 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
                   type="button"
                   className="btn btn-primary"
                   onClick={handleTestParse}
-                  disabled={!pdfFile && !testFile || testing}
+                  disabled={(!pdfFile && !testFile) || testing}
                 >
                   {testing ? (
                     <>

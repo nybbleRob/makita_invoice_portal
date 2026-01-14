@@ -27,7 +27,7 @@ import InvoiceView from './pages/InvoiceView';
 import InvoiceEdit from './pages/InvoiceEdit';
 import CreditNotes from './pages/CreditNotes';
 import CreditNoteView from './pages/CreditNoteView';
-import Statements from './pages/Statements';
+// import Statements from './pages/Statements'; // Unused - route is commented out
 import Unallocated from './pages/Unallocated';
 import UnallocatedView from './pages/UnallocatedView';
 import ActivityLogs from './pages/ActivityLogs';

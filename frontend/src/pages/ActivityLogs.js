@@ -72,7 +72,7 @@ const ActivityLogs = () => {
   
   // Available options for filters
   const [users, setUsers] = useState([]);
-  const [companies, setCompanies] = useState([]);
+  // const [companies, setCompanies] = useState([]); // Unused - commented out
   const [activityTypes, setActivityTypes] = useState([]);
   
   // Clear logs modal
@@ -131,9 +131,9 @@ const ActivityLogs = () => {
       const usersData = Array.isArray(usersResponse.data) ? usersResponse.data : (usersResponse.data.users || []);
       setUsers(usersData);
       
-      // Fetch companies
-      const companiesResponse = await api.get('/api/companies');
-      setCompanies(companiesResponse.data || []);
+      // Fetch companies - commented out as unused
+      // const companiesResponse = await api.get('/api/companies');
+      // setCompanies(companiesResponse.data || []);
       
       // Fetch activity types
       const typesResponse = await api.get('/api/activity-logs/types');

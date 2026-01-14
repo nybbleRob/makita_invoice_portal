@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
