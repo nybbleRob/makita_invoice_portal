@@ -283,13 +283,26 @@ router.post('/resend-email-change', auth, async (req, res) => {
     const expiryMinutes = Math.floor(expiryMs / (1000 * 60));
     const expiryTime = expiryMinutes === 1 ? '1 minute' : `${expiryMinutes} minutes`;
     
+    // Defensive check: ensure we're sending to NEW email, not old
+    const recipientEmail = user.pendingEmail.toLowerCase();
+    if (recipientEmail === user.email.toLowerCase()) {
+      throw new Error('Cannot send email change validation to old email address. Recipient must be the new email address.');
+    }
+    
+    // Log for debugging
+    console.log(`[Email Change Resend] Sending validation email:`, {
+      oldEmail: user.email,
+      newEmail: recipientEmail,
+      userId: user.id
+    });
+    
     await sendTemplatedEmail(
       'email-change-validation',
-      user.pendingEmail.toLowerCase(),
+      recipientEmail,
       {
         userName: user.name || user.email,
         oldEmail: user.email,
-        newEmail: user.pendingEmail.toLowerCase(),
+        newEmail: recipientEmail,
         validationUrl: validationUrl,
         expiryTime: expiryTime
       },
@@ -372,12 +385,27 @@ router.post('/request-email-change', auth, async (req, res) => {
         const expiryTime = expiryMinutes === 1 ? '1 minute' : `${expiryMinutes} minutes`;
         
         const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
+        
+        // Defensive check: ensure we're sending to NEW email, not old
+        const recipientEmail = newEmail.toLowerCase();
+        if (recipientEmail === user.email.toLowerCase()) {
+          throw new Error('Cannot send email change validation to old email address. Recipient must be the new email address.');
+        }
+        
+        // Log for debugging
+        console.log(`[Email Change] Sending validation email:`, {
+          oldEmail: user.email,
+          newEmail: recipientEmail,
+          userId: user.id
+        });
+        
         await sendTemplatedEmail(
           'email-change-validation',
-          newEmail.toLowerCase(),
+          recipientEmail,
           {
             userName: user.name || user.email,
-            newEmail: newEmail.toLowerCase(),
+            oldEmail: user.email,
+            newEmail: recipientEmail,
             validationUrl: validationUrl,
             expiryTime: expiryTime
           },
