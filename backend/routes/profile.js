@@ -3,7 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const sharp = require('sharp');
-const { User } = require('../models');
+const { User, Settings } = require('../models');
 const auth = require('../middleware/auth');
 const router = express.Router();
 
@@ -259,7 +259,6 @@ router.post('/resend-email-change', auth, async (req, res) => {
     }
     
     // Get settings for email configuration
-    const Settings = require('../models/Settings');
     const settings = await Settings.getSettings();
     const { isEmailEnabled } = require('../utils/emailService');
     const { getEmailChangeValidationUrl } = require('../utils/urlConfig');
@@ -359,7 +358,6 @@ router.post('/request-email-change', auth, async (req, res) => {
     await user.save();
     
     // Get settings for email configuration
-    const Settings = require('../models/Settings');
     const settings = await Settings.getSettings();
     
     // Send validation email to new email address
@@ -462,7 +460,6 @@ router.post('/validate-email-change', async (req, res) => {
     await user.save();
     
     // Get settings for email configuration
-    const Settings = require('../models/Settings');
     const settings = await Settings.getSettings();
     
     // Send confirmation email to new email address
