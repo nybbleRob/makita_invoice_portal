@@ -100,6 +100,13 @@ const recaptchaMiddleware = (options = {}) => {
         return next();
       }
       
+      // Skip reCAPTCHA if 2FA code is present (user already passed reCAPTCHA on initial login)
+      // This prevents requiring reCAPTCHA twice in the same login flow
+      if (req.body.twoFactorCode) {
+        console.log('⚠️  reCAPTCHA verification skipped - 2FA code present (already verified on initial login)');
+        return next();
+      }
+      
       // Get token from request body
       const token = req.body.recaptchaToken || req.body.recaptcha_token;
       
