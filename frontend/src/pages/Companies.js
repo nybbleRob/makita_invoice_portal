@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import api from '../services/api';
+import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { useDebounce } from '../hooks/useDebounce';
@@ -571,6 +571,52 @@ const Companies = () => {
   // Check if user is administrator
   const isAdministrator = () => {
     return currentUser?.role === 'global_admin' || currentUser?.role === 'administrator';
+  };
+
+  // Export companies to CSV/XLS
+  const handleExportCompanies = async (format = 'csv') => {
+    try {
+      const token = localStorage.getItem('token');
+      const url = `${API_BASE_URL}/api/companies/export?format=${format}`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Export failed' }));
+        throw new Error(errorData.message || 'Export failed');
+      }
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `companies-export-${new Date().toISOString().split('T')[0]}.${format}`;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, '');
+        }
+      }
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+      
+      toast.success(`Companies exported to ${format.toUpperCase()} successfully!`);
+    } catch (error) {
+      console.error('Error exporting companies:', error);
+      toast.error('Error exporting companies: ' + (error.message || 'Unknown error'));
+    }
   };
 
   const resetCorporateForm = () => {
@@ -1414,6 +1460,48 @@ const Companies = () => {
                     >
                       Add Branch
                     </button>
+                    {/* Export button - only visible to administrators */}
+                    {isAdministrator() && (
+                      <div className="dropdown">
+                        <button
+                          className="btn btn-outline-primary dropdown-toggle"
+                          type="button"
+                          data-bs-toggle="dropdown"
+                          aria-expanded="false"
+                        >
+                          Export
+                        </button>
+                        <ul className="dropdown-menu">
+                          <li>
+                            <button
+                              className="dropdown-item"
+                              type="button"
+                              onClick={() => handleExportCompanies('csv')}
+                            >
+                              Export as CSV
+                            </button>
+                          </li>
+                          <li>
+                            <button
+                              className="dropdown-item"
+                              type="button"
+                              onClick={() => handleExportCompanies('xls')}
+                            >
+                              Export as XLS
+                            </button>
+                          </li>
+                          <li>
+                            <button
+                              className="dropdown-item"
+                              type="button"
+                              onClick={() => handleExportCompanies('xlsx')}
+                            >
+                              Export as XLSX
+                            </button>
+                          </li>
+                        </ul>
+                      </div>
+                    )}
                     {/* Bulk Actions */}
                     {isAdministrator() && selectedCompanyIds.length > 0 && (
                       <div className="dropdown">

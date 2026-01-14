@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import api from '../services/api';
+import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { getRoleLabel, getRoleBadgeClass } from '../utils/roleLabels';
@@ -71,6 +71,15 @@ const UserManagement = () => {
   const [assignedCompanies, setAssignedCompanies] = useState({});
   const [loadingAssignedCompanies, setLoadingAssignedCompanies] = useState({});
   const [assignedCompaniesPagination, setAssignedCompaniesPagination] = useState({});
+  
+  // Import Modal state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importPreview, setImportPreview] = useState(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importStep, setImportStep] = useState('upload'); // 'upload', 'preview', 'importing', 'complete'
+  const [importResults, setImportResults] = useState(null);
+  const importFileInputRef = useRef(null);
   
   // Users table pagination (server-side)
   const [usersPage, setUsersPage] = useState(1);
@@ -573,6 +582,123 @@ const UserManagement = () => {
     }
   };
 
+  // Export users to CSV/XLS/XLSX
+  const handleExportUsers = async (format = 'csv') => {
+    try {
+      const token = localStorage.getItem('token');
+      const url = `${API_BASE_URL}/api/users/export?format=${format}`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `users-export-${new Date().toISOString().split('T')[0]}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(a);
+      
+      toast.success(`Users exported to ${format.toUpperCase()} successfully!`);
+    } catch (error) {
+      toast.error('Error exporting users: ' + error.message);
+    }
+  };
+
+  // Handle import file selection
+  const handleImportFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImportFile(file);
+      setImportPreview(null);
+      setImportResults(null);
+      setImportStep('upload');
+    }
+  };
+
+  // Preview import file
+  const handleImportPreview = async () => {
+    if (!importFile) {
+      toast.error('Please select a file first');
+      return;
+    }
+
+    setImportLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+
+      const response = await api.post('/api/users/import/preview', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      setImportPreview(response.data);
+      setImportStep('preview');
+    } catch (error) {
+      toast.error('Error previewing import: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  // Execute import
+  const handleImportExecute = async () => {
+    if (!importFile) {
+      toast.error('Please select a file first');
+      return;
+    }
+
+    setImportLoading(true);
+    setImportStep('importing');
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+
+      const response = await api.post('/api/users/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      setImportResults(response.data);
+      setImportStep('complete');
+      
+      if (response.data.success) {
+        toast.success(`Import complete: ${response.data.created} created, ${response.data.updated} updated`);
+      } else {
+        toast.warning(`Import completed with errors. ${response.data.created} created, ${response.data.updated} updated, ${response.data.errors.length} errors.`);
+      }
+      
+      fetchUsers(); // Refresh the user list
+    } catch (error) {
+      toast.error('Error importing users: ' + (error.response?.data?.message || error.message));
+      setImportStep('preview');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  // Reset import modal
+  const resetImportModal = () => {
+    setShowImportModal(false);
+    setImportFile(null);
+    setImportPreview(null);
+    setImportResults(null);
+    setImportStep('upload');
+    setImportLoading(false);
+    if (importFileInputRef.current) {
+      importFileInputRef.current.value = '';
+    }
+  };
+
   // Helper function to check if current user can manage target user's role
   const canManageUserRole = (targetRole) => {
     if (!currentUser) return false;
@@ -1006,6 +1132,50 @@ const UserManagement = () => {
                           </li>
                         </ul>
                       </div>
+                    )}
+                    {/* Export dropdown */}
+                    {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && (
+                      <div className="dropdown">
+                        <button
+                          className="btn btn-outline-secondary dropdown-toggle"
+                          type="button"
+                          data-bs-toggle="dropdown"
+                          aria-expanded="false"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="me-1">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                          </svg>
+                          Export
+                        </button>
+                        <ul className="dropdown-menu">
+                          <li>
+                            <button className="dropdown-item" type="button" onClick={() => handleExportUsers('csv')}>
+                              Export as CSV
+                            </button>
+                          </li>
+                          <li>
+                            <button className="dropdown-item" type="button" onClick={() => handleExportUsers('xlsx')}>
+                              Export as XLSX
+                            </button>
+                          </li>
+                        </ul>
+                      </div>
+                    )}
+                    {/* Import button */}
+                    {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && (
+                      <button
+                        className="btn btn-outline-secondary"
+                        onClick={() => setShowImportModal(true)}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="me-1">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                          <polyline points="17 8 12 3 7 8"></polyline>
+                          <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        Import
+                      </button>
                     )}
                     {/* Pending Accounts button */}
                     {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && (
@@ -2004,6 +2174,237 @@ const UserManagement = () => {
           onApply={() => setShowCompanyAssignmentModal(false)}
         />
       )}
+
+      {/* Import Users Modal */}
+      {showImportModal && (
+        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
+          <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Import Users</h5>
+                <button type="button" className="btn-close" onClick={resetImportModal}></button>
+              </div>
+              <div className="modal-body">
+                {/* Step 1: Upload */}
+                {importStep === 'upload' && (
+                  <div>
+                    <div className="mb-3">
+                      <label className="form-label">Select File (CSV, XLS, or XLSX)</label>
+                      <input
+                        ref={importFileInputRef}
+                        type="file"
+                        className="form-control"
+                        accept=".csv,.xls,.xlsx"
+                        onChange={handleImportFileChange}
+                      />
+                    </div>
+                    <div className="alert alert-info">
+                      <h4 className="alert-title">Import File Format</h4>
+                      <p className="mb-2">The import file should contain the following columns:</p>
+                      <ul className="mb-2">
+                        <li><strong>id</strong> - Database ID (UUID) - Optional, used for updating existing users</li>
+                        <li><strong>name</strong> - User name (required)</li>
+                        <li><strong>email</strong> - Email address (required)</li>
+                        <li><strong>role</strong> - User role (external_user, notification_contact, credit_controller, etc.)</li>
+                        <li><strong>active</strong> - TRUE or FALSE</li>
+                        <li><strong>all_companies</strong> - TRUE or FALSE</li>
+                        <li><strong>company_account_numbers</strong> - Comma-separated account numbers</li>
+                        <li><strong>send_invoice_email</strong> - TRUE or FALSE</li>
+                        <li><strong>send_invoice_attachment</strong> - TRUE or FALSE</li>
+                        <li><strong>send_statement_email</strong> - TRUE or FALSE</li>
+                        <li><strong>send_statement_attachment</strong> - TRUE or FALSE</li>
+                        <li><strong>send_email_as_summary</strong> - TRUE or FALSE</li>
+                        <li><strong>send_import_summary_report</strong> - TRUE or FALSE</li>
+                      </ul>
+                      <p className="mb-0"><strong>Tip:</strong> Export existing users first to get a template file.</p>
+                    </div>
+                    {importFile && (
+                      <div className="alert alert-success">
+                        <strong>Selected file:</strong> {importFile.name}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Step 2: Preview */}
+                {importStep === 'preview' && importPreview && (
+                  <div>
+                    <div className="mb-3">
+                      <h4>Import Preview</h4>
+                      <div className="row g-3 mb-3">
+                        <div className="col-auto">
+                          <span className="badge bg-blue-lt fs-6">Total: {importPreview.summary.total}</span>
+                        </div>
+                        <div className="col-auto">
+                          <span className="badge bg-green-lt fs-6">To Create: {importPreview.summary.toCreate}</span>
+                        </div>
+                        <div className="col-auto">
+                          <span className="badge bg-yellow-lt fs-6">To Update: {importPreview.summary.toUpdate}</span>
+                        </div>
+                        {importPreview.summary.errors > 0 && (
+                          <div className="col-auto">
+                            <span className="badge bg-red-lt fs-6">Errors: {importPreview.summary.errors}</span>
+                          </div>
+                        )}
+                        {importPreview.summary.warnings > 0 && (
+                          <div className="col-auto">
+                            <span className="badge bg-orange-lt fs-6">Warnings: {importPreview.summary.warnings}</span>
+                          </div>
+                        )}
+                        {importPreview.summary.emailChanges > 0 && (
+                          <div className="col-auto">
+                            <span className="badge bg-purple-lt fs-6">Email Changes: {importPreview.summary.emailChanges}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="table-responsive" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                      <table className="table table-sm table-vcenter">
+                        <thead>
+                          <tr>
+                            <th>Row</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importPreview.preview.map((item, idx) => (
+                            <tr key={idx} className={item.status === 'error' ? 'bg-red-lt' : item.status === 'warning' ? 'bg-yellow-lt' : ''}>
+                              <td>{item.rowNum}</td>
+                              <td>
+                                {item.status === 'valid' && <span className="badge bg-success">Valid</span>}
+                                {item.status === 'warning' && <span className="badge bg-warning">Warning</span>}
+                                {item.status === 'error' && <span className="badge bg-danger">Error</span>}
+                              </td>
+                              <td>
+                                <span className="badge bg-secondary-lt">{item.action}</span>
+                              </td>
+                              <td>{item.data.name || '-'}</td>
+                              <td>
+                                {item.data.email || '-'}
+                                {item.emailChangeRequired && (
+                                  <span className="badge bg-purple-lt ms-1">Email Change</span>
+                                )}
+                              </td>
+                              <td>{item.data.role ? getRoleLabel(item.data.role) : '-'}</td>
+                              <td>
+                                {item.errors.length > 0 && (
+                                  <span className="text-danger">{item.errors.join(', ')}</span>
+                                )}
+                                {item.warnings.length > 0 && (
+                                  <span className="text-warning">{item.warnings.join(', ')}</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 3: Importing */}
+                {importStep === 'importing' && (
+                  <div className="text-center py-5">
+                    <div className="spinner-border text-primary mb-3" role="status">
+                      <span className="visually-hidden">Importing...</span>
+                    </div>
+                    <p className="mb-0">Importing users, please wait...</p>
+                  </div>
+                )}
+
+                {/* Step 4: Complete */}
+                {importStep === 'complete' && importResults && (
+                  <div>
+                    <div className={`alert ${importResults.success ? 'alert-success' : 'alert-warning'} mb-3`}>
+                      <h4 className="alert-title">
+                        {importResults.success ? 'Import Completed Successfully!' : 'Import Completed with Issues'}
+                      </h4>
+                      <div className="d-flex gap-3 mt-2">
+                        <span><strong>Created:</strong> {importResults.created}</span>
+                        <span><strong>Updated:</strong> {importResults.updated}</span>
+                        {importResults.emailChangesPending > 0 && (
+                          <span><strong>Email Changes Pending:</strong> {importResults.emailChangesPending}</span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {importResults.errors.length > 0 && (
+                      <div className="mb-3">
+                        <h5 className="text-danger">Errors ({importResults.errors.length})</h5>
+                        <ul className="list-unstyled">
+                          {importResults.errors.slice(0, 20).map((err, idx) => (
+                            <li key={idx} className="text-danger">{err}</li>
+                          ))}
+                          {importResults.errors.length > 20 && (
+                            <li className="text-muted">...and {importResults.errors.length - 20} more errors</li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+                    
+                    {importResults.warnings.length > 0 && (
+                      <div className="mb-3">
+                        <h5 className="text-warning">Warnings ({importResults.warnings.length})</h5>
+                        <ul className="list-unstyled">
+                          {importResults.warnings.slice(0, 20).map((warn, idx) => (
+                            <li key={idx} className="text-warning">{warn}</li>
+                          ))}
+                          {importResults.warnings.length > 20 && (
+                            <li className="text-muted">...and {importResults.warnings.length - 20} more warnings</li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                {importStep === 'upload' && (
+                  <>
+                    <button type="button" className="btn btn-secondary" onClick={resetImportModal}>
+                      Cancel
+                    </button>
+                    <button 
+                      type="button" 
+                      className="btn btn-primary" 
+                      onClick={handleImportPreview}
+                      disabled={!importFile || importLoading}
+                    >
+                      {importLoading ? 'Processing...' : 'Preview Import'}
+                    </button>
+                  </>
+                )}
+                {importStep === 'preview' && (
+                  <>
+                    <button type="button" className="btn btn-secondary" onClick={() => setImportStep('upload')}>
+                      Back
+                    </button>
+                    <button 
+                      type="button" 
+                      className="btn btn-primary" 
+                      onClick={handleImportExecute}
+                      disabled={importLoading || (importPreview?.summary?.errors > 0 && importPreview?.summary?.toCreate === 0 && importPreview?.summary?.toUpdate === 0)}
+                    >
+                      {importLoading ? 'Importing...' : 'Import Users'}
+                    </button>
+                  </>
+                )}
+                {importStep === 'complete' && (
+                  <button type="button" className="btn btn-primary" onClick={resetImportModal}>
+                    Close
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {showImportModal && <div className="modal-backdrop fade show"></div>}
     </div>
   );
 };

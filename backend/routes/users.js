@@ -1,6 +1,9 @@
 const express = require('express');
+const multer = require('multer');
+const Papa = require('papaparse');
+const XLSX = require('xlsx');
 const { User, Company, UserCompany, Settings, Sequelize, sequelize } = require('../models');
-const { Op } = Sequelize;
+const { Op, QueryTypes } = Sequelize;
 const { canManageUsers } = require('../middleware/roleCheck');
 const { canManageRole, getManageableRoles, getRoleLabel, ROLE_HIERARCHY } = require('../utils/roleHierarchy');
 const auth = require('../middleware/auth');
@@ -1255,6 +1258,779 @@ router.delete('/:id/two-factor', canManageUsers, async (req, res) => {
   }
 });
 
+// Configure multer for file uploads (for import)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = [
+      'text/csv',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+    if (allowedMimes.includes(file.mimetype) || 
+        file.originalname.endsWith('.csv') || 
+        file.originalname.endsWith('.xls') || 
+        file.originalname.endsWith('.xlsx')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only CSV, XLS, and XLSX files are allowed.'));
+    }
+  }
+});
+
+/**
+ * Parse and validate import file (CSV, XLS, XLSX)
+ * Returns array of row objects
+ */
+async function parseUserImportFile(file) {
+  let rows = [];
+  const fileExtension = file.originalname.split('.').pop().toLowerCase();
+
+  if (fileExtension === 'csv') {
+    const csvText = file.buffer.toString('utf8');
+    const result = Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (header) => header.trim()
+    });
+    
+    if (result.errors.length > 0) {
+      throw new Error(`CSV parsing errors: ${result.errors.map(e => e.message).join(', ')}`);
+    }
+    
+    rows = result.data;
+  } else if (fileExtension === 'xls' || fileExtension === 'xlsx') {
+    const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    rows = XLSX.utils.sheet_to_json(worksheet, { 
+      defval: null,
+      raw: false
+    });
+  } else {
+    throw new Error('Unsupported file format. Use CSV, XLS, or XLSX.');
+  }
+
+  if (!rows || rows.length === 0) {
+    throw new Error('File is empty or contains no data');
+  }
+
+  return rows;
+}
+
+/**
+ * Parse boolean value from various formats
+ */
+function parseBooleanValue(value) {
+  if (value === undefined || value === null || value === '') return false;
+  const v = String(value).trim().toUpperCase();
+  return v === 'TRUE' || v === 'YES' || v === 'Y' || v === '1';
+}
+
+/**
+ * Process a single user row and return preview data
+ */
+async function processUserRowForPreview(row, rowNum, existingUsersMap, existingUsersByIdMap, existingCompaniesMap, manageableRoles) {
+  const result = {
+    rowNum,
+    status: 'valid',
+    errors: [],
+    warnings: [],
+    action: 'create',
+    data: {},
+    existingData: null,
+    emailChangeRequired: false,
+    companyAccountNumbers: []
+  };
+
+  try {
+    // Extract fields from row (support multiple column name formats)
+    const userId = row['id'] || row['ID'] || row['Id'] || row['user_id'] || null;
+    const name = row['name'] || row['Name'] || row['NAME'] || '';
+    const email = row['email'] || row['Email'] || row['EMAIL'] || '';
+    const role = (row['role'] || row['Role'] || row['ROLE'] || 'external_user').toLowerCase();
+    const active = parseBooleanValue(row['active'] || row['Active'] || row['ACTIVE'] || row['isActive'] || 'TRUE');
+    const allCompanies = parseBooleanValue(row['all_companies'] || row['allCompanies'] || row['All Companies'] || 'FALSE');
+    const companyAccountNumbersRaw = row['company_account_numbers'] || row['companyAccountNumbers'] || row['Company Account Numbers'] || row['companies'] || '';
+    
+    // Email notification preferences
+    const sendInvoiceEmail = parseBooleanValue(row['send_invoice_email'] || row['sendInvoiceEmail'] || 'FALSE');
+    const sendInvoiceAttachment = parseBooleanValue(row['send_invoice_attachment'] || row['sendInvoiceAttachment'] || 'FALSE');
+    const sendStatementEmail = parseBooleanValue(row['send_statement_email'] || row['sendStatementEmail'] || 'FALSE');
+    const sendStatementAttachment = parseBooleanValue(row['send_statement_attachment'] || row['sendStatementAttachment'] || 'FALSE');
+    const sendEmailAsSummary = parseBooleanValue(row['send_email_as_summary'] || row['sendEmailAsSummary'] || 'FALSE');
+    const sendImportSummaryReport = parseBooleanValue(row['send_import_summary_report'] || row['sendImportSummaryReport'] || 'FALSE');
+
+    // Validate required fields
+    if (!name || !name.trim()) {
+      result.status = 'error';
+      result.errors.push('Name is required');
+      return result;
+    }
+
+    if (!email || !email.trim()) {
+      result.status = 'error';
+      result.errors.push('Email is required');
+      return result;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!emailRegex.test(trimmedEmail)) {
+      result.status = 'error';
+      result.errors.push(`Invalid email format: ${email}`);
+      return result;
+    }
+
+    // Validate role
+    const validRoles = ['global_admin', 'administrator', 'manager', 'credit_senior', 'credit_controller', 'external_user', 'notification_contact'];
+    if (!validRoles.includes(role)) {
+      result.status = 'error';
+      result.errors.push(`Invalid role: ${role}. Valid roles: ${validRoles.join(', ')}`);
+      return result;
+    }
+
+    // Check if current user can manage this role
+    if (!manageableRoles.includes(role)) {
+      result.status = 'error';
+      result.errors.push(`You cannot import users with role: ${getRoleLabel(role)}`);
+      return result;
+    }
+
+    // Validate email preferences
+    if (sendInvoiceAttachment && !sendInvoiceEmail) {
+      result.warnings.push('Invoice attachment enabled without invoice email - will be ignored');
+    }
+    if (sendStatementAttachment && !sendStatementEmail) {
+      result.warnings.push('Statement attachment enabled without statement email - will be ignored');
+    }
+    if (sendEmailAsSummary && !sendInvoiceEmail && !sendStatementEmail) {
+      result.warnings.push('Email summary enabled without any email types - will be ignored');
+    }
+
+    // Parse company account numbers
+    const companyAccountNumbers = [];
+    if (companyAccountNumbersRaw && !allCompanies) {
+      const parts = String(companyAccountNumbersRaw).split(',').map(s => s.trim()).filter(s => s);
+      for (const part of parts) {
+        const refNo = parseInt(part);
+        if (!isNaN(refNo)) {
+          companyAccountNumbers.push(refNo);
+          // Check if company exists
+          if (!existingCompaniesMap.has(refNo)) {
+            result.warnings.push(`Company with account number ${refNo} not found`);
+          }
+        } else {
+          result.warnings.push(`Invalid company account number: ${part}`);
+        }
+      }
+    }
+
+    // Determine if this is a create or update
+    let existingUser = null;
+    let matchMethod = null;
+
+    // First try to match by ID if provided
+    if (userId) {
+      const validation = validateUUID(userId, 'user ID');
+      if (validation.valid) {
+        existingUser = existingUsersByIdMap.get(validation.value);
+        if (existingUser) {
+          matchMethod = 'ID';
+        }
+      } else {
+        result.warnings.push(`Invalid user ID format "${userId}". Attempting to match by email.`);
+      }
+    }
+
+    // Fall back to email matching
+    if (!existingUser) {
+      existingUser = existingUsersMap.get(trimmedEmail);
+      if (existingUser) {
+        matchMethod = 'Email';
+      }
+    }
+
+    // Build user data
+    const userData = {
+      name: name.trim(),
+      email: trimmedEmail,
+      role: role,
+      isActive: active,
+      allCompanies: allCompanies,
+      sendInvoiceEmail: sendInvoiceEmail,
+      sendInvoiceAttachment: sendInvoiceEmail ? sendInvoiceAttachment : false,
+      sendStatementEmail: sendStatementEmail,
+      sendStatementAttachment: sendStatementEmail ? sendStatementAttachment : false,
+      sendEmailAsSummary: (sendInvoiceEmail || sendStatementEmail) ? sendEmailAsSummary : false,
+      sendImportSummaryReport: sendImportSummaryReport
+    };
+
+    result.data = userData;
+    result.companyAccountNumbers = companyAccountNumbers;
+
+    if (existingUser) {
+      result.action = `update (matched by ${matchMethod})`;
+      result.existingData = {
+        id: existingUser.id,
+        name: existingUser.name,
+        email: existingUser.email,
+        role: existingUser.role,
+        isActive: existingUser.isActive,
+        allCompanies: existingUser.allCompanies
+      };
+
+      // Check if email is being changed
+      if (existingUser.email.toLowerCase() !== trimmedEmail) {
+        result.emailChangeRequired = true;
+        result.warnings.push(`Email will change from ${existingUser.email} to ${trimmedEmail}. User will receive validation email.`);
+      }
+
+      // Check if role is being changed
+      if (existingUser.role !== role) {
+        result.warnings.push(`Role will change from ${getRoleLabel(existingUser.role)} to ${getRoleLabel(role)}`);
+      }
+    } else {
+      result.action = 'create';
+      // Check if email already exists (duplicate in file)
+      const emailCheck = existingUsersMap.get(trimmedEmail);
+      if (emailCheck) {
+        result.status = 'error';
+        result.errors.push(`Email ${trimmedEmail} already exists in the system`);
+        return result;
+      }
+    }
+
+    if (result.warnings.length > 0 && result.status !== 'error') {
+      result.status = 'warning';
+    }
+
+  } catch (error) {
+    result.status = 'error';
+    result.errors.push(error.message);
+  }
+
+  return result;
+}
+
+/**
+ * Preview user import - parses file and returns preview without importing
+ * POST /api/users/import/preview
+ */
+router.post('/import/preview', canManageUsers, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    // Parse file
+    const file = req.file;
+    const fileExtension = file.originalname.split('.').pop().toLowerCase();
+    let columnNames = [];
+
+    // Get column names for display
+    if (fileExtension === 'csv') {
+      const csvText = file.buffer.toString('utf8');
+      const result = Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: false,
+        transformHeader: (header) => header.trim()
+      });
+      columnNames = result.meta.fields || [];
+    } else if (fileExtension === 'xls' || fileExtension === 'xlsx') {
+      const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+        const cell = worksheet[cellAddress];
+        if (cell && cell.v) {
+          columnNames.push(cell.v.toString().trim());
+        }
+      }
+    }
+
+    const rows = await parseUserImportFile(file);
+
+    // Get all existing users for matching
+    const existingUsers = await User.findAll({
+      attributes: ['id', 'name', 'email', 'role', 'isActive', 'allCompanies', 
+        'sendInvoiceEmail', 'sendInvoiceAttachment', 'sendStatementEmail', 
+        'sendStatementAttachment', 'sendEmailAsSummary', 'sendImportSummaryReport']
+    });
+
+    const existingUsersMap = new Map(); // by email
+    const existingUsersByIdMap = new Map(); // by ID
+    existingUsers.forEach(user => {
+      if (user.email) {
+        existingUsersMap.set(user.email.toLowerCase(), user);
+      }
+      existingUsersByIdMap.set(user.id, user);
+    });
+
+    // Get all existing companies for company assignment lookup
+    const existingCompanies = await Company.findAll({
+      attributes: ['id', 'name', 'referenceNo']
+    });
+    const existingCompaniesMap = new Map();
+    existingCompanies.forEach(company => {
+      if (company.referenceNo) {
+        existingCompaniesMap.set(company.referenceNo, company);
+      }
+    });
+
+    // Get manageable roles for current user
+    const manageableRoles = getManageableRoles(req.user.role);
+
+    // Process each row for preview
+    const previewData = [];
+    const summary = {
+      total: rows.length,
+      toCreate: 0,
+      toUpdate: 0,
+      errors: 0,
+      warnings: 0,
+      emailChanges: 0
+    };
+
+    // Track emails in this import to detect duplicates
+    const importEmails = new Set();
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2; // Account for header row
+
+      const processed = await processUserRowForPreview(
+        row, 
+        rowNum, 
+        existingUsersMap, 
+        existingUsersByIdMap, 
+        existingCompaniesMap, 
+        manageableRoles
+      );
+
+      // Check for duplicate emails within the import file
+      const rowEmail = processed.data.email;
+      if (rowEmail) {
+        if (importEmails.has(rowEmail)) {
+          processed.status = 'error';
+          processed.errors.push(`Duplicate email in import file: ${rowEmail}`);
+        } else {
+          importEmails.add(rowEmail);
+        }
+      }
+
+      previewData.push(processed);
+
+      // Update summary
+      if (processed.status === 'error') {
+        summary.errors++;
+      } else {
+        if (processed.action === 'create') {
+          summary.toCreate++;
+        } else {
+          summary.toUpdate++;
+        }
+        if (processed.status === 'warning') {
+          summary.warnings++;
+        }
+        if (processed.emailChangeRequired) {
+          summary.emailChanges++;
+        }
+      }
+    }
+
+    // Column mapping descriptions
+    const columnMappings = {
+      'id': 'Database ID (UUID) - Primary matching key. If provided, matches by ID first.',
+      'name': 'User Name - Required',
+      'email': 'Email Address - Required. Falls back to email matching if no ID.',
+      'role': 'User Role - global_admin, administrator, manager, credit_senior, credit_controller, external_user, notification_contact',
+      'active': 'Active Status - TRUE or FALSE',
+      'all_companies': 'All Companies Access - TRUE or FALSE',
+      'company_account_numbers': 'Company Account Numbers - Comma-separated list of account numbers',
+      'send_invoice_email': 'Receive Invoice Emails - TRUE or FALSE',
+      'send_invoice_attachment': 'Include Invoice Attachments - TRUE or FALSE',
+      'send_statement_email': 'Receive Statement Emails - TRUE or FALSE',
+      'send_statement_attachment': 'Include Statement Attachments - TRUE or FALSE',
+      'send_email_as_summary': 'Send as Summary Email - TRUE or FALSE',
+      'send_import_summary_report': 'Receive Import Summary Reports - TRUE or FALSE'
+    };
+
+    res.json({
+      preview: previewData,
+      summary,
+      totalRows: rows.length,
+      columnNames,
+      columnMappings
+    });
+
+  } catch (error) {
+    console.error('Error previewing user import:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
+/**
+ * Import users from CSV/XLS/XLSX file
+ * POST /api/users/import
+ * 
+ * Creates new users or updates existing ones.
+ * - Matches by ID first (if provided), then falls back to email
+ * - New users get a welcome email with temporary password
+ * - Email changes trigger validation flow (user must verify new email)
+ * - Companies are assigned by account number (referenceNo)
+ */
+router.post('/import', canManageUsers, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    const rows = await parseUserImportFile(req.file);
+
+    // Get all existing users for matching
+    const existingUsers = await User.findAll({
+      attributes: ['id', 'name', 'email', 'role', 'isActive', 'allCompanies',
+        'sendInvoiceEmail', 'sendInvoiceAttachment', 'sendStatementEmail',
+        'sendStatementAttachment', 'sendEmailAsSummary', 'sendImportSummaryReport']
+    });
+
+    const existingUsersMap = new Map();
+    const existingUsersByIdMap = new Map();
+    existingUsers.forEach(user => {
+      if (user.email) {
+        existingUsersMap.set(user.email.toLowerCase(), user);
+      }
+      existingUsersByIdMap.set(user.id, user);
+    });
+
+    // Get all existing companies for company assignment lookup
+    const existingCompanies = await Company.findAll({
+      attributes: ['id', 'name', 'referenceNo']
+    });
+    const existingCompaniesMap = new Map();
+    existingCompanies.forEach(company => {
+      if (company.referenceNo) {
+        existingCompaniesMap.set(company.referenceNo, company);
+      }
+    });
+
+    // Get manageable roles for current user
+    const manageableRoles = getManageableRoles(req.user.role);
+
+    // Results tracking
+    const results = {
+      success: true,
+      created: 0,
+      updated: 0,
+      errors: [],
+      warnings: [],
+      emailChangesPending: 0,
+      details: []
+    };
+
+    // Track emails processed in this import to prevent duplicates
+    const processedEmails = new Set();
+
+    // Get settings for email sending
+    const settings = await Settings.getSettings();
+    const { isEmailEnabled } = require('../utils/emailService');
+    const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
+    const { generateReadableTemporaryPassword } = require('../utils/passwordGenerator');
+    const { getEmailChangeValidationUrl } = require('../utils/urlConfig');
+    const crypto = require('crypto');
+
+    // Process each row
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2; // Account for header row
+
+      try {
+        // Extract fields
+        const userId = row['id'] || row['ID'] || row['Id'] || row['user_id'] || null;
+        const name = (row['name'] || row['Name'] || row['NAME'] || '').trim();
+        const email = (row['email'] || row['Email'] || row['EMAIL'] || '').trim().toLowerCase();
+        const role = (row['role'] || row['Role'] || row['ROLE'] || 'external_user').toLowerCase();
+        const active = parseBooleanValue(row['active'] || row['Active'] || row['ACTIVE'] || row['isActive'] || 'TRUE');
+        const allCompanies = parseBooleanValue(row['all_companies'] || row['allCompanies'] || row['All Companies'] || 'FALSE');
+        const companyAccountNumbersRaw = row['company_account_numbers'] || row['companyAccountNumbers'] || row['Company Account Numbers'] || row['companies'] || '';
+
+        // Email notification preferences
+        const sendInvoiceEmail = parseBooleanValue(row['send_invoice_email'] || row['sendInvoiceEmail'] || 'FALSE');
+        const sendInvoiceAttachment = parseBooleanValue(row['send_invoice_attachment'] || row['sendInvoiceAttachment'] || 'FALSE');
+        const sendStatementEmail = parseBooleanValue(row['send_statement_email'] || row['sendStatementEmail'] || 'FALSE');
+        const sendStatementAttachment = parseBooleanValue(row['send_statement_attachment'] || row['sendStatementAttachment'] || 'FALSE');
+        const sendEmailAsSummary = parseBooleanValue(row['send_email_as_summary'] || row['sendEmailAsSummary'] || 'FALSE');
+        const sendImportSummaryReport = parseBooleanValue(row['send_import_summary_report'] || row['sendImportSummaryReport'] || 'FALSE');
+
+        // Validate required fields
+        if (!name) {
+          results.errors.push(`Row ${rowNum}: Name is required`);
+          continue;
+        }
+
+        if (!email) {
+          results.errors.push(`Row ${rowNum}: Email is required`);
+          continue;
+        }
+
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          results.errors.push(`Row ${rowNum}: Invalid email format: ${email}`);
+          continue;
+        }
+
+        // Check for duplicate in this import
+        if (processedEmails.has(email)) {
+          results.errors.push(`Row ${rowNum}: Duplicate email in import file: ${email}`);
+          continue;
+        }
+
+        // Validate role
+        const validRoles = ['global_admin', 'administrator', 'manager', 'credit_senior', 'credit_controller', 'external_user', 'notification_contact'];
+        if (!validRoles.includes(role)) {
+          results.errors.push(`Row ${rowNum}: Invalid role: ${role}`);
+          continue;
+        }
+
+        // Check if current user can manage this role
+        if (!manageableRoles.includes(role)) {
+          results.errors.push(`Row ${rowNum}: You cannot import users with role: ${getRoleLabel(role)}`);
+          continue;
+        }
+
+        // Parse company account numbers
+        const companyIds = [];
+        if (companyAccountNumbersRaw && !allCompanies) {
+          const parts = String(companyAccountNumbersRaw).split(',').map(s => s.trim()).filter(s => s);
+          for (const part of parts) {
+            const refNo = parseInt(part);
+            if (!isNaN(refNo)) {
+              const company = existingCompaniesMap.get(refNo);
+              if (company) {
+                companyIds.push(company.id);
+              } else {
+                results.warnings.push(`Row ${rowNum}: Company with account number ${refNo} not found - skipping assignment`);
+              }
+            }
+          }
+        }
+
+        // Find existing user
+        let existingUser = null;
+
+        // First try to match by ID
+        if (userId) {
+          const validation = validateUUID(userId, 'user ID');
+          if (validation.valid) {
+            existingUser = await User.findByPk(validation.value);
+          }
+        }
+
+        // Fall back to email matching
+        if (!existingUser) {
+          existingUser = await User.findOne({ where: { email } });
+        }
+
+        if (existingUser) {
+          // UPDATE existing user
+          const oldEmail = existingUser.email.toLowerCase();
+          const emailChanged = oldEmail !== email;
+
+          // Update user fields
+          existingUser.name = name;
+          existingUser.role = role;
+          existingUser.isActive = active;
+          existingUser.allCompanies = allCompanies;
+          existingUser.sendInvoiceEmail = sendInvoiceEmail;
+          existingUser.sendInvoiceAttachment = sendInvoiceEmail ? sendInvoiceAttachment : false;
+          existingUser.sendStatementEmail = sendStatementEmail;
+          existingUser.sendStatementAttachment = sendStatementEmail ? sendStatementAttachment : false;
+          existingUser.sendEmailAsSummary = (sendInvoiceEmail || sendStatementEmail) ? sendEmailAsSummary : false;
+          existingUser.sendImportSummaryReport = sendImportSummaryReport;
+
+          // Handle email change
+          if (emailChanged) {
+            // Check if new email is already in use
+            const emailInUse = await User.findOne({ where: { email } });
+            if (emailInUse && emailInUse.id !== existingUser.id) {
+              results.errors.push(`Row ${rowNum}: Email ${email} is already in use by another user`);
+              continue;
+            }
+
+            // Set up email change validation flow
+            const changeToken = crypto.randomBytes(32).toString('hex');
+            const changeTokenHash = crypto.createHash('sha256').update(changeToken).digest('hex');
+
+            existingUser.pendingEmail = email;
+            existingUser.emailChangeToken = changeTokenHash;
+            existingUser.emailChangeExpires = Date.now() + 1800000; // 30 minutes
+
+            // Send validation email to new address
+            if (isEmailEnabled(settings)) {
+              try {
+                const validationUrl = getEmailChangeValidationUrl(changeToken);
+                const expiryTime = '30 minutes';
+
+                await sendTemplatedEmail(
+                  'email-change-validation',
+                  email,
+                  {
+                    userName: name,
+                    oldEmail: oldEmail,
+                    newEmail: email,
+                    validationUrl: validationUrl,
+                    expiryTime: expiryTime
+                  },
+                  settings
+                );
+              } catch (emailError) {
+                results.warnings.push(`Row ${rowNum}: Failed to send email change validation to ${email}: ${emailError.message}`);
+              }
+            }
+
+            results.emailChangesPending++;
+            results.warnings.push(`Row ${rowNum}: Email change from ${oldEmail} to ${email} requires validation`);
+          }
+
+          await existingUser.save();
+
+          // Update company assignments
+          if (!allCompanies && companyIds.length > 0) {
+            const companies = await Company.findAll({
+              where: { id: { [Op.in]: companyIds } }
+            });
+            await existingUser.setCompanies(companies);
+          } else if (!allCompanies) {
+            // Clear company assignments if none specified and not allCompanies
+            await existingUser.setCompanies([]);
+          }
+
+          processedEmails.add(emailChanged ? oldEmail : email);
+          results.updated++;
+          results.details.push({
+            rowNum,
+            action: 'updated',
+            email: existingUser.email,
+            name: name,
+            emailChanged: emailChanged
+          });
+
+        } else {
+          // CREATE new user
+          
+          // Check if email already exists
+          const emailExists = await User.findOne({ where: { email } });
+          if (emailExists) {
+            results.errors.push(`Row ${rowNum}: Email ${email} already exists`);
+            continue;
+          }
+
+          // Generate temporary password
+          const tempPassword = generateReadableTemporaryPassword();
+
+          // Create user
+          const newUser = await User.create({
+            name: name,
+            email: email,
+            password: tempPassword,
+            role: role,
+            isActive: active,
+            allCompanies: allCompanies,
+            addedById: req.user.userId,
+            mustChangePassword: true,
+            sendInvoiceEmail: sendInvoiceEmail,
+            sendInvoiceAttachment: sendInvoiceEmail ? sendInvoiceAttachment : false,
+            sendStatementEmail: sendStatementEmail,
+            sendStatementAttachment: sendStatementEmail ? sendStatementAttachment : false,
+            sendEmailAsSummary: (sendInvoiceEmail || sendStatementEmail) ? sendEmailAsSummary : false,
+            sendImportSummaryReport: sendImportSummaryReport
+          });
+
+          // Assign companies
+          if (!allCompanies && companyIds.length > 0) {
+            const companies = await Company.findAll({
+              where: { id: { [Op.in]: companyIds } }
+            });
+            await newUser.setCompanies(companies);
+          }
+
+          // Send welcome email
+          if (isEmailEnabled(settings)) {
+            try {
+              await sendTemplatedEmail(
+                'welcome',
+                email,
+                {
+                  userName: name,
+                  userEmail: email,
+                  tempPassword: tempPassword
+                },
+                settings,
+                {
+                  ipAddress: req.ip,
+                  userAgent: req.get('user-agent'),
+                  userId: req.user.userId
+                }
+              );
+            } catch (emailError) {
+              results.warnings.push(`Row ${rowNum}: Failed to send welcome email to ${email}: ${emailError.message}`);
+            }
+          }
+
+          processedEmails.add(email);
+          results.created++;
+          results.details.push({
+            rowNum,
+            action: 'created',
+            email: email,
+            name: name,
+            userId: newUser.id
+          });
+        }
+
+      } catch (rowError) {
+        results.errors.push(`Row ${rowNum}: ${rowError.message}`);
+      }
+    }
+
+    // Log import activity
+    await logActivity({
+      type: ActivityType.USERS_IMPORTED,
+      userId: req.user.userId,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: `Imported users: ${results.created} created, ${results.updated} updated`,
+      details: {
+        totalRows: rows.length,
+        created: results.created,
+        updated: results.updated,
+        errors: results.errors.length,
+        warnings: results.warnings.length,
+        emailChangesPending: results.emailChangesPending
+      },
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    }).catch(err => console.error('Error logging import activity:', err));
+
+    // Determine overall success
+    results.success = results.errors.length === 0;
+
+    res.json(results);
+
+  } catch (error) {
+    console.error('Error importing users:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
 // Get manageable roles for current user
 router.get('/roles/manageable', canManageUsers, (req, res) => {
   try {
@@ -1391,6 +2167,107 @@ router.post('/:id/companies', canManageUsers, async (req, res) => {
       companies: user.companies || []
     });
   } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+/**
+ * Export users to CSV/XLS
+ * GET /api/users/export?format=csv|xlsx
+ */
+router.get('/export', canManageUsers, async (req, res) => {
+  try {
+    const format = (req.query.format || 'csv').toLowerCase();
+    if (format !== 'csv' && format !== 'xls' && format !== 'xlsx') {
+      return res.status(400).json({ message: 'Invalid format. Use csv, xls, or xlsx' });
+    }
+
+    // Get manageable roles
+    const manageableRoles = getManageableRoles(req.user.role);
+    
+    // Filter by manageable roles (global admins can see all users)
+    const where = manageableRoles.length === Object.keys(ROLE_HIERARCHY).length
+      ? {} 
+      : { role: { [Op.in]: manageableRoles } };
+
+    // Get all users with companies
+    const users = await User.findAll({
+      where,
+      attributes: { exclude: ['password', 'twoFactorSecret', 'resetPasswordToken', 'resetPasswordExpires', 'emailChangeToken'] },
+      include: [
+        {
+          model: Company,
+          as: 'companies',
+          attributes: ['id', 'name', 'referenceNo'],
+          through: { attributes: [] },
+          required: false
+        }
+      ],
+      order: [['name', 'ASC']]
+    });
+
+    // Format data for export
+    const exportData = users.map(user => {
+      const companyAccountNumbers = user.companies
+        ? user.companies.map(c => c.referenceNo).filter(refNo => refNo !== null && refNo !== undefined).join(', ')
+        : '';
+
+      return {
+        id: user.id || '',
+        name: user.name || '',
+        email: user.email || '',
+        role: user.role || '',
+        active: user.isActive ? 'TRUE' : 'FALSE',
+        all_companies: user.allCompanies ? 'TRUE' : 'FALSE',
+        company_account_numbers: companyAccountNumbers,
+        send_invoice_email: user.sendInvoiceEmail ? 'TRUE' : 'FALSE',
+        send_invoice_attachment: user.sendInvoiceAttachment ? 'TRUE' : 'FALSE',
+        send_statement_email: user.sendStatementEmail ? 'TRUE' : 'FALSE',
+        send_statement_attachment: user.sendStatementAttachment ? 'TRUE' : 'FALSE',
+        send_email_as_summary: user.sendEmailAsSummary ? 'TRUE' : 'FALSE',
+        send_import_summary_report: user.sendImportSummaryReport ? 'TRUE' : 'FALSE'
+      };
+    });
+
+    if (format === 'csv') {
+      // Generate CSV using Papa.parse
+      const csv = Papa.unparse(exportData, {
+        header: true,
+        columns: ['id', 'name', 'email', 'role', 'active', 'all_companies', 'company_account_numbers', 'send_invoice_email', 'send_invoice_attachment', 'send_statement_email', 'send_statement_attachment', 'send_email_as_summary', 'send_import_summary_report']
+      });
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="users-export-${new Date().toISOString().split('T')[0]}.csv"`);
+      res.send(csv);
+    } else {
+      // Generate XLS/XLSX using XLSX library
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Users');
+      
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: format === 'xls' ? 'xls' : 'xlsx' });
+      
+      res.setHeader('Content-Type', format === 'xls' ? 'application/vnd.ms-excel' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="users-export-${new Date().toISOString().split('T')[0]}.${format}"`);
+      res.send(buffer);
+    }
+
+    // Log export activity (fire-and-forget)
+    logActivity({
+      type: ActivityType.USERS_EXPORTED,
+      userId: req.user.userId,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: `Exported ${users.length} users to ${format.toUpperCase()}`,
+      details: {
+        format: format,
+        userCount: users.length
+      },
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    }).catch(err => console.error('Error logging export activity:', err));
+  } catch (error) {
+    console.error('Error exporting users:', error);
     res.status(500).json({ message: error.message });
   }
 });
