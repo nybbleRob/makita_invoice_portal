@@ -136,9 +136,21 @@ const Register = () => {
     }
   };
   
+  const registerStyle = settings?.loginBackgroundImage ? {
+    backgroundImage: `url(${API_BASE_URL}${settings.loginBackgroundImage})`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
+    minHeight: '100vh',
+    height: '100%'
+  } : {
+    minHeight: '100vh',
+    height: '100%'
+  };
+
   if (success) {
     return (
-      <div className="page page-center">
+      <div className="page page-center" style={registerStyle}>
         <PageTitle title="Registration Submitted" />
         <div className="container container-tight py-4">
           <div className="card card-md">
@@ -172,7 +184,7 @@ const Register = () => {
   }
   
   return (
-    <div className="page page-center">
+    <div className="page page-center" style={registerStyle}>
       <PageTitle title="Register for New Account" />
       <div className="container container-tight py-4">
         <div className="card card-md">
