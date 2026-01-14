@@ -206,6 +206,122 @@ router.post('/bulk-status', canManageUsers, async (req, res) => {
   }
 });
 
+// Get manageable roles for current user
+// MUST be defined BEFORE /:id route to avoid "roles" being treated as a UUID
+router.get('/roles/manageable', canManageUsers, (req, res) => {
+  try {
+    const manageableRoles = getManageableRoles(req.user.role);
+    res.json(manageableRoles.map(role => ({
+      value: role,
+      label: getRoleLabel(role)
+    })));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+/**
+ * Export users to CSV/XLS
+ * GET /api/users/export?format=csv|xlsx
+ * MUST be defined BEFORE /:id route to avoid "export" being treated as a UUID
+ */
+router.get('/export', canManageUsers, async (req, res) => {
+  try {
+    const format = (req.query.format || 'csv').toLowerCase();
+    if (format !== 'csv' && format !== 'xls' && format !== 'xlsx') {
+      return res.status(400).json({ message: 'Invalid format. Use csv, xls, or xlsx' });
+    }
+
+    // Get manageable roles
+    const manageableRoles = getManageableRoles(req.user.role);
+    
+    // Filter by manageable roles (global admins can see all users)
+    const where = manageableRoles.length === Object.keys(ROLE_HIERARCHY).length
+      ? {} 
+      : { role: { [Op.in]: manageableRoles } };
+
+    // Get all users with companies
+    const users = await User.findAll({
+      where,
+      attributes: { exclude: ['password', 'twoFactorSecret', 'resetPasswordToken', 'resetPasswordExpires', 'emailChangeToken'] },
+      include: [
+        {
+          model: Company,
+          as: 'companies',
+          attributes: ['id', 'name', 'referenceNo'],
+          through: { attributes: [] },
+          required: false
+        }
+      ],
+      order: [['name', 'ASC']]
+    });
+
+    // Format data for export
+    const exportData = users.map(user => {
+      const companyAccountNumbers = user.companies
+        ? user.companies.map(c => c.referenceNo).filter(refNo => refNo !== null && refNo !== undefined).join(', ')
+        : '';
+
+      return {
+        id: user.id || '',
+        name: user.name || '',
+        email: user.email || '',
+        role: user.role || '',
+        active: user.isActive ? 'TRUE' : 'FALSE',
+        all_companies: user.allCompanies ? 'TRUE' : 'FALSE',
+        company_account_numbers: companyAccountNumbers,
+        send_invoice_email: user.sendInvoiceEmail ? 'TRUE' : 'FALSE',
+        send_invoice_attachment: user.sendInvoiceAttachment ? 'TRUE' : 'FALSE',
+        send_statement_email: user.sendStatementEmail ? 'TRUE' : 'FALSE',
+        send_statement_attachment: user.sendStatementAttachment ? 'TRUE' : 'FALSE',
+        send_email_as_summary: user.sendEmailAsSummary ? 'TRUE' : 'FALSE',
+        send_import_summary_report: user.sendImportSummaryReport ? 'TRUE' : 'FALSE'
+      };
+    });
+
+    if (format === 'csv') {
+      // Generate CSV using Papa.parse
+      const csv = Papa.unparse(exportData, {
+        header: true,
+        columns: ['id', 'name', 'email', 'role', 'active', 'all_companies', 'company_account_numbers', 'send_invoice_email', 'send_invoice_attachment', 'send_statement_email', 'send_statement_attachment', 'send_email_as_summary', 'send_import_summary_report']
+      });
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="users-export-${new Date().toISOString().split('T')[0]}.csv"`);
+      res.send(csv);
+    } else {
+      // Generate XLS/XLSX using XLSX library
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Users');
+      
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: format === 'xls' ? 'xls' : 'xlsx' });
+      
+      res.setHeader('Content-Type', format === 'xls' ? 'application/vnd.ms-excel' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="users-export-${new Date().toISOString().split('T')[0]}.${format}"`);
+      res.send(buffer);
+    }
+
+    // Log export activity (fire-and-forget)
+    logActivity({
+      type: ActivityType.USERS_EXPORTED,
+      userId: req.user.userId,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: `Exported ${users.length} users to ${format.toUpperCase()}`,
+      details: {
+        format: format,
+        userCount: users.length
+      },
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    }).catch(err => console.error('Error logging export activity:', err));
+  } catch (error) {
+    console.error('Error exporting users:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Get single user
 router.get('/:id', canManageUsers, async (req, res) => {
   try {
@@ -2031,19 +2147,6 @@ router.post('/import', canManageUsers, upload.single('file'), async (req, res) =
   }
 });
 
-// Get manageable roles for current user
-router.get('/roles/manageable', canManageUsers, (req, res) => {
-  try {
-    const manageableRoles = getManageableRoles(req.user.role);
-    res.json(manageableRoles.map(role => ({
-      value: role,
-      label: getRoleLabel(role)
-    })));
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
 // Get companies assigned to a user (with pagination support)
 router.get('/:id/companies', canManageUsers, async (req, res) => {
   try {
@@ -2167,107 +2270,6 @@ router.post('/:id/companies', canManageUsers, async (req, res) => {
       companies: user.companies || []
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-/**
- * Export users to CSV/XLS
- * GET /api/users/export?format=csv|xlsx
- */
-router.get('/export', canManageUsers, async (req, res) => {
-  try {
-    const format = (req.query.format || 'csv').toLowerCase();
-    if (format !== 'csv' && format !== 'xls' && format !== 'xlsx') {
-      return res.status(400).json({ message: 'Invalid format. Use csv, xls, or xlsx' });
-    }
-
-    // Get manageable roles
-    const manageableRoles = getManageableRoles(req.user.role);
-    
-    // Filter by manageable roles (global admins can see all users)
-    const where = manageableRoles.length === Object.keys(ROLE_HIERARCHY).length
-      ? {} 
-      : { role: { [Op.in]: manageableRoles } };
-
-    // Get all users with companies
-    const users = await User.findAll({
-      where,
-      attributes: { exclude: ['password', 'twoFactorSecret', 'resetPasswordToken', 'resetPasswordExpires', 'emailChangeToken'] },
-      include: [
-        {
-          model: Company,
-          as: 'companies',
-          attributes: ['id', 'name', 'referenceNo'],
-          through: { attributes: [] },
-          required: false
-        }
-      ],
-      order: [['name', 'ASC']]
-    });
-
-    // Format data for export
-    const exportData = users.map(user => {
-      const companyAccountNumbers = user.companies
-        ? user.companies.map(c => c.referenceNo).filter(refNo => refNo !== null && refNo !== undefined).join(', ')
-        : '';
-
-      return {
-        id: user.id || '',
-        name: user.name || '',
-        email: user.email || '',
-        role: user.role || '',
-        active: user.isActive ? 'TRUE' : 'FALSE',
-        all_companies: user.allCompanies ? 'TRUE' : 'FALSE',
-        company_account_numbers: companyAccountNumbers,
-        send_invoice_email: user.sendInvoiceEmail ? 'TRUE' : 'FALSE',
-        send_invoice_attachment: user.sendInvoiceAttachment ? 'TRUE' : 'FALSE',
-        send_statement_email: user.sendStatementEmail ? 'TRUE' : 'FALSE',
-        send_statement_attachment: user.sendStatementAttachment ? 'TRUE' : 'FALSE',
-        send_email_as_summary: user.sendEmailAsSummary ? 'TRUE' : 'FALSE',
-        send_import_summary_report: user.sendImportSummaryReport ? 'TRUE' : 'FALSE'
-      };
-    });
-
-    if (format === 'csv') {
-      // Generate CSV using Papa.parse
-      const csv = Papa.unparse(exportData, {
-        header: true,
-        columns: ['id', 'name', 'email', 'role', 'active', 'all_companies', 'company_account_numbers', 'send_invoice_email', 'send_invoice_attachment', 'send_statement_email', 'send_statement_attachment', 'send_email_as_summary', 'send_import_summary_report']
-      });
-
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename="users-export-${new Date().toISOString().split('T')[0]}.csv"`);
-      res.send(csv);
-    } else {
-      // Generate XLS/XLSX using XLSX library
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Users');
-      
-      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: format === 'xls' ? 'xls' : 'xlsx' });
-      
-      res.setHeader('Content-Type', format === 'xls' ? 'application/vnd.ms-excel' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename="users-export-${new Date().toISOString().split('T')[0]}.${format}"`);
-      res.send(buffer);
-    }
-
-    // Log export activity (fire-and-forget)
-    logActivity({
-      type: ActivityType.USERS_EXPORTED,
-      userId: req.user.userId,
-      userEmail: req.user.email,
-      userRole: req.user.role,
-      action: `Exported ${users.length} users to ${format.toUpperCase()}`,
-      details: {
-        format: format,
-        userCount: users.length
-      },
-      ipAddress: req.ip || req.connection.remoteAddress,
-      userAgent: req.get('user-agent')
-    }).catch(err => console.error('Error logging export activity:', err));
-  } catch (error) {
-    console.error('Error exporting users:', error);
     res.status(500).json({ message: error.message });
   }
 });
