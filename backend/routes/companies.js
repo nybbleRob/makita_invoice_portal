@@ -3,6 +3,7 @@ const multer = require('multer');
 const Papa = require('papaparse');
 const XLSX = require('xlsx');
 const { Company, Sequelize, ImportTransaction, User, UserCompany, sequelize } = require('../models');
+const { QueryTypes } = Sequelize;
 const { Op } = Sequelize;
 const auth = require('../middleware/auth');
 const globalAdmin = require('../middleware/globalAdmin');
@@ -1145,7 +1146,7 @@ async function parseAndValidateImportFile(file) {
 }
 
 // Helper function to process a single row and return preview data
-async function processRowForPreview(row, rowNum, existingCompaniesMap, csvCompaniesMap = null, existingUsersMap = null) {
+async function processRowForPreview(row, rowNum, existingCompaniesMap, csvCompaniesMap = null, existingUsersMap = null, existingCompaniesByIdMap = null) {
   const result = {
     rowNum,
     status: 'valid', // 'valid', 'warning', 'error'
@@ -1351,7 +1352,7 @@ router.post('/import/preview', auth, upload.single('file'), async (req, res) => 
     
     const rows = await parseAndValidateImportFile(req.file);
 
-    // Get all existing companies by referenceNo for matching
+    // Get all existing companies by referenceNo and ID for matching
     const existingCompanies = await Company.findAll({
       include: [{
         model: Company,
@@ -1361,11 +1362,13 @@ router.post('/import/preview', auth, upload.single('file'), async (req, res) => 
       }]
     });
 
-    const existingCompaniesMap = new Map();
+    const existingCompaniesMap = new Map(); // Map by referenceNo (for backwards compatibility)
+    const existingCompaniesByIdMap = new Map(); // Map by ID
     existingCompanies.forEach(company => {
       if (company.referenceNo) {
         existingCompaniesMap.set(company.referenceNo, company);
       }
+      existingCompaniesByIdMap.set(company.id, company);
     });
 
     // Get all existing users by email for primary contact matching
@@ -1445,7 +1448,7 @@ router.post('/import/preview', auth, upload.single('file'), async (req, res) => 
     for (let i = 0; i < sortedRows.length; i++) {
       const { row, originalIndex: rowNum } = sortedRows[i];
       
-      const processed = await processRowForPreview(row, rowNum, existingCompaniesMap, csvCompaniesMap, existingUsersMap);
+      const processed = await processRowForPreview(row, rowNum, existingCompaniesMap, csvCompaniesMap, existingUsersMap, existingCompaniesByIdMap);
       previewData.push(processed);
 
       // Track unique emails to create
@@ -1480,7 +1483,8 @@ router.post('/import/preview', auth, upload.single('file'), async (req, res) => 
 
     // Column mapping descriptions (support both old and new formats)
     const columnMappings = {
-      'account_no': 'Account Number - Unique identifier for the company',
+      'id': 'Database ID (UUID) - Primary matching key, falls back to account_no if not present',
+      'account_no': 'Account Number - Unique identifier for the company (fallback matching key)',
       'parent_account_no': 'Parent Account Number - Empty for top-level CORP, otherwise references parent',
       'company_name': 'Company Name - Required',
       'type': 'Company Type - CORP (Corporate/Parent), SUB (Subsidiary), or BRANCH',
@@ -1681,15 +1685,32 @@ router.post('/import', auth, upload.single('file'), async (req, res) => {
         };
         companyData.metadata = metadata;
 
-        // Check if company exists
-        const refNo = referenceNo ? parseInt(referenceNo) : null;
+        // Check if company exists - try ID first, then fall back to referenceNo
         let existingCompany = null;
-        if (refNo) {
-          existingCompany = existingCompaniesMap.get(refNo);
-          if (!existingCompany) {
-            existingCompany = await Company.findOne({
-              where: { referenceNo: refNo }
-            });
+        
+        // Try to match by ID first (if present and valid UUID)
+        if (companyId && typeof companyId === 'string' && companyId.trim()) {
+          const idTrimmed = companyId.trim();
+          // Basic UUID format validation (8-4-4-4-12 hex characters)
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          if (uuidRegex.test(idTrimmed)) {
+            existingCompany = existingCompaniesByIdMap.get(idTrimmed);
+            if (!existingCompany) {
+              existingCompany = await Company.findByPk(idTrimmed);
+            }
+          }
+        }
+        
+        // Fall back to referenceNo matching if ID not found or not present
+        if (!existingCompany) {
+          const refNo = referenceNo ? parseInt(referenceNo) : null;
+          if (refNo) {
+            existingCompany = existingCompaniesMap.get(refNo);
+            if (!existingCompany) {
+              existingCompany = await Company.findOne({
+                where: { referenceNo: refNo }
+              });
+            }
           }
         }
 
@@ -2264,6 +2285,135 @@ router.get('/:id/assigned-users', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching assigned users:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+/**
+ * Export companies to CSV/XLS
+ * GET /api/companies/export?format=csv|xsl
+ */
+router.get('/export', auth, async (req, res) => {
+  try {
+    // Check if user is administrator (same as import)
+    if (req.user.role !== 'global_admin' && req.user.role !== 'administrator') {
+      return res.status(403).json({ 
+        message: 'Access denied. Administrator privileges required.' 
+      });
+    }
+
+    const format = (req.query.format || 'csv').toLowerCase();
+    if (format !== 'csv' && format !== 'xls' && format !== 'xlsx') {
+      return res.status(400).json({ message: 'Invalid format. Use csv or xls' });
+    }
+
+    // Get all companies with parent and primary contact
+    const companies = await Company.findAll({
+      include: [
+        {
+          model: Company,
+          as: 'parent',
+          required: false,
+          attributes: ['id', 'referenceNo']
+        },
+        {
+          model: User,
+          as: 'primaryContact',
+          required: false,
+          attributes: ['id', 'email']
+        }
+      ],
+      order: [
+        [Sequelize.literal("CASE WHEN type = 'CORP' THEN 1 WHEN type = 'SUB' THEN 2 WHEN type = 'BRANCH' THEN 3 ELSE 4 END"), 'ASC'],
+        ['name', 'ASC']
+      ]
+    });
+
+    // Get all users assigned to companies for contact_emails
+    // Use raw query for efficiency
+    const companyIds = companies.map(c => c.id);
+    const userCompanyRows = await sequelize.query(`
+      SELECT uc."companyId", u.email
+      FROM user_companies uc
+      INNER JOIN users u ON u.id = uc."userId"
+      WHERE uc."companyId" = ANY(:companyIds)
+        AND u."isActive" = true
+        AND u."deletedAt" IS NULL
+      ORDER BY uc."companyId", u.email
+    `, {
+      replacements: { companyIds: companyIds },
+      type: QueryTypes.SELECT
+    });
+
+    // Build a map of companyId -> array of user emails
+    const companyUsersMap = new Map();
+    userCompanyRows.forEach(row => {
+      if (row.email) {
+        if (!companyUsersMap.has(row.companyId)) {
+          companyUsersMap.set(row.companyId, []);
+        }
+        companyUsersMap.get(row.companyId).push(row.email);
+      }
+    });
+
+    // Format data for export
+    const exportData = companies.map(company => {
+      const assignedUsers = companyUsersMap.get(company.id) || [];
+      const contactEmails = assignedUsers.join(', ');
+      const primaryEmail = company.primaryContact?.email || company.globalSystemEmail || '';
+
+      return {
+        id: company.id || '',
+        account_no: company.referenceNo || '',
+        parent_account_no: company.parent?.referenceNo || '',
+        company_name: company.name || '',
+        type: company.type || '',
+        active: company.isActive ? 'TRUE' : 'FALSE',
+        edi: company.edi ? 'TRUE' : 'FALSE',
+        contact_emails: contactEmails,
+        primary_email: primaryEmail
+      };
+    });
+
+    if (format === 'csv') {
+      // Generate CSV using Papa.parse
+      const csv = Papa.unparse(exportData, {
+        header: true,
+        columns: ['id', 'account_no', 'parent_account_no', 'company_name', 'type', 'active', 'edi', 'contact_emails', 'primary_email']
+      });
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="companies-export-${new Date().toISOString().split('T')[0]}.csv"`);
+      res.send(csv);
+    } else {
+      // Generate XLS/XLSX using XLSX library
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Companies');
+      
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: format === 'xls' ? 'xls' : 'xlsx' });
+      
+      res.setHeader('Content-Type', format === 'xls' ? 'application/vnd.ms-excel' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="companies-export-${new Date().toISOString().split('T')[0]}.${format}"`);
+      res.send(buffer);
+    }
+
+    // Log export activity (fire-and-forget)
+    logActivity({
+      type: ActivityType.COMPANY_EXPORTED,
+      userId: req.user.userId,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: `Exported ${companies.length} companies to ${format.toUpperCase()}`,
+      details: {
+        format: format,
+        companyCount: companies.length
+      },
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    }).catch(err => console.error('Error logging export activity:', err));
+  } catch (error) {
+    console.error('Error exporting companies:', error);
     res.status(500).json({ message: error.message });
   }
 });
