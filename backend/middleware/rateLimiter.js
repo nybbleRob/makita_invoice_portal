@@ -93,13 +93,15 @@ const rateLimiters = {
       // Use email if available, otherwise IP
       return req.body?.email || req.ip || 'unknown';
     },
-    // Skip rate limiting for /me and /validate-reset-token endpoints (read-only operations)
+    // Skip rate limiting for /me, /validate-reset-token, and /validate-email-change endpoints (read-only operations)
     skip: (req) => {
-      // When mounted at /api/auth, the path will be /me or /validate-reset-token
+      // When mounted at /api/auth, the path will be /me, /validate-reset-token, or /validate-email-change
       return req.path === '/me' || 
              req.originalUrl === '/api/auth/me' ||
              req.path === '/validate-reset-token' ||
-             req.originalUrl === '/api/auth/validate-reset-token';
+             req.originalUrl === '/api/auth/validate-reset-token' ||
+             req.path === '/validate-email-change' ||
+             req.originalUrl === '/api/auth/validate-email-change';
     },
   }),
   
