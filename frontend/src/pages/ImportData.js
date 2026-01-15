@@ -428,9 +428,9 @@ const ImportData = () => {
               {importing && importStep === 'importing' && (
                 <div className="text-center py-5">
                   <div className="spinner-border text-primary mb-3" role="status">
-                    <span className="visually-hidden">Processing...</span>
+                    <span className="visually-hidden">Importing...</span>
                   </div>
-                  <h5>Importing data...</h5>
+                  <h5>Importing {importType === 'companies' ? 'companies' : 'users'}...</h5>
                   <p className="text-muted">Please wait while we process your import. This may take a few moments.</p>
                 </div>
               )}
@@ -772,15 +772,6 @@ const ImportData = () => {
                 );
               })()}
 
-              {/* Step 3: Importing */}
-              {importStep === 'importing' && (
-                <div className="text-center py-5">
-                  <div className="spinner-border text-primary mb-3" role="status">
-                    <span className="visually-hidden">Loading...</span>
-                  </div>
-                  <div>Importing {importType}...</div>
-                </div>
-              )}
 
               {/* Step 4: Complete */}
               {importStep === 'complete' && importResults && (
