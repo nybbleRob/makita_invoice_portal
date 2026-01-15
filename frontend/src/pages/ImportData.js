@@ -408,8 +408,30 @@ const ImportData = () => {
                 </>
               )}
 
+              {/* Loading indicator during file upload/preview */}
+              {importing && importStep === 'preview' && !importPreview && (
+                <div className="text-center py-5">
+                  <div className="spinner-border text-primary mb-3" role="status">
+                    <span className="visually-hidden">Processing...</span>
+                  </div>
+                  <h5>Uploading and processing file...</h5>
+                  <p className="text-muted">Please wait while we analyze your import file.</p>
+                </div>
+              )}
+
+              {/* Loading indicator during import execution */}
+              {importing && importStep === 'importing' && (
+                <div className="text-center py-5">
+                  <div className="spinner-border text-primary mb-3" role="status">
+                    <span className="visually-hidden">Processing...</span>
+                  </div>
+                  <h5>Importing data...</h5>
+                  <p className="text-muted">Please wait while we process your import. This may take a few moments.</p>
+                </div>
+              )}
+
               {/* Step 2: Preview & Validation */}
-              {importStep === 'preview' && importPreview && (() => {
+              {importStep === 'preview' && importPreview && !importing && (() => {
                 // Filter preview data based on selected filter
                 const filteredPreview = importPreview.preview.filter(item => {
                   if (previewFilter === 'all') return true;
@@ -418,6 +440,7 @@ const ImportData = () => {
                   if (previewFilter === 'valid') return item.status === 'valid';
                   if (previewFilter === 'create') return item.action === 'create';
                   if (previewFilter === 'update') return item.action === 'update';
+                  if (previewFilter === 'no_change') return item.action === 'no_change';
                   return true;
                 });
 
@@ -451,6 +474,16 @@ const ImportData = () => {
                             </div>
                           </div>
                         </div>
+                        {importType === 'companies' && importPreview.summary.noChange !== undefined && (
+                          <div className="col-md-2">
+                            <div className="card">
+                              <div className="card-body text-center py-2">
+                                <div className="h4 mb-0 text-muted">{importPreview.summary.noChange || 0}</div>
+                                <div className="text-muted small">No Change</div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         {importType === 'companies' ? (
                           <>
                             <div className="col-md-2">
@@ -520,6 +553,7 @@ const ImportData = () => {
                             <option value="error">Errors ({importPreview.preview.filter(i => i.status === 'error').length})</option>
                             <option value="create">New {importType === 'companies' ? 'Companies' : 'Users'} ({importPreview.preview.filter(i => i.action === 'create').length})</option>
                             <option value="update">Updates ({importPreview.preview.filter(i => i.action === 'update').length})</option>
+                            {importType === 'companies' && <option value="no_change">No Change ({importPreview.preview.filter(i => i.action === 'no_change').length})</option>}
                           </select>
                         </div>
                         <button

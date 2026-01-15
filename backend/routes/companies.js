@@ -1293,6 +1293,59 @@ async function parseAndValidateImportFile(file) {
   return rows;
 }
 
+// Helper function to check if company data has actually changed
+function hasCompanyDataChanged(existingCompany, newData, newPrimaryEmail = null) {
+  // Compare basic fields
+  if ((existingCompany.name || '').trim() !== (newData.name || '').trim()) {
+    return true;
+  }
+  if (existingCompany.type !== newData.type) {
+    return true;
+  }
+  if (existingCompany.referenceNo !== newData.referenceNo) {
+    return true;
+  }
+  if (existingCompany.edi !== newData.edi) {
+    return true;
+  }
+  if (existingCompany.isActive !== newData.isActive) {
+    return true;
+  }
+  
+  // Compare parentId (handle null/undefined)
+  const existingParentId = existingCompany.parentId || null;
+  const newParentId = newData.parentId || null;
+  if (existingParentId !== newParentId) {
+    return true;
+  }
+  
+  // Compare metadata
+  const existingMetadata = existingCompany.metadata || {};
+  const newMetadata = newData.metadata || {};
+  if (existingMetadata.receivesStatements !== newMetadata.receivesStatements) {
+    return true;
+  }
+  if (existingMetadata.receivesInvoices !== newMetadata.receivesInvoices) {
+    return true;
+  }
+  
+  // Compare primary email
+  const existingPrimaryEmail = existingCompany.primaryContact?.email?.toLowerCase() || 
+                                existingCompany.globalSystemEmail?.toLowerCase() || 
+                                null;
+  const newPrimaryEmailLower = newPrimaryEmail ? newPrimaryEmail.toLowerCase() : null;
+  
+  // Normalize null/empty strings
+  const existingEmailNormalized = existingPrimaryEmail || null;
+  const newEmailNormalized = newPrimaryEmailLower || null;
+  
+  if (existingEmailNormalized !== newEmailNormalized) {
+    return true;
+  }
+  
+  return false;
+}
+
 // Helper function to process a single row and return preview data
 async function processRowForPreview(row, rowNum, existingCompaniesMap, csvCompaniesMap = null, existingUsersMap = null, existingCompaniesByIdMap = null) {
   const result = {
@@ -1429,7 +1482,13 @@ async function processRowForPreview(row, rowNum, existingCompaniesMap, csvCompan
     }
 
     if (existingCompany) {
-      result.action = 'update';
+      // Check if data has actually changed
+      const hasChanged = hasCompanyDataChanged(existingCompany, companyData, result.primaryEmail);
+      if (hasChanged) {
+        result.action = 'update';
+      } else {
+        result.action = 'no_change';
+      }
       result.existingData = {
         name: existingCompany.name,
         type: existingCompany.type,
@@ -1502,12 +1561,20 @@ router.post('/import/preview', auth, upload.single('file'), async (req, res) => 
 
     // Get all existing companies by referenceNo and ID for matching
     const existingCompanies = await Company.findAll({
-      include: [{
-        model: Company,
-        as: 'parent',
-        attributes: ['id', 'name'],
-        required: false
-      }]
+      include: [
+        {
+          model: Company,
+          as: 'parent',
+          attributes: ['id', 'name'],
+          required: false
+        },
+        {
+          model: User,
+          as: 'primaryContact',
+          attributes: ['id', 'email'],
+          required: false
+        }
+      ]
     });
 
     const existingCompaniesMap = new Map(); // Map by referenceNo (for backwards compatibility)
@@ -1587,6 +1654,7 @@ router.post('/import/preview', auth, upload.single('file'), async (req, res) => 
       total: rows.length,
       toCreate: 0,
       toUpdate: 0,
+      noChange: 0,
       errors: 0,
       warnings: 0,
       usersToCreate: 0,
@@ -1615,14 +1683,18 @@ router.post('/import/preview', auth, upload.single('file'), async (req, res) => 
         summary.warnings++;
         if (processed.action === 'create') {
           summary.toCreate++;
-        } else {
+        } else if (processed.action === 'update') {
           summary.toUpdate++;
+        } else if (processed.action === 'no_change') {
+          summary.noChange++;
         }
       } else {
         if (processed.action === 'create') {
           summary.toCreate++;
-        } else {
+        } else if (processed.action === 'update') {
           summary.toUpdate++;
+        } else if (processed.action === 'no_change') {
+          summary.noChange++;
         }
       }
     }
@@ -1678,19 +1750,29 @@ router.post('/import', auth, upload.single('file'), async (req, res) => {
 
     // Get all existing companies by referenceNo for matching
     const existingCompanies = await Company.findAll({
-      include: [{
-        model: Company,
-        as: 'parent',
-        attributes: ['id', 'name'],
-        required: false
-      }]
+      include: [
+        {
+          model: Company,
+          as: 'parent',
+          attributes: ['id', 'name'],
+          required: false
+        },
+        {
+          model: User,
+          as: 'primaryContact',
+          attributes: ['id', 'email'],
+          required: false
+        }
+      ]
     });
 
     const existingCompaniesMap = new Map();
+    const existingCompaniesByIdMap = new Map();
     existingCompanies.forEach(company => {
       if (company.referenceNo) {
         existingCompaniesMap.set(company.referenceNo, company);
       }
+      existingCompaniesByIdMap.set(company.id, company);
     });
 
     // Get all existing users by email
@@ -1746,6 +1828,7 @@ router.post('/import', auth, upload.single('file'), async (req, res) => {
       const { row, originalIndex: rowNum } = sortedRows[i];
       try {
         // Map column names (support both new and old formats)
+        const companyId = row['id'] || row['ID'] || row['Id'] || null;
         const name = row['company_name'] || row['CNME'] || row['Name'] || row['name'] || row['Company Name'] || '';
         const type = (row['type'] || row['TYPE'] || row['Type'] || '').toUpperCase();
         const referenceNo = row['account_no'] || row['CUSTOMER'] || row['Reference No'] || row['referenceNo'] || row['reference_no'] || row['ReferenceNo'] || null;
@@ -1844,7 +1927,16 @@ router.post('/import', auth, upload.single('file'), async (req, res) => {
           if (uuidRegex.test(idTrimmed)) {
             existingCompany = existingCompaniesByIdMap.get(idTrimmed);
             if (!existingCompany) {
-              existingCompany = await Company.findByPk(idTrimmed);
+              existingCompany = await Company.findByPk(idTrimmed, {
+                include: [
+                  {
+                    model: User,
+                    as: 'primaryContact',
+                    attributes: ['id', 'email'],
+                    required: false
+                  }
+                ]
+              });
             }
           }
         }
@@ -1856,37 +1948,58 @@ router.post('/import', auth, upload.single('file'), async (req, res) => {
             existingCompany = existingCompaniesMap.get(refNo);
             if (!existingCompany) {
               existingCompany = await Company.findOne({
-                where: { referenceNo: refNo }
+                where: { referenceNo: refNo },
+                include: [
+                  {
+                    model: User,
+                    as: 'primaryContact',
+                    attributes: ['id', 'email'],
+                    required: false
+                  }
+                ]
               });
             }
           }
         }
 
+        // Get primary email for comparison
+        const primaryEmailForComparison = primaryEmail && primaryEmail.trim() 
+          ? primaryEmail.trim().toLowerCase() 
+          : null;
+
         let company;
         if (existingCompany) {
-          // Store previous data for UNDO
-          const previousData = {
-            name: existingCompany.name,
-            type: existingCompany.type,
-            referenceNo: existingCompany.referenceNo,
-            globalSystemEmail: existingCompany.globalSystemEmail,
-            edi: existingCompany.edi,
-            isActive: existingCompany.isActive,
-            parentId: existingCompany.parentId,
-            primaryContactId: existingCompany.primaryContactId,
-            sendInvoiceEmail: existingCompany.sendInvoiceEmail,
-            sendStatementEmail: existingCompany.sendStatementEmail,
-            metadata: existingCompany.metadata || {}
-          };
+          // Check if data has actually changed
+          const hasChanged = hasCompanyDataChanged(existingCompany, companyData, primaryEmailForComparison);
+          
+          if (hasChanged) {
+            // Store previous data for UNDO
+            const previousData = {
+              name: existingCompany.name,
+              type: existingCompany.type,
+              referenceNo: existingCompany.referenceNo,
+              globalSystemEmail: existingCompany.globalSystemEmail,
+              edi: existingCompany.edi,
+              isActive: existingCompany.isActive,
+              parentId: existingCompany.parentId,
+              primaryContactId: existingCompany.primaryContactId,
+              sendInvoiceEmail: existingCompany.sendInvoiceEmail,
+              sendStatementEmail: existingCompany.sendStatementEmail,
+              metadata: existingCompany.metadata || {}
+            };
 
-          // Update existing company
-          await existingCompany.update(companyData);
-          company = existingCompany;
-          updatedCompaniesData.push({
-            companyId: existingCompany.id,
-            previousData: previousData
-          });
-          results.updated++;
+            // Update existing company
+            await existingCompany.update(companyData);
+            company = existingCompany;
+            updatedCompaniesData.push({
+              companyId: existingCompany.id,
+              previousData: previousData
+            });
+            results.updated++;
+          } else {
+            // No changes, skip update but still use the company for email handling
+            company = existingCompany;
+          }
         } else {
           // Create new company
           company = await Company.create(companyData);
