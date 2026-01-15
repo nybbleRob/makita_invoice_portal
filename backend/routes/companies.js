@@ -483,7 +483,6 @@ router.get('/export', auth, async (req, res) => {
         INNER JOIN users u ON u.id = uc."userId"
         WHERE uc."companyId" IN (${placeholders})
           AND u."isActive" = true
-          AND u."deletedAt" IS NULL
         ORDER BY uc."companyId", u.email
       `, {
         replacements: replacements,
@@ -2474,7 +2473,6 @@ router.get('/:id/assigned-users-count', auth, async (req, res) => {
       INNER JOIN users u ON u.id = uc."userId"
       WHERE uc."companyId" = ANY(:ancestorIds)
         AND u."isActive" = true
-        AND u."deletedAt" IS NULL
     `, {
       replacements: { ancestorIds: ancestorIds },
       type: sequelize.QueryTypes.SELECT
