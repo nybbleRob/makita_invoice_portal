@@ -24,10 +24,15 @@ const ImportData = () => {
     return currentUser?.role === 'global_admin' || currentUser?.role === 'administrator';
   };
 
-  // Fetch last import transaction on component mount
+  // Check if user is global admin
+  const isGlobalAdmin = () => {
+    return currentUser?.role === 'global_admin';
+  };
+
+  // Fetch last import transaction on component mount (only for global admins)
   useEffect(() => {
     const fetchLastImport = async () => {
-      if (!isAdministrator()) {
+      if (!isGlobalAdmin()) {
         return;
       }
 
@@ -252,8 +257,8 @@ const ImportData = () => {
         </div>
       </div>
 
-      {/* Undo Last Import Banner - Only for Companies */}
-      {importType === 'companies' && lastImport && (
+      {/* Undo Last Import Banner - Only for Global Admins and Companies */}
+      {importType === 'companies' && isGlobalAdmin() && lastImport && (
         <div className="page-body">
           <div className="container-xl">
             <div className="alert alert-warning alert-dismissible" role="alert">

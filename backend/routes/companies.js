@@ -2133,24 +2133,20 @@ router.post('/import', auth, upload.single('file'), async (req, res) => {
 
 // Get last import transaction endpoint - returns the most recent import that can be undone
 router.get('/import/last', auth, async (req, res) => {
-  // Check if user is administrator
-  if (req.user.role !== 'global_admin' && req.user.role !== 'administrator') {
+  // Check if user is global admin
+  if (req.user.role !== 'global_admin') {
     return res.status(403).json({ 
-      message: 'Access denied. Administrator privileges required.' 
+      message: 'Access denied. Global Administrator privileges required.' 
     });
   }
 
   try {
     // Find the most recent import transaction that hasn't been undone
-    // Global admins can see all imports, regular admins can only see their own
+    // Only global admins can see imports
     const whereClause = {
       type: 'company_import',
       status: 'completed'
     };
-
-    if (req.user.role !== 'global_admin') {
-      whereClause.userId = req.user.userId;
-    }
 
     const lastImport = await ImportTransaction.findOne({
       where: whereClause,
@@ -2187,10 +2183,10 @@ router.get('/import/last', auth, async (req, res) => {
 
 // UNDO import endpoint - rollback an import transaction
 router.post('/import/:transactionId/undo', auth, async (req, res) => {
-  // Check if user is administrator
-  if (req.user.role !== 'global_admin' && req.user.role !== 'administrator') {
+  // Check if user is global admin
+  if (req.user.role !== 'global_admin') {
     return res.status(403).json({ 
-      message: 'Access denied. Administrator privileges required.' 
+      message: 'Access denied. Global Administrator privileges required.' 
     });
   }
 
@@ -2215,12 +2211,7 @@ router.post('/import/:transactionId/undo', auth, async (req, res) => {
       return res.status(400).json({ message: 'This import has already been undone' });
     }
 
-    // Verify user has permission (only the user who created it or global admin can undo)
-    if (importTransaction.userId !== req.user.userId && req.user.role !== 'global_admin') {
-      return res.status(403).json({ 
-        message: 'Access denied. You can only undo your own imports.' 
-      });
-    }
+    // Global admins can undo any import (no additional check needed since we already verified global_admin role)
 
     const results = {
       deleted: 0,
