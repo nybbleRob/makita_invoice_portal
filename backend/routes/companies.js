@@ -467,18 +467,29 @@ router.get('/export', auth, async (req, res) => {
     // Get all users assigned to companies for contact_emails
     // Use raw query for efficiency
     const companyIds = companies.map(c => c.id);
-    const userCompanyRows = await sequelize.query(`
-      SELECT uc."companyId", u.email
-      FROM user_companies uc
-      INNER JOIN users u ON u.id = uc."userId"
-      WHERE uc."companyId" = ANY(:companyIds)
-        AND u."isActive" = true
-        AND u."deletedAt" IS NULL
-      ORDER BY uc."companyId", u.email
-    `, {
-      replacements: { companyIds: companyIds },
-      type: QueryTypes.SELECT
-    });
+    
+    let userCompanyRows = [];
+    if (companyIds.length > 0) {
+      // Use IN clause with proper array handling for PostgreSQL
+      const placeholders = companyIds.map((_, index) => `:companyId${index}`).join(', ');
+      const replacements = {};
+      companyIds.forEach((id, index) => {
+        replacements[`companyId${index}`] = id;
+      });
+      
+      userCompanyRows = await sequelize.query(`
+        SELECT uc."companyId", u.email
+        FROM user_companies uc
+        INNER JOIN users u ON u.id = uc."userId"
+        WHERE uc."companyId" IN (${placeholders})
+          AND u."isActive" = true
+          AND u."deletedAt" IS NULL
+        ORDER BY uc."companyId", u.email
+      `, {
+        replacements: replacements,
+        type: QueryTypes.SELECT
+      });
+    }
 
     // Build a map of companyId -> array of user emails
     const companyUsersMap = new Map();
