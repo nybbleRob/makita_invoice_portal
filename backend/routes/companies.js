@@ -1294,39 +1294,68 @@ async function parseAndValidateImportFile(file) {
 }
 
 // Helper function to check if company data has actually changed
-function hasCompanyDataChanged(existingCompany, newData, newPrimaryEmail = null) {
+// Returns: { changed: boolean, changedFields: string[], changes: object }
+function hasCompanyDataChanged(existingCompany, newData, newPrimaryEmail = null, existingContactEmails = null, newContactEmails = null) {
+  const result = {
+    changed: false,
+    changedFields: [],
+    changes: {}
+  };
+
   // Compare basic fields
-  if ((existingCompany.name || '').trim() !== (newData.name || '').trim()) {
-    return true;
+  const existingName = (existingCompany.name || '').trim();
+  const newName = (newData.name || '').trim();
+  if (existingName !== newName) {
+    result.changed = true;
+    result.changedFields.push('name');
+    result.changes.name = { old: existingName, new: newName };
   }
+
   if (existingCompany.type !== newData.type) {
-    return true;
+    result.changed = true;
+    result.changedFields.push('type');
+    result.changes.type = { old: existingCompany.type, new: newData.type };
   }
+
   if (existingCompany.referenceNo !== newData.referenceNo) {
-    return true;
+    result.changed = true;
+    result.changedFields.push('referenceNo');
+    result.changes.referenceNo = { old: existingCompany.referenceNo, new: newData.referenceNo };
   }
+
   if (existingCompany.edi !== newData.edi) {
-    return true;
+    result.changed = true;
+    result.changedFields.push('edi');
+    result.changes.edi = { old: existingCompany.edi, new: newData.edi };
   }
+
   if (existingCompany.isActive !== newData.isActive) {
-    return true;
+    result.changed = true;
+    result.changedFields.push('isActive');
+    result.changes.isActive = { old: existingCompany.isActive, new: newData.isActive };
   }
   
   // Compare parentId (handle null/undefined)
   const existingParentId = existingCompany.parentId || null;
   const newParentId = newData.parentId || null;
   if (existingParentId !== newParentId) {
-    return true;
+    result.changed = true;
+    result.changedFields.push('parentId');
+    result.changes.parentId = { old: existingParentId, new: newParentId };
   }
   
   // Compare metadata
   const existingMetadata = existingCompany.metadata || {};
   const newMetadata = newData.metadata || {};
   if (existingMetadata.receivesStatements !== newMetadata.receivesStatements) {
-    return true;
+    result.changed = true;
+    result.changedFields.push('receivesStatements');
+    result.changes.receivesStatements = { old: existingMetadata.receivesStatements, new: newMetadata.receivesStatements };
   }
   if (existingMetadata.receivesInvoices !== newMetadata.receivesInvoices) {
-    return true;
+    result.changed = true;
+    result.changedFields.push('receivesInvoices');
+    result.changes.receivesInvoices = { old: existingMetadata.receivesInvoices, new: newMetadata.receivesInvoices };
   }
   
   // Compare primary email
@@ -1340,14 +1369,36 @@ function hasCompanyDataChanged(existingCompany, newData, newPrimaryEmail = null)
   const newEmailNormalized = newPrimaryEmailLower || null;
   
   if (existingEmailNormalized !== newEmailNormalized) {
-    return true;
+    result.changed = true;
+    result.changedFields.push('primaryEmail');
+    result.changes.primaryEmail = { old: existingEmailNormalized, new: newEmailNormalized };
+  }
+
+  // Compare contact_emails (user assignments)
+  if (existingContactEmails !== null && newContactEmails !== null) {
+    // Normalize and sort email arrays for comparison
+    const normalizeEmails = (emails) => {
+      if (!Array.isArray(emails)) return [];
+      return emails.map(e => (e || '').toLowerCase().trim()).filter(e => e).sort();
+    };
+    
+    const existingEmailsNormalized = normalizeEmails(existingContactEmails);
+    const newEmailsNormalized = normalizeEmails(newContactEmails);
+    
+    // Compare arrays
+    if (existingEmailsNormalized.length !== newEmailsNormalized.length ||
+        !existingEmailsNormalized.every((email, idx) => email === newEmailsNormalized[idx])) {
+      result.changed = true;
+      result.changedFields.push('contact_emails');
+      result.changes.contact_emails = { old: existingEmailsNormalized, new: newEmailsNormalized };
+    }
   }
   
-  return false;
+  return result;
 }
 
 // Helper function to process a single row and return preview data
-async function processRowForPreview(row, rowNum, existingCompaniesMap, csvCompaniesMap = null, existingUsersMap = null, existingCompaniesByIdMap = null) {
+async function processRowForPreview(row, rowNum, existingCompaniesMap, csvCompaniesMap = null, existingUsersMap = null, existingCompaniesByIdMap = null, existingContactEmailsMap = null) {
   const result = {
     rowNum,
     status: 'valid', // 'valid', 'warning', 'error'
@@ -1357,7 +1408,9 @@ async function processRowForPreview(row, rowNum, existingCompaniesMap, csvCompan
     data: {},
     existingData: null,
     primaryEmail: null,
-    userAction: null // 'create', 'existing', or null
+    userAction: null, // 'create', 'existing', or null
+    changedFields: [],
+    changes: {}
   };
 
   try {
@@ -1367,8 +1420,19 @@ async function processRowForPreview(row, rowNum, existingCompaniesMap, csvCompan
     const referenceNo = row['account_no'] || row['CUSTOMER'] || row['Reference No'] || row['referenceNo'] || row['reference_no'] || row['ReferenceNo'] || null;
     const parentRef = row['parent_account_no'] || row['PARENT'] || row['Parent'] || row['parent'] || row['Parent Reference'] || null;
     const primaryEmail = row['primary_email'] || row['Email Address'] || row['email'] || row['Email'] || row['globalSystemEmail'] || '';
+    const contactEmailsStr = row['contact_emails'] || row['contactEmails'] || row['Contact Emails'] || '';
     const statements = row['Statements'] || row['statements'] || '';
     const invoices = row['Invoices / Credit'] || row['Invoices / Credit'] || row['invoices'] || '';
+    
+    // Parse contact_emails from CSV (comma-separated email list)
+    let newContactEmails = null;
+    if (contactEmailsStr && contactEmailsStr.trim()) {
+      newContactEmails = contactEmailsStr
+        .split(',')
+        .map(email => email.trim())
+        .filter(email => email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.toLowerCase()))
+        .map(email => email.toLowerCase());
+    }
     
     // EDI handling - support TRUE/FALSE strings and boolean
     let ediValue = row['edi'] || row['EDI'] || row['Enable EDI'] || false;
@@ -1482,10 +1546,25 @@ async function processRowForPreview(row, rowNum, existingCompaniesMap, csvCompan
     }
 
     if (existingCompany) {
+      // Get existing contact emails for this company
+      let existingContactEmails = null;
+      if (existingContactEmailsMap && existingContactEmailsMap.has(existingCompany.id)) {
+        existingContactEmails = existingContactEmailsMap.get(existingCompany.id);
+      }
+      
       // Check if data has actually changed
-      const hasChanged = hasCompanyDataChanged(existingCompany, companyData, result.primaryEmail);
-      if (hasChanged) {
+      const changeInfo = hasCompanyDataChanged(
+        existingCompany, 
+        companyData, 
+        result.primaryEmail,
+        existingContactEmails,
+        newContactEmails
+      );
+      
+      if (changeInfo.changed) {
         result.action = 'update';
+        result.changedFields = changeInfo.changedFields;
+        result.changes = changeInfo.changes;
       } else {
         result.action = 'no_change';
       }
@@ -1501,6 +1580,10 @@ async function processRowForPreview(row, rowNum, existingCompaniesMap, csvCompan
       };
     } else {
       result.action = 'create';
+      // For new companies, store contact_emails if provided
+      if (newContactEmails && newContactEmails.length > 0) {
+        result.data.contactEmails = newContactEmails;
+      }
     }
 
     if (result.warnings.length > 0) {
@@ -1597,6 +1680,39 @@ router.post('/import/preview', auth, upload.single('file'), async (req, res) => 
       }
     });
 
+    // Get all existing user assignments (contact_emails) for companies
+    const existingContactEmailsMap = new Map(); // Map: companyId -> array of email addresses
+    const companyIds = Array.from(existingCompaniesByIdMap.keys());
+    if (companyIds.length > 0) {
+      const placeholders = companyIds.map((_, index) => `:companyId${index}`).join(', ');
+      const replacements = {};
+      companyIds.forEach((id, index) => {
+        replacements[`companyId${index}`] = id;
+      });
+      
+      const userCompanyRows = await sequelize.query(`
+        SELECT uc."companyId", u.email
+        FROM user_companies uc
+        INNER JOIN users u ON u.id = uc."userId"
+        WHERE uc."companyId" IN (${placeholders})
+          AND u."isActive" = true
+        ORDER BY uc."companyId", u.email
+      `, {
+        replacements: replacements,
+        type: QueryTypes.SELECT
+      });
+
+      userCompanyRows.forEach(row => {
+        if (row.email) {
+          const companyId = row.companyId;
+          if (!existingContactEmailsMap.has(companyId)) {
+            existingContactEmailsMap.set(companyId, []);
+          }
+          existingContactEmailsMap.get(companyId).push(row.email.toLowerCase());
+        }
+      });
+    }
+
     // Sort rows by TYPE: CORP first, then SUB, then BRANCH
     // This ensures parent records exist before children
     const typeOrder = { 'CORP': 0, 'SUB': 1, 'BRANCH': 2 };
@@ -1664,7 +1780,7 @@ router.post('/import/preview', auth, upload.single('file'), async (req, res) => 
     for (let i = 0; i < sortedRows.length; i++) {
       const { row, originalIndex: rowNum } = sortedRows[i];
       
-      const processed = await processRowForPreview(row, rowNum, existingCompaniesMap, csvCompaniesMap, existingUsersMap, existingCompaniesByIdMap);
+      const processed = await processRowForPreview(row, rowNum, existingCompaniesMap, csvCompaniesMap, existingUsersMap, existingCompaniesByIdMap, existingContactEmailsMap);
       previewData.push(processed);
 
       // Track unique emails to create
@@ -1786,6 +1902,39 @@ router.post('/import', auth, upload.single('file'), async (req, res) => {
       }
     });
 
+    // Get all existing user assignments (contact_emails) for companies
+    const existingContactEmailsMap = new Map(); // Map: companyId -> array of email addresses
+    const companyIds = Array.from(existingCompaniesByIdMap.keys());
+    if (companyIds.length > 0) {
+      const placeholders = companyIds.map((_, index) => `:companyId${index}`).join(', ');
+      const replacements = {};
+      companyIds.forEach((id, index) => {
+        replacements[`companyId${index}`] = id;
+      });
+      
+      const userCompanyRows = await sequelize.query(`
+        SELECT uc."companyId", u.email
+        FROM user_companies uc
+        INNER JOIN users u ON u.id = uc."userId"
+        WHERE uc."companyId" IN (${placeholders})
+          AND u."isActive" = true
+        ORDER BY uc."companyId", u.email
+      `, {
+        replacements: replacements,
+        type: QueryTypes.SELECT
+      });
+
+      userCompanyRows.forEach(row => {
+        if (row.email) {
+          const companyId = row.companyId;
+          if (!existingContactEmailsMap.has(companyId)) {
+            existingContactEmailsMap.set(companyId, []);
+          }
+          existingContactEmailsMap.get(companyId).push(row.email.toLowerCase());
+        }
+      });
+    }
+
     // Sort rows by TYPE: CORP first, then SUB, then BRANCH
     const typeOrder = { 'CORP': 0, 'SUB': 1, 'BRANCH': 2 };
     const sortedRows = rows.map((row, index) => ({ row, originalIndex: index + 2 })).sort((a, b) => {
@@ -1834,8 +1983,19 @@ router.post('/import', auth, upload.single('file'), async (req, res) => {
         const referenceNo = row['account_no'] || row['CUSTOMER'] || row['Reference No'] || row['referenceNo'] || row['reference_no'] || row['ReferenceNo'] || null;
         const parentRef = row['parent_account_no'] || row['PARENT'] || row['Parent'] || row['parent'] || row['Parent Reference'] || null;
         const primaryEmail = row['primary_email'] || row['Email Address'] || row['email'] || row['Email'] || row['globalSystemEmail'] || '';
+        const contactEmailsStr = row['contact_emails'] || row['contactEmails'] || row['Contact Emails'] || '';
         const statements = row['Statements'] || row['statements'] || '';
         const invoices = row['Invoices / Credit'] || row['Invoices / Credit'] || row['invoices'] || '';
+        
+        // Parse contact_emails from CSV (comma-separated email list)
+        let newContactEmails = null;
+        if (contactEmailsStr && contactEmailsStr.trim()) {
+          newContactEmails = contactEmailsStr
+            .split(',')
+            .map(email => email.trim())
+            .filter(email => email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.toLowerCase()))
+            .map(email => email.toLowerCase());
+        }
         
         // EDI handling
         let ediValue = row['edi'] || row['EDI'] || row['Enable EDI'] || false;
@@ -1969,10 +2129,22 @@ router.post('/import', auth, upload.single('file'), async (req, res) => {
 
         let company;
         if (existingCompany) {
-          // Check if data has actually changed
-          const hasChanged = hasCompanyDataChanged(existingCompany, companyData, primaryEmailForComparison);
+          // Get existing contact emails for this company
+          let existingContactEmails = null;
+          if (existingContactEmailsMap && existingContactEmailsMap.has(existingCompany.id)) {
+            existingContactEmails = existingContactEmailsMap.get(existingCompany.id);
+          }
           
-          if (hasChanged) {
+          // Check if data has actually changed
+          const changeInfo = hasCompanyDataChanged(
+            existingCompany, 
+            companyData, 
+            primaryEmailForComparison,
+            existingContactEmails,
+            newContactEmails
+          );
+          
+          if (changeInfo.changed) {
             // Store previous data for UNDO
             const previousData = {
               name: existingCompany.name,
@@ -2064,6 +2236,93 @@ router.post('/import', auth, upload.single('file'), async (req, res) => {
                   userId: user.id,
                   companyId: company.id
                 });
+              }
+            }
+          }
+        }
+
+        // Handle contact_emails - update user assignments
+        if (newContactEmails !== null && newContactEmails.length >= 0) {
+          // Get current user assignments for this company using raw query
+          const currentAssignments = await sequelize.query(`
+            SELECT uc."userId", u.email
+            FROM user_companies uc
+            INNER JOIN users u ON u.id = uc."userId"
+            WHERE uc."companyId" = :companyId
+              AND u."isActive" = true
+          `, {
+            replacements: { companyId: company.id },
+            type: QueryTypes.SELECT
+          });
+
+          const currentEmails = new Set(
+            currentAssignments.map(row => row.email.toLowerCase())
+          );
+
+          const targetEmails = new Set(newContactEmails || []);
+
+          // Remove users not in the new list
+          for (const assignment of currentAssignments) {
+            const email = assignment.email.toLowerCase();
+            if (!targetEmails.has(email)) {
+              await UserCompany.destroy({
+                where: { 
+                  companyId: company.id,
+                  userId: assignment.userId
+                }
+              });
+            }
+          }
+
+          // Add users that are in the new list but not currently assigned
+          for (const email of targetEmails) {
+            if (!currentEmails.has(email)) {
+              // Find or create user
+              let user = existingUsersMap.get(email);
+              
+              if (!user) {
+                // Create new notification_contact user
+                try {
+                  user = await User.create({
+                    name: email.split('@')[0], // Use email prefix as name
+                    email: email,
+                    role: 'notification_contact',
+                    password: null,
+                    isActive: true,
+                    addedById: req.user.userId,
+                    sendInvoiceEmail: false,
+                    sendInvoiceAttachment: false,
+                    sendStatementEmail: false,
+                    sendStatementAttachment: false,
+                    sendEmailAsSummary: false,
+                    allCompanies: false
+                  });
+                  existingUsersMap.set(email, user);
+                  createdUserIds.push(user.id);
+                  results.usersCreated++;
+                } catch (userError) {
+                  // User might already exist (race condition), try to find it
+                  user = await User.findOne({ where: { email: email } });
+                  if (user) {
+                    existingUsersMap.set(email, user);
+                  } else {
+                    results.errors.push(`Row ${rowNum}: Failed to create user for ${email}: ${userError.message}`);
+                    continue;
+                  }
+                }
+              }
+
+              // Create UserCompany association
+              if (user) {
+                const existingAssoc = await UserCompany.findOne({
+                  where: { userId: user.id, companyId: company.id }
+                });
+                if (!existingAssoc) {
+                  await UserCompany.create({
+                    userId: user.id,
+                    companyId: company.id
+                  });
+                }
               }
             }
           }

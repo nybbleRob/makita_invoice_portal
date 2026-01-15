@@ -420,7 +420,7 @@ const ImportData = () => {
                     <span className="visually-hidden">Processing...</span>
                   </div>
                   <h5>Uploading and processing file...</h5>
-                  <p className="text-muted">Please wait while we analyze your import file.</p>
+                  <p className="text-muted">Please wait while we analyse your import file.</p>
                 </div>
               )}
 
@@ -632,13 +632,14 @@ const ImportData = () => {
                               <th>Parent</th>
                               <th>Primary Email</th>
                               <th>EDI</th>
+                              <th>Changes</th>
                               <th>Issues</th>
                             </tr>
                           </thead>
                           <tbody>
                             {filteredPreview.length === 0 ? (
                               <tr>
-                                <td colSpan="10" className="text-center text-muted py-4">
+                                <td colSpan="11" className="text-center text-muted py-4">
                                   No rows match the selected filter
                                 </td>
                               </tr>
@@ -691,6 +692,37 @@ const ImportData = () => {
                                     <span className="badge bg-warning-lt">Yes</span>
                                   ) : (
                                     <span className="text-muted small">No</span>
+                                  )}
+                                </td>
+                                <td>
+                                  {item.action === 'update' && item.changedFields && item.changedFields.length > 0 ? (
+                                    <div className="small">
+                                      {item.changedFields.map((field, idx) => {
+                                        // Format field names for display
+                                        const fieldLabels = {
+                                          name: 'Name',
+                                          type: 'Type',
+                                          referenceNo: 'Account No',
+                                          edi: 'EDI',
+                                          isActive: 'Active',
+                                          parentId: 'Parent',
+                                          primaryEmail: 'Primary Email',
+                                          receivesStatements: 'Receives Statements',
+                                          receivesInvoices: 'Receives Invoices',
+                                          contact_emails: 'Contact Emails'
+                                        };
+                                        const label = fieldLabels[field] || field;
+                                        return (
+                                          <span key={idx} className="badge bg-info-lt me-1 mb-1" style={{ fontSize: '10px' }}>
+                                            {label}
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : item.action === 'create' ? (
+                                    <span className="text-muted small">-</span>
+                                  ) : (
+                                    <span className="text-muted small">-</span>
                                   )}
                                 </td>
                                 <td>
