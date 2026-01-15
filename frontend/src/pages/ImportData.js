@@ -248,16 +248,6 @@ const ImportData = () => {
               <h2 className="page-title">Import Data</h2>
               <div className="text-muted mt-1">Import company or user data from CSV, XLS, XLSX, or JSON files</div>
             </div>
-            <div className="col-auto ms-auto">
-              <div className="btn-list">
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => navigate(importType === 'companies' ? '/companies' : '/users')}
-                >
-                  Back to {importType === 'companies' ? 'Companies' : 'Users'}
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       </div>
