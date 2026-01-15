@@ -439,7 +439,7 @@ const ImportData = () => {
                   if (previewFilter === 'warning') return item.status === 'warning';
                   if (previewFilter === 'valid') return item.status === 'valid';
                   if (previewFilter === 'create') return item.action === 'create';
-                  if (previewFilter === 'update') return item.action === 'update';
+                  if (previewFilter === 'update') return item.action === 'update' || (typeof item.action === 'string' && item.action.startsWith('update'));
                   if (previewFilter === 'no_change') return item.action === 'no_change';
                   return true;
                 });
@@ -474,7 +474,7 @@ const ImportData = () => {
                             </div>
                           </div>
                         </div>
-                        {importType === 'companies' && importPreview.summary.noChange !== undefined && (
+                        {importPreview.summary.noChange !== undefined && (
                           <div className="col-md-2">
                             <div className="card">
                               <div className="card-body text-center py-2">
@@ -525,6 +525,16 @@ const ImportData = () => {
                                 </div>
                               </div>
                             )}
+                            {importPreview.summary.noChange !== undefined && (
+                              <div className="col-md-2">
+                                <div className="card">
+                                  <div className="card-body text-center py-2">
+                                    <div className="h4 mb-0 text-muted">{importPreview.summary.noChange || 0}</div>
+                                    <div className="text-muted small">No Change</div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </>
                         )}
                         <div className="col-md-2">
@@ -552,8 +562,8 @@ const ImportData = () => {
                             <option value="warning">Warnings ({importPreview.preview.filter(i => i.status === 'warning').length})</option>
                             <option value="error">Errors ({importPreview.preview.filter(i => i.status === 'error').length})</option>
                             <option value="create">New {importType === 'companies' ? 'Companies' : 'Users'} ({importPreview.preview.filter(i => i.action === 'create').length})</option>
-                            <option value="update">Updates ({importPreview.preview.filter(i => i.action === 'update').length})</option>
-                            {importType === 'companies' && <option value="no_change">No Change ({importPreview.preview.filter(i => i.action === 'no_change').length})</option>}
+                            <option value="update">Updates ({importPreview.preview.filter(i => i.action === 'update' || (typeof i.action === 'string' && i.action.startsWith('update'))).length})</option>
+                            <option value="no_change">No Change ({importPreview.preview.filter(i => i.action === 'no_change').length})</option>
                           </select>
                         </div>
                         <button

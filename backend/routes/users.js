@@ -1449,6 +1449,71 @@ function parseBooleanValue(value) {
 /**
  * Process a single user row and return preview data
  */
+// Helper function to check if user data has actually changed
+function hasUserDataChanged(existingUser, newData, newEmail, newCompanyIds = null) {
+  // Compare basic fields
+  if ((existingUser.name || '').trim() !== (newData.name || '').trim()) {
+    return true;
+  }
+  if (existingUser.role !== newData.role) {
+    return true;
+  }
+  if (existingUser.isActive !== newData.isActive) {
+    return true;
+  }
+  if (existingUser.allCompanies !== newData.allCompanies) {
+    return true;
+  }
+  
+  // Compare email (handle case sensitivity)
+  const existingEmail = (existingUser.email || '').toLowerCase();
+  const newEmailLower = (newEmail || '').toLowerCase();
+  if (existingEmail !== newEmailLower) {
+    return true;
+  }
+  
+  // Compare email notification preferences
+  if (existingUser.sendInvoiceEmail !== newData.sendInvoiceEmail) {
+    return true;
+  }
+  if (existingUser.sendInvoiceAttachment !== newData.sendInvoiceAttachment) {
+    return true;
+  }
+  if (existingUser.sendStatementEmail !== newData.sendStatementEmail) {
+    return true;
+  }
+  if (existingUser.sendStatementAttachment !== newData.sendStatementAttachment) {
+    return true;
+  }
+  if (existingUser.sendEmailAsSummary !== newData.sendEmailAsSummary) {
+    return true;
+  }
+  if (existingUser.sendImportSummaryReport !== newData.sendImportSummaryReport) {
+    return true;
+  }
+  
+  // Compare company assignments if provided
+  if (newCompanyIds !== null) {
+    // Get existing company IDs
+    const existingCompanyIds = existingUser.companies 
+      ? existingUser.companies.map(c => c.id).sort()
+      : [];
+    const newCompanyIdsSorted = [...newCompanyIds].sort();
+    
+    // Compare arrays
+    if (existingCompanyIds.length !== newCompanyIdsSorted.length) {
+      return true;
+    }
+    for (let i = 0; i < existingCompanyIds.length; i++) {
+      if (existingCompanyIds[i] !== newCompanyIdsSorted[i]) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
+
 async function processUserRowForPreview(row, rowNum, existingUsersMap, existingUsersByIdMap, existingCompaniesMap, manageableRoles) {
   const result = {
     rowNum,
@@ -1590,7 +1655,26 @@ async function processUserRowForPreview(row, rowNum, existingUsersMap, existingU
     result.companyAccountNumbers = companyAccountNumbers;
 
     if (existingUser) {
-      result.action = `update (matched by ${matchMethod})`;
+      // Get company IDs for comparison
+      const companyIds = [];
+      if (!allCompanies && companyAccountNumbers.length > 0) {
+        for (const refNo of companyAccountNumbers) {
+          const company = existingCompaniesMap.get(refNo);
+          if (company) {
+            companyIds.push(company.id);
+          }
+        }
+      }
+      
+      // Check if data has actually changed
+      const hasChanged = hasUserDataChanged(existingUser, userData, trimmedEmail, companyIds.length > 0 ? companyIds : null);
+      
+      if (hasChanged) {
+        result.action = `update (matched by ${matchMethod})`;
+      } else {
+        result.action = 'no_change';
+      }
+      
       result.existingData = {
         id: existingUser.id,
         name: existingUser.name,
@@ -1673,11 +1757,18 @@ router.post('/import/preview', canManageUsers, upload.single('file'), async (req
 
     const rows = await parseUserImportFile(file);
 
-    // Get all existing users for matching
+    // Get all existing users for matching (with companies for comparison)
     const existingUsers = await User.findAll({
       attributes: ['id', 'name', 'email', 'role', 'isActive', 'allCompanies', 
         'sendInvoiceEmail', 'sendInvoiceAttachment', 'sendStatementEmail', 
-        'sendStatementAttachment', 'sendEmailAsSummary', 'sendImportSummaryReport']
+        'sendStatementAttachment', 'sendEmailAsSummary', 'sendImportSummaryReport'],
+      include: [{
+        model: Company,
+        as: 'companies',
+        attributes: ['id'],
+        through: { attributes: [] },
+        required: false
+      }]
     });
 
     const existingUsersMap = new Map(); // by email
@@ -1709,6 +1800,7 @@ router.post('/import/preview', canManageUsers, upload.single('file'), async (req
       total: rows.length,
       toCreate: 0,
       toUpdate: 0,
+      noChange: 0,
       errors: 0,
       warnings: 0,
       emailChanges: 0
@@ -1749,8 +1841,10 @@ router.post('/import/preview', canManageUsers, upload.single('file'), async (req
       } else {
         if (processed.action === 'create') {
           summary.toCreate++;
-        } else {
+        } else if (processed.action === 'update' || processed.action.startsWith('update')) {
           summary.toUpdate++;
+        } else if (processed.action === 'no_change') {
+          summary.noChange++;
         }
         if (processed.status === 'warning') {
           summary.warnings++;
@@ -1946,17 +2040,56 @@ router.post('/import', canManageUsers, upload.single('file'), async (req, res) =
         if (userId) {
           const validation = validateUUID(userId, 'user ID');
           if (validation.valid) {
-            existingUser = await User.findByPk(validation.value);
+            existingUser = await User.findByPk(validation.value, {
+              include: [{
+                model: Company,
+                as: 'companies',
+                attributes: ['id'],
+                through: { attributes: [] }
+              }]
+            });
           }
         }
 
         // Fall back to email matching
         if (!existingUser) {
-          existingUser = await User.findOne({ where: { email } });
+          existingUser = await User.findOne({ 
+            where: { email },
+            include: [{
+              model: Company,
+              as: 'companies',
+              attributes: ['id'],
+              through: { attributes: [] }
+            }]
+          });
         }
 
         if (existingUser) {
-          // UPDATE existing user
+          // Prepare new user data for comparison
+          const newUserData = {
+            name: name.trim(),
+            role: role,
+            isActive: active,
+            allCompanies: allCompanies,
+            sendInvoiceEmail: sendInvoiceEmail,
+            sendInvoiceAttachment: sendInvoiceEmail ? sendInvoiceAttachment : false,
+            sendStatementEmail: sendStatementEmail,
+            sendStatementAttachment: sendStatementEmail ? sendStatementAttachment : false,
+            sendEmailAsSummary: (sendInvoiceEmail || sendStatementEmail) ? sendEmailAsSummary : false,
+            sendImportSummaryReport: sendImportSummaryReport
+          };
+
+          // Check if data has actually changed
+          const companyIdsForComparison = !allCompanies && companyIds.length > 0 ? companyIds : null;
+          const hasChanged = hasUserDataChanged(existingUser, newUserData, email, companyIdsForComparison);
+
+          if (!hasChanged) {
+            // No changes, skip update but still track email for duplicate prevention
+            processedEmails.add(email);
+            continue;
+          }
+
+          // UPDATE existing user (data has changed)
           const oldEmail = existingUser.email.toLowerCase();
           const emailChanged = oldEmail !== email;
 
