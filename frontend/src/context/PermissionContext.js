@@ -24,8 +24,8 @@ const PERMISSIONS = {
   SETTINGS_VIEW: ['global_admin'],
   SETTINGS_EDIT: ['global_admin'],
   
-  IMPORT_DATA_VIEW: ['global_admin'],
-  IMPORT_DATA_MANAGE: ['global_admin'],
+  IMPORT_DATA_VIEW: ['global_admin', 'administrator'],
+  IMPORT_DATA_MANAGE: ['global_admin', 'administrator'],
   
   TEMPLATES_VIEW: ['global_admin'],
   TEMPLATES_EDIT: ['global_admin'],

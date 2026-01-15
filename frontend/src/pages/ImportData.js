@@ -8,6 +8,7 @@ import PageTitle from '../components/PageTitle';
 const ImportData = () => {
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
+  const [importType, setImportType] = useState('companies'); // 'companies' or 'users'
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importStep, setImportStep] = useState('upload'); // 'upload', 'preview', 'importing', 'complete'
@@ -55,7 +56,11 @@ const ImportData = () => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await api.post('/api/companies/import/preview', formData, {
+      const endpoint = importType === 'companies' 
+        ? '/api/companies/import/preview' 
+        : '/api/users/import/preview';
+
+      const response = await api.post(endpoint, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -84,44 +89,74 @@ const ImportData = () => {
       const formData = new FormData();
       formData.append('file', importFile);
 
-      const response = await api.post('/api/companies/import', formData, {
+      const endpoint = importType === 'companies' 
+        ? '/api/companies/import' 
+        : '/api/users/import';
+
+      const response = await api.post(endpoint, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
 
-      const { created, updated, errors, totalRows, transactionId } = response.data;
-      
-      setImportResults({
-        created,
-        updated,
-        errors: errors || [],
-        totalRows
-      });
-      setImportTransactionId(transactionId);
-      setImportStep('complete');
-      
-      let message = `Import completed! Created: ${created}, Updated: ${updated} out of ${totalRows} rows.`;
-      if (errors && errors.length > 0) {
-        message += `\n\nErrors (${errors.length}):\n${errors.slice(0, 10).join('\n')}`;
-        if (errors.length > 10) {
-          message += `\n... and ${errors.length - 10} more errors.`;
+      // Handle response format differences
+      if (importType === 'companies') {
+        const { created, updated, errors, totalRows, transactionId } = response.data;
+        setImportResults({
+          created,
+          updated,
+          errors: errors || [],
+          totalRows,
+          success: true
+        });
+        setImportTransactionId(transactionId);
+        setImportStep('complete');
+        
+        let message = `Import completed! Created: ${created}, Updated: ${updated} out of ${totalRows} rows.`;
+        if (errors && errors.length > 0) {
+          message += `\n\nErrors (${errors.length}):\n${errors.slice(0, 10).join('\n')}`;
+          if (errors.length > 10) {
+            message += `\n... and ${errors.length - 10} more errors.`;
+          }
+          toast.warning(message, { duration: 10000 });
+        } else {
+          toast.success(message);
         }
-        toast.warning(message, { duration: 10000 });
-      } else {
-        toast.success(message);
-      }
 
-      // Fetch last import to show undo banner
-      try {
-        const lastImportResponse = await api.get('/api/companies/import/last');
-        // Response will be null if no import found (200 status)
-        setLastImport(lastImportResponse.data);
-      } catch (error) {
-        console.error('Error fetching last import:', error);
+        // Fetch last import to show undo banner (only for companies)
+        try {
+          const lastImportResponse = await api.get('/api/companies/import/last');
+          setLastImport(lastImportResponse.data);
+        } catch (error) {
+          console.error('Error fetching last import:', error);
+        }
+      } else {
+        // Users import response format
+        const { created, updated, errors, warnings, emailChangesPending, success } = response.data;
+        setImportResults({
+          created,
+          updated,
+          errors: errors || [],
+          warnings: warnings || [],
+          emailChangesPending: emailChangesPending || 0,
+          success: success !== false,
+          totalRows: (created || 0) + (updated || 0)
+        });
+        setImportStep('complete');
+        
+        if (success !== false) {
+          let message = `Import complete: ${created} created, ${updated} updated`;
+          if (emailChangesPending > 0) {
+            message += `, ${emailChangesPending} email changes pending`;
+          }
+          toast.success(message);
+        } else {
+          toast.warning(`Import completed with errors. ${created} created, ${updated} updated, ${errors.length} errors.`);
+        }
       }
     } catch (error) {
-      toast.error('Error importing companies: ' + (error.response?.data?.message || error.message));
+      const errorType = importType === 'companies' ? 'companies' : 'users';
+      toast.error(`Error importing ${errorType}: ` + (error.response?.data?.message || error.message));
       setImportStep('preview');
     } finally {
       setImporting(false);
@@ -211,15 +246,15 @@ const ImportData = () => {
           <div className="row g-2 align-items-center">
             <div className="col">
               <h2 className="page-title">Import Data</h2>
-              <div className="text-muted mt-1">Import company data from CSV, XLS, XLSX, or JSON files</div>
+              <div className="text-muted mt-1">Import company or user data from CSV, XLS, XLSX, or JSON files</div>
             </div>
             <div className="col-auto ms-auto">
               <div className="btn-list">
                 <button
                   className="btn btn-secondary"
-                  onClick={() => navigate('/companies')}
+                  onClick={() => navigate(importType === 'companies' ? '/companies' : '/users')}
                 >
-                  Back to Companies
+                  Back to {importType === 'companies' ? 'Companies' : 'Users'}
                 </button>
               </div>
             </div>
@@ -227,8 +262,8 @@ const ImportData = () => {
         </div>
       </div>
 
-      {/* Undo Last Import Banner */}
-      {lastImport && (
+      {/* Undo Last Import Banner - Only for Companies */}
+      {importType === 'companies' && lastImport && (
         <div className="page-body">
           <div className="container-xl">
             <div className="alert alert-warning alert-dismissible" role="alert">
@@ -267,35 +302,118 @@ const ImportData = () => {
         <div className="container-xl">
           <div className="card">
             <div className="card-body">
+              {/* Import Type Selector */}
+              {importStep === 'upload' && (
+                <div className="mb-4">
+                  <label className="form-label">Import Type</label>
+                  <div className="form-selectgroup form-selectgroup-boxes d-flex flex-column gap-2">
+                    <label className="form-selectgroup-item">
+                      <input
+                        type="radio"
+                        name="importType"
+                        value="companies"
+                        className="form-selectgroup-input"
+                        checked={importType === 'companies'}
+                        onChange={(e) => {
+                          setImportType(e.target.value);
+                          setImportFile(null);
+                          setImportPreview(null);
+                          setImportResults(null);
+                          setPreviewFilter('all');
+                        }}
+                      />
+                      <div className="form-selectgroup-label d-flex align-items-center p-3">
+                        <div className="me-3">
+                          <span className="form-selectgroup-check"></span>
+                        </div>
+                        <div>
+                          <strong>Companies</strong>
+                          <div className="text-muted small">Import company data from CSV, XLS, XLSX, or JSON files</div>
+                        </div>
+                      </div>
+                    </label>
+                    <label className="form-selectgroup-item">
+                      <input
+                        type="radio"
+                        name="importType"
+                        value="users"
+                        className="form-selectgroup-input"
+                        checked={importType === 'users'}
+                        onChange={(e) => {
+                          setImportType(e.target.value);
+                          setImportFile(null);
+                          setImportPreview(null);
+                          setImportResults(null);
+                          setPreviewFilter('all');
+                        }}
+                      />
+                      <div className="form-selectgroup-label d-flex align-items-center p-3">
+                        <div className="me-3">
+                          <span className="form-selectgroup-check"></span>
+                        </div>
+                        <div>
+                          <strong>Users</strong>
+                          <div className="text-muted small">Import user data from CSV, XLS, or XLSX files</div>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              )}
+
               {/* Step 1: File Upload */}
               {importStep === 'upload' && (
                 <>
                   <div className="mb-3">
-                    <label className="form-label">Select File (CSV, XLS, XLSX, or JSON)</label>
+                    <label className="form-label">Select File ({importType === 'companies' ? 'CSV, XLS, XLSX, or JSON' : 'CSV, XLS, or XLSX'})</label>
                     <input
                       type="file"
                       className="form-control"
-                      accept=".csv,.xls,.xlsx,.json"
+                      accept={importType === 'companies' ? '.csv,.xls,.xlsx,.json' : '.csv,.xls,.xlsx'}
                       onChange={handleFileSelect}
                     />
                     <small className="form-hint">
-                      Supported formats: CSV, XLS, XLSX, JSON. File size limit: 10MB
+                      Supported formats: {importType === 'companies' ? 'CSV, XLS, XLSX, JSON' : 'CSV, XLS, XLSX'}. File size limit: 10MB
                     </small>
                   </div>
                   <div className="alert alert-info">
                     <h4>File Format Requirements:</h4>
-                    <p className="mb-2"><strong>Required columns:</strong></p>
-                    <ul className="mb-2">
-                      <li><strong>account_no</strong> - Account Number (unique identifier for matching)</li>
-                      <li><strong>parent_account_no</strong> - Parent's account number (empty for top-level CORP)</li>
-                      <li><strong>company_name</strong> - Company Name (required)</li>
-                      <li><strong>type</strong> - Company type: CORP, SUB, or BRANCH (required)</li>
-                      <li><strong>active</strong> - Active status: TRUE or FALSE</li>
-                      <li><strong>edi</strong> - EDI enabled: TRUE or FALSE (if TRUE, email notifications disabled)</li>
-                      <li><strong>primary_email</strong> - Primary contact email (optional, creates notification contact)</li>
-                    </ul>
-                    <p className="mb-2"><strong>Note:</strong> Companies are matched by account_no. Existing companies will be updated.</p>
-                    <p className="mb-0 text-muted small">Legacy column names (CUSTOMER, PARENT, CNME, TYPE) are also supported for backward compatibility.</p>
+                    {importType === 'companies' ? (
+                      <>
+                        <p className="mb-2"><strong>Required columns:</strong></p>
+                        <ul className="mb-2">
+                          <li><strong>account_no</strong> - Account Number (unique identifier for matching)</li>
+                          <li><strong>parent_account_no</strong> - Parent's account number (empty for top-level CORP)</li>
+                          <li><strong>company_name</strong> - Company Name (required)</li>
+                          <li><strong>type</strong> - Company type: CORP, SUB, or BRANCH (required)</li>
+                          <li><strong>active</strong> - Active status: TRUE or FALSE</li>
+                          <li><strong>edi</strong> - EDI enabled: TRUE or FALSE (if TRUE, email notifications disabled)</li>
+                          <li><strong>primary_email</strong> - Primary contact email (optional, creates notification contact)</li>
+                        </ul>
+                        <p className="mb-2"><strong>Note:</strong> Companies are matched by account_no. Existing companies will be updated.</p>
+                        <p className="mb-0 text-muted small">Legacy column names (CUSTOMER, PARENT, CNME, TYPE) are also supported for backward compatibility.</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="mb-2"><strong>Required columns:</strong></p>
+                        <ul className="mb-2">
+                          <li><strong>id</strong> - Database ID (UUID) - Optional, used for updating existing users</li>
+                          <li><strong>name</strong> - User name (required)</li>
+                          <li><strong>email</strong> - Email address (required)</li>
+                          <li><strong>role</strong> - User role (external_user, notification_contact, credit_controller, etc.)</li>
+                          <li><strong>active</strong> - TRUE or FALSE</li>
+                          <li><strong>all_companies</strong> - TRUE or FALSE</li>
+                          <li><strong>company_account_numbers</strong> - Comma-separated account numbers</li>
+                          <li><strong>send_invoice_email</strong> - TRUE or FALSE</li>
+                          <li><strong>send_invoice_attachment</strong> - TRUE or FALSE</li>
+                          <li><strong>send_statement_email</strong> - TRUE or FALSE</li>
+                          <li><strong>send_statement_attachment</strong> - TRUE or FALSE</li>
+                          <li><strong>send_email_as_summary</strong> - TRUE or FALSE</li>
+                          <li><strong>send_import_summary_report</strong> - TRUE or FALSE</li>
+                        </ul>
+                        <p className="mb-0"><strong>Tip:</strong> Export existing users first to get a template file.</p>
+                      </>
+                    )}
                   </div>
                 </>
               )}
@@ -331,7 +449,7 @@ const ImportData = () => {
                           <div className="card">
                             <div className="card-body text-center py-2">
                               <div className="h4 mb-0 text-success">{importPreview.summary.toCreate}</div>
-                              <div className="text-muted small">New Companies</div>
+                              <div className="text-muted small">New {importType === 'companies' ? 'Companies' : 'Users'}</div>
                             </div>
                           </div>
                         </div>
@@ -343,22 +461,49 @@ const ImportData = () => {
                             </div>
                           </div>
                         </div>
-                        <div className="col-md-2">
-                          <div className="card">
-                            <div className="card-body text-center py-2">
-                              <div className="h4 mb-0 text-primary">{importPreview.summary.usersToCreate || 0}</div>
-                              <div className="text-muted small">New Contacts</div>
+                        {importType === 'companies' ? (
+                          <>
+                            <div className="col-md-2">
+                              <div className="card">
+                                <div className="card-body text-center py-2">
+                                  <div className="h4 mb-0 text-primary">{importPreview.summary.usersToCreate || 0}</div>
+                                  <div className="text-muted small">New Contacts</div>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </div>
-                        <div className="col-md-2">
-                          <div className="card">
-                            <div className="card-body text-center py-2">
-                              <div className="h4 mb-0 text-warning">{importPreview.summary.ediEnabled || 0}</div>
-                              <div className="text-muted small">EDI Enabled</div>
+                            <div className="col-md-2">
+                              <div className="card">
+                                <div className="card-body text-center py-2">
+                                  <div className="h4 mb-0 text-warning">{importPreview.summary.ediEnabled || 0}</div>
+                                  <div className="text-muted small">EDI Enabled</div>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </div>
+                          </>
+                        ) : (
+                          <>
+                            {importPreview.summary.warnings !== undefined && (
+                              <div className="col-md-2">
+                                <div className="card">
+                                  <div className="card-body text-center py-2">
+                                    <div className="h4 mb-0 text-warning">{importPreview.summary.warnings || 0}</div>
+                                    <div className="text-muted small">Warnings</div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            {importPreview.summary.emailChanges !== undefined && (
+                              <div className="col-md-2">
+                                <div className="card">
+                                  <div className="card-body text-center py-2">
+                                    <div className="h4 mb-0 text-primary">{importPreview.summary.emailChanges || 0}</div>
+                                    <div className="text-muted small">Email Changes</div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
                         <div className="col-md-2">
                           <div className="card">
                             <div className="card-body text-center py-2">
@@ -383,7 +528,7 @@ const ImportData = () => {
                             <option value="valid">Valid ({importPreview.preview.filter(i => i.status === 'valid').length})</option>
                             <option value="warning">Warnings ({importPreview.preview.filter(i => i.status === 'warning').length})</option>
                             <option value="error">Errors ({importPreview.preview.filter(i => i.status === 'error').length})</option>
-                            <option value="create">New Companies ({importPreview.preview.filter(i => i.action === 'create').length})</option>
+                            <option value="create">New {importType === 'companies' ? 'Companies' : 'Users'} ({importPreview.preview.filter(i => i.action === 'create').length})</option>
                             <option value="update">Updates ({importPreview.preview.filter(i => i.action === 'update').length})</option>
                           </select>
                         </div>
@@ -562,25 +707,37 @@ const ImportData = () => {
                   <div className="spinner-border text-primary mb-3" role="status">
                     <span className="visually-hidden">Loading...</span>
                   </div>
-                  <div>Importing companies...</div>
+                  <div>Importing {importType}...</div>
                 </div>
               )}
 
               {/* Step 4: Complete */}
               {importStep === 'complete' && importResults && (
                 <>
-                  <div className="alert alert-success">
-                    <h5>Import Completed Successfully!</h5>
+                  <div className={`alert ${importResults.success !== false ? 'alert-success' : 'alert-warning'}`}>
+                    <h5>{importResults.success !== false ? 'Import Completed Successfully!' : 'Import Completed with Issues'}</h5>
                     <p className="mb-0">
-                      Companies Created: <strong>{importResults.created}</strong> | 
-                      Updated: <strong>{importResults.updated}</strong> | 
-                      {importResults.usersCreated > 0 && (
-                        <>Contacts Created: <strong>{importResults.usersCreated}</strong> | </>
+                      {importType === 'companies' ? (
+                        <>
+                          Companies Created: <strong>{importResults.created}</strong> | 
+                          Updated: <strong>{importResults.updated}</strong> | 
+                          {importResults.usersCreated > 0 && (
+                            <>Contacts Created: <strong>{importResults.usersCreated}</strong> | </>
+                          )}
+                          Total Rows: <strong>{importResults.totalRows}</strong>
+                        </>
+                      ) : (
+                        <>
+                          Created: <strong>{importResults.created}</strong> | 
+                          Updated: <strong>{importResults.updated}</strong>
+                          {importResults.emailChangesPending > 0 && (
+                            <> | Email Changes Pending: <strong>{importResults.emailChangesPending}</strong></>
+                          )}
+                        </>
                       )}
-                      Total Rows: <strong>{importResults.totalRows}</strong>
                     </p>
                   </div>
-                  {importResults.errors.length > 0 && (
+                  {importResults.errors && importResults.errors.length > 0 && (
                     <div className="alert alert-warning">
                       <h6>Errors ({importResults.errors.length}):</h6>
                       <ul className="mb-0">
@@ -593,8 +750,21 @@ const ImportData = () => {
                       </ul>
                     </div>
                   )}
+                  {importResults.warnings && importResults.warnings.length > 0 && (
+                    <div className="alert alert-info">
+                      <h6>Warnings ({importResults.warnings.length}):</h6>
+                      <ul className="mb-0">
+                        {importResults.warnings.slice(0, 10).map((warning, idx) => (
+                          <li key={idx}>{warning}</li>
+                        ))}
+                        {importResults.warnings.length > 10 && (
+                          <li>... and {importResults.warnings.length - 10} more warnings</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
                   <div className="mt-3 d-flex justify-content-end gap-2">
-                    {importTransactionId && (
+                    {importType === 'companies' && importTransactionId && (
                       <button
                         type="button"
                         className="btn btn-warning"
@@ -615,10 +785,10 @@ const ImportData = () => {
                     <button
                       type="button"
                       className="btn btn-secondary"
-                      onClick={() => navigate('/companies')}
+                      onClick={() => navigate(importType === 'companies' ? '/companies' : '/users')}
                       disabled={undoing}
                     >
-                      Go to Companies
+                      Go to {importType === 'companies' ? 'Companies' : 'Users'}
                     </button>
                   </div>
                 </>
