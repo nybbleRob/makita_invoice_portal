@@ -764,7 +764,7 @@ const ImportData = () => {
                           onClick={handleConfirmImport}
                           disabled={importing || importPreview.summary.errors > 0}
                         >
-                          {importing ? 'Processing...' : 'Confirm Import'}
+                          {importing ? 'Processing...' : `Confirm ${importType === 'companies' ? 'Company' : 'User'} Import`}
                         </button>
                       </div>
                     </div>
