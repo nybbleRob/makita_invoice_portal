@@ -994,20 +994,47 @@ const CreditNotes = () => {
             </div>
             {pagination.pages > 1 && (
               <div className="card-footer d-flex align-items-center">
-                <div className="pagination m-0 ms-auto">
+                <div className="d-flex gap-2 ms-auto">
                   <button
-                    className="btn btn-sm"
+                    className="btn btn-sm btn-outline-primary"
                     disabled={pagination.page === 1}
                     onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                   >
                     Previous
                   </button>
-                  <span className="mx-2">
-                    Page {pagination.page} of {pagination.pages}
-                  </span>
+                  <div className="d-flex align-items-center gap-2">
+                    <span className="text-muted">Page</span>
+                    <input
+                      type="number"
+                      className="form-control form-control-sm"
+                      style={{ width: '70px' }}
+                      min="1"
+                      max={pagination.pages}
+                      value={pagination.page}
+                      autoComplete="off"
+                      key={pagination.page} // Reset input when page changes externally
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const page = parseInt(e.target.value);
+                          if (page >= 1 && page <= pagination.pages) {
+                            setPagination(prev => ({ ...prev, page }));
+                          }
+                          e.target.blur();
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const page = parseInt(e.target.value);
+                        if (page >= 1 && page <= pagination.pages && page !== pagination.page) {
+                          setPagination(prev => ({ ...prev, page }));
+                        }
+                      }}
+                    />
+                    <span className="text-muted">of {pagination.pages}</span>
+                  </div>
                   <button
-                    className="btn btn-sm"
-                    disabled={pagination.page === pagination.pages}
+                    className="btn btn-sm btn-outline-primary"
+                    disabled={pagination.page >= pagination.pages}
                     onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                   >
                     Next

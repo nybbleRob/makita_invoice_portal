@@ -1260,7 +1260,7 @@ const UserManagement = () => {
                   <div className="text-muted">
                     Showing {((usersPage - 1) * usersPerPage) + 1} to {Math.min(usersPage * usersPerPage, usersPagination.total)} of {usersPagination.total} users
                   </div>
-                  <div className="btn-group">
+                  <div className="d-flex gap-2">
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-primary"
@@ -1269,27 +1269,36 @@ const UserManagement = () => {
                     >
                       Previous
                     </button>
-                    {Array.from({ length: usersPagination.pages }, (_, i) => i + 1)
-                      .filter(page => {
-                        // Show first, last, and pages around current
-                        return page === 1 || page === usersPagination.pages || (page >= usersPage - 2 && page <= usersPage + 2);
-                      })
-                      .map((page, idx, arr) => {
-                        // Add ellipsis
-                        const showEllipsisBefore = idx > 0 && page - arr[idx - 1] > 1;
-                        return (
-                          <React.Fragment key={page}>
-                            {showEllipsisBefore && <span className="btn btn-sm btn-outline-secondary disabled">...</span>}
-                            <button
-                              type="button"
-                              className={`btn btn-sm ${usersPage === page ? 'btn-primary' : 'btn-outline-primary'}`}
-                              onClick={() => setUsersPage(page)}
-                            >
-                              {page}
-                            </button>
-                          </React.Fragment>
-                        );
-                      })}
+                    <div className="d-flex align-items-center gap-2">
+                      <span className="text-muted">Page</span>
+                      <input
+                        type="number"
+                        className="form-control form-control-sm"
+                        style={{ width: '70px' }}
+                        min="1"
+                        max={usersPagination.pages}
+                        value={usersPage}
+                        autoComplete="off"
+                        key={usersPage} // Reset input when page changes externally
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const page = parseInt(e.target.value);
+                            if (page >= 1 && page <= usersPagination.pages) {
+                              setUsersPage(page);
+                            }
+                            e.target.blur();
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const page = parseInt(e.target.value);
+                          if (page >= 1 && page <= usersPagination.pages && page !== usersPage) {
+                            setUsersPage(page);
+                          }
+                        }}
+                      />
+                      <span className="text-muted">of {usersPagination.pages}</span>
+                    </div>
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-primary"
