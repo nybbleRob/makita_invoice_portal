@@ -197,13 +197,23 @@ router.get('/parents', auth, async (req, res) => {
 // Only returns companies the user has access to, structured as a tree
 router.get('/hierarchy', auth, checkDocumentAccess, async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, page, limit } = req.query;
+    const pageNum = page ? parseInt(page) : 1;
+    const limitNum = limit ? parseInt(limit) : 50; // Default 50 per page
     
     // Build where clause based on user permissions
     const where = {};
     if (req.accessibleCompanyIds !== null) {
       if (req.accessibleCompanyIds.length === 0) {
-        return res.json({ companies: [] });
+        return res.json({ 
+          companies: [],
+          pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total: 0,
+            pages: 0
+          }
+        });
       }
       where.id = { [Op.in]: req.accessibleCompanyIds };
     }
@@ -227,7 +237,7 @@ router.get('/hierarchy', auth, checkDocumentAccess, async (req, res) => {
       where[Op.or] = searchConditions;
     }
     
-    // Fetch all accessible companies
+    // Fetch all accessible companies (we need all to build the tree)
     const companies = await Company.findAll({
       where,
       attributes: ['id', 'name', 'referenceNo', 'code', 'type', 'parentId', 'isActive'],
@@ -274,7 +284,21 @@ router.get('/hierarchy', auth, checkDocumentAccess, async (req, res) => {
     rootCompanies.forEach(sortChildren);
     rootCompanies.sort((a, b) => a.name.localeCompare(b.name));
     
-    res.json({ companies: rootCompanies });
+    // Paginate root companies only (but include full subtrees)
+    const total = rootCompanies.length;
+    const pages = Math.ceil(total / limitNum);
+    const offset = (pageNum - 1) * limitNum;
+    const paginatedRootCompanies = rootCompanies.slice(offset, offset + limitNum);
+    
+    res.json({ 
+      companies: paginatedRootCompanies,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: total,
+        pages: pages
+      }
+    });
   } catch (error) {
     console.error('Error fetching company hierarchy:', error);
     res.status(500).json({ message: error.message });

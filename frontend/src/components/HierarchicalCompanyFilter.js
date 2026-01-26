@@ -19,6 +19,7 @@ const HierarchicalCompanyFilter = ({
   const [tempSelectedIds, setTempSelectedIds] = useState(new Set(selectedCompanyIds.map(id => String(id))));
   const searchInputRef = useRef(null);
   const [initialFetchDone, setInitialFetchDone] = useState(false);
+  const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 });
 
   // Sync tempSelectedIds with prop when modal opens/reopens
   useEffect(() => {
@@ -26,13 +27,20 @@ const HierarchicalCompanyFilter = ({
   }, [selectedCompanyIds]);
 
   // Fetch hierarchical company data
-  const fetchHierarchy = useCallback(async (search = '') => {
+  const fetchHierarchy = useCallback(async (search = '', page = 1) => {
     try {
       setLoading(true);
-      const params = search ? { search } : {};
+      const params = {
+        page,
+        limit: pagination.limit,
+        ...(search && { search })
+      };
       const response = await api.get('/api/companies/hierarchy', { params });
       const companiesData = response.data.companies || [];
+      const paginationData = response.data.pagination || { page: 1, limit: 50, total: 0, pages: 0 };
+      
       setCompanies(companiesData);
+      setPagination(paginationData);
       
       // Auto-expand all when searching, otherwise start collapsed
       if (search) {
@@ -55,10 +63,11 @@ const HierarchicalCompanyFilter = ({
     } catch (error) {
       console.error('Error fetching company hierarchy:', error);
       setCompanies([]);
+      setPagination({ page: 1, limit: 50, total: 0, pages: 0 });
     } finally {
       setLoading(false);
     }
-  }, [initialFetchDone]);
+  }, [initialFetchDone, pagination.limit]);
 
   // Initial fetch
   useEffect(() => {
@@ -118,7 +127,9 @@ const HierarchicalCompanyFilter = ({
     if (!initialFetchDone) return; // Skip during initial load
     
     const timer = setTimeout(() => {
-      fetchHierarchy(searchQuery);
+      // Reset to page 1 when searching
+      setPagination(prev => ({ ...prev, page: 1 }));
+      fetchHierarchy(searchQuery, 1);
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery, initialFetchDone, fetchHierarchy]);
@@ -499,6 +510,41 @@ const HierarchicalCompanyFilter = ({
                 companies.map(company => renderNode(company, 0))
               )}
             </div>
+            
+            {/* Pagination */}
+            {pagination.pages > 1 && (
+              <div className="d-flex justify-content-between align-items-center mt-3">
+                <div className="text-muted">
+                  Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} companies
+                </div>
+                <div className="btn-group">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => {
+                      const newPage = pagination.page - 1;
+                      setPagination(prev => ({ ...prev, page: newPage }));
+                      fetchHierarchy(searchQuery, newPage);
+                    }}
+                    disabled={pagination.page === 1 || loading}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => {
+                      const newPage = pagination.page + 1;
+                      setPagination(prev => ({ ...prev, page: newPage }));
+                      fetchHierarchy(searchQuery, newPage);
+                    }}
+                    disabled={pagination.page >= pagination.pages || loading}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           
           <div className="modal-footer">
