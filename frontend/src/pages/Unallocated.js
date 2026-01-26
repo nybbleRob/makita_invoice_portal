@@ -636,30 +636,32 @@ const Unallocated = () => {
                         </button>
                       </>
                     )}
+                    {/* Allocate All - only show when NO items selected */}
+                    {currentUser?.role && ['global_admin', 'administrator'].includes(currentUser.role) && pagination.total > 0 && selectedFiles.size === 0 && (
+                      <button
+                        className="btn btn-success"
+                        onClick={() => handleBulkAllocate([])}
+                        disabled={allocating}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-check me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                          <path d="M5 12l5 5l10 -10"/>
+                        </svg>
+                        Allocate All ({pagination.total})
+                      </button>
+                    )}
+                    {/* Clear All - always show for admins */}
                     {currentUser?.role && ['global_admin', 'administrator'].includes(currentUser.role) && pagination.total > 0 && (
-                      <>
-                        <button
-                          className="btn btn-success"
-                          onClick={() => handleBulkAllocate([])}
-                          disabled={allocating}
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-check me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                            <path d="M5 12l5 5l10 -10"/>
-                          </svg>
-                          Allocate All ({pagination.total})
-                        </button>
-                        <button
-                          className="btn btn-danger"
-                          onClick={() => {
-                            setShowClearAllModal(true);
-                            setClearAllReason('');
-                          }}
-                          disabled={clearingAll}
-                        >
-                          Clear All ({pagination.total})
-                        </button>
-                      </>
+                      <button
+                        className="btn btn-danger"
+                        onClick={() => {
+                          setShowClearAllModal(true);
+                          setClearAllReason('');
+                        }}
+                        disabled={clearingAll}
+                      >
+                        Clear All ({pagination.total})
+                      </button>
                     )}
                   </div>
                 </div>
