@@ -86,10 +86,28 @@ const Invoices = () => {
         }
       }
       
+      // Check if search contains comma-separated invoice numbers
+      let searchParam = null;
+      let invoiceNumbersParam = null;
+      
+      if (activeSearchQuery && activeSearchQuery.trim()) {
+        if (activeSearchQuery.includes(',')) {
+          // Comma-separated invoice numbers - exact match
+          const numbers = activeSearchQuery.split(',').map(n => n.trim()).filter(n => n);
+          if (numbers.length > 0) {
+            invoiceNumbersParam = numbers.join(',');
+          }
+        } else if (activeSearchQuery.trim().length >= 3) {
+          // Regular search (requires 3+ chars)
+          searchParam = activeSearchQuery;
+        }
+      }
+      
       const params = {
         page: pagination.page,
         limit: pagination.limit,
-        ...(activeSearchQuery && activeSearchQuery.trim().length >= 3 && { search: activeSearchQuery }),
+        ...(searchParam && { search: searchParam }),
+        ...(invoiceNumbersParam && { invoiceNumbers: invoiceNumbersParam }),
         ...(statusFilter !== 'all' && { status: statusFilter }),
         ...(companyIdsParam && { companyIds: companyIdsParam }),
         sortBy,
@@ -728,7 +746,7 @@ const Invoices = () => {
                         ref={searchInputRef}
                         type="text"
                         className="form-control"
-                        placeholder="Search..."
+                        placeholder="Search... (comma-separated invoice numbers supported)"
                         value={searchQuery}
                         onChange={(e) => {
                           // ONLY update state - do NOT trigger search

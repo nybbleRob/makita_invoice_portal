@@ -60,6 +60,7 @@ router.get('/', async (req, res) => {
       page = 1, 
       limit = 50, 
       search = '', 
+      invoiceNumbers, // Comma-separated invoice numbers for exact match
       companyId, 
       companyIds, // Support multiple company IDs (comma-separated or array)
       status, 
@@ -115,7 +116,16 @@ router.get('/', async (req, res) => {
     
     // Build search conditions
     const searchConditions = [];
-    if (search) {
+    
+    // Handle comma-separated invoice numbers (exact match) - takes priority over regular search
+    if (invoiceNumbers) {
+      const numbers = invoiceNumbers.split(',').map(n => n.trim()).filter(n => n);
+      if (numbers.length > 0) {
+        whereConditions.invoiceNumber = { [Op.in]: numbers };
+      }
+    }
+    // Otherwise use regular search (partial match)
+    else if (search) {
       const searchTerm = `%${search}%`;
       searchConditions.push(
         { invoiceNumber: { [Op.iLike]: searchTerm } },
