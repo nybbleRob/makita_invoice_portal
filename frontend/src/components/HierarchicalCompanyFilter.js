@@ -113,15 +113,10 @@ const HierarchicalCompanyFilter = ({
     };
   }, [onClose, handleApply]);
 
-  // Debounced search - only trigger for actual search changes
-  useEffect(() => {
-    if (!initialFetchDone) return; // Skip during initial load
-    
-    const timer = setTimeout(() => {
-      fetchHierarchy(searchQuery);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
+  // Handle search - only trigger when button is clicked or Enter is pressed
+  const handleSearch = useCallback(() => {
+    fetchHierarchy(searchQuery);
+  }, [searchQuery, fetchHierarchy]);
 
   // Get all descendant IDs for a company (as strings)
   const getDescendantIds = useCallback((node) => {
@@ -417,16 +412,41 @@ const HierarchicalCompanyFilter = ({
           <div className="modal-body">
             {/* Search */}
             <div className="mb-3">
-              <input
-                ref={searchInputRef}
-                id="company-filter-search"
-                name="company-filter-search"
-                type="text"
-                className="form-control"
-                placeholder="Search companies by name or account number..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+              <div className="input-group input-group-flat w-auto">
+                <span className="input-group-text">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon icon-1">
+                    <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
+                    <path d="M21 21l-6 -6"></path>
+                  </svg>
+                </span>
+                <input
+                  ref={searchInputRef}
+                  id="company-filter-search"
+                  name="company-filter-search"
+                  type="text"
+                  className="form-control"
+                  placeholder="Search companies by name or account number..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSearch();
+                    }
+                  }}
+                  autocomplete="off"
+                />
+                <span className="input-group-text">
+                  <kbd>ctrl + K</kbd>
+                </span>
+                <button 
+                  className="btn btn-primary" 
+                  type="button"
+                  onClick={handleSearch}
+                >
+                  Search
+                </button>
+              </div>
             </div>
             
             {/* Action buttons */}
