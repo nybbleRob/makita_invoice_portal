@@ -425,6 +425,12 @@ const UserManagement = () => {
         return;
       }
       
+      // Validate external users must have company assignment
+      if (formData.role === 'external_user' && !formData.allCompanies && (!formData.companyIds || formData.companyIds.length === 0)) {
+        toast.error('External users must be assigned to at least one company or have "All Companies" enabled');
+        return;
+      }
+      
       // Use password from passwordData if provided, otherwise use empty string (will create temporary password)
       const userData = {
         ...formData,
