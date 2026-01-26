@@ -844,7 +844,7 @@ const CreditNotes = () => {
                     </th>
                     <th>Credit Note No.</th>
                     <th>Date/Tax Point</th>
-                    <th>Account No.</th>
+                    <th style={{ width: '90px' }}>Account No.</th>
                     <th>Company Name</th>
                     <th>Invoice To</th>
                     <th>Delivery Address</th>
@@ -907,14 +907,14 @@ const CreditNotes = () => {
                             />
                           </td>
                           <td><strong>{creditNote.creditNumber || creditNote.creditNoteNumber || '-'}</strong></td>
-                          <td>{formatDate(creditNote.issueDate)}</td>
-                          <td>{creditNote.company?.referenceNo || creditNote.company?.code || '-'}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{formatDate(creditNote.issueDate)}</td>
+                          <td style={{ width: '90px' }}>{creditNote.company?.referenceNo || creditNote.company?.code || '-'}</td>
                           <td 
                             id={`cn-company-${creditNote.id}`}
                             data-bs-toggle="tooltip" 
                             data-bs-placement="top" 
                             title={creditNote.company?.name || '-'}
-                            style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'help' }}
+                            style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'help' }}
                           >
                             {creditNote.company?.name || '-'}
                           </td>
@@ -923,7 +923,7 @@ const CreditNotes = () => {
                             data-bs-toggle="tooltip" 
                             data-bs-placement="top" 
                             title={invoiceTo}
-                            style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'help' }}
+                            style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'help' }}
                           >
                             {invoiceTo}
                           </td>
@@ -932,7 +932,7 @@ const CreditNotes = () => {
                             data-bs-toggle="tooltip" 
                             data-bs-placement="top" 
                             title={deliveryAddress}
-                            style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'help' }}
+                            style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'help' }}
                           >
                             {deliveryAddress}
                           </td>
