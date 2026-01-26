@@ -158,6 +158,9 @@ const SupplierInvoices = () => {
   };
   
   const pollImportStatus = async (id) => {
+    let resultsFetchRetries = 0;
+    const MAX_RESULTS_RETRIES = 5;
+    
     const pollOnce = async () => {
       try {
         const statusResponse = await api.get(`/api/supplier-documents/import/${id}`);
@@ -173,6 +176,20 @@ const SupplierInvoices = () => {
             setImportPollingInterval(null);
           }
           toast.info('Import was cancelled');
+          return true; // Stop polling
+        }
+        
+        // Check if failed
+        if (importSession.status === 'failed') {
+          console.log('Import failed');
+          setImportStatus(null);
+          setShowImportModal(false);
+          if (importPollingInterval) {
+            clearInterval(importPollingInterval);
+            setImportPollingInterval(null);
+          }
+          toast.error('Import failed. Please try again.', 8000);
+          setImportFiles([]);
           return true; // Stop polling
         }
         
@@ -199,6 +216,17 @@ const SupplierInvoices = () => {
             return true; // Stop polling
           } catch (error) {
             console.error('Error fetching import results:', error);
+            resultsFetchRetries++;
+            
+            // After max retries, close modal and show basic success message
+            if (resultsFetchRetries >= MAX_RESULTS_RETRIES) {
+              console.log('Max retries reached for fetching results, closing modal');
+              setShowImportModal(false);
+              setImportFiles([]);
+              fetchDocuments();
+              toast.success(`Import completed! Processed ${importSession.processedFiles || importSession.totalFiles} file(s).`);
+              return true; // Stop polling
+            }
             // Continue polling to retry
           }
         }
