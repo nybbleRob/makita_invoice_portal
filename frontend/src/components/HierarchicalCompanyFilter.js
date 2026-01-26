@@ -410,6 +410,10 @@ const HierarchicalCompanyFilter = ({
             <button type="button" className="btn-close" onClick={onClose}></button>
           </div>
           
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            handleApply();
+          }}>
           <div className="modal-body">
             {/* Search */}
             <div className="mb-3">
@@ -422,12 +426,6 @@ const HierarchicalCompanyFilter = ({
                 placeholder="Search companies by name or account number..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleApply();
-                  }
-                }}
               />
             </div>
             
@@ -507,13 +505,13 @@ const HierarchicalCompanyFilter = ({
               Cancel
             </button>
             <button 
-              type="button" 
+              type="submit" 
               className="btn btn-primary" 
-              onClick={handleApply}
             >
               Apply Filter ({tempSelectedIds.size} selected)
             </button>
           </div>
+          </form>
           </div>
         </div>
       </div>
