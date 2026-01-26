@@ -71,6 +71,25 @@ const HierarchicalCompanyFilter = ({
     }, 100);
   }, []);
 
+  // Attach keyboard handler to document to catch all key events
+  useEffect(() => {
+    const handleDocumentKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      } else if (e.key === 'Enter' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') {
+        // Only trigger if not typing in input/textarea and not clicking a button
+        e.preventDefault();
+        handleApply();
+      }
+    };
+
+    document.addEventListener('keydown', handleDocumentKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleDocumentKeyDown);
+    };
+  }, [onClose, handleApply]);
+
   // Debounced search - only trigger for actual search changes
   useEffect(() => {
     if (!initialFetchDone) return; // Skip during initial load
@@ -214,17 +233,6 @@ const HierarchicalCompanyFilter = ({
     if (onApply) onApply();
   }, [tempSelectedIds, onSelectionChange, onApply]);
 
-  // Keyboard handler for Enter and Escape
-  const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      onClose();
-    } else if (e.key === 'Enter' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
-      // Only trigger if not typing in input/textarea
-      e.preventDefault();
-      handleApply();
-    }
-  }, [onClose, handleApply]);
 
   // Get selected company names for display
   const selectedCompanyNames = useMemo(() => {
@@ -281,7 +289,20 @@ const HierarchicalCompanyFilter = ({
                 onClick={(e) => toggleExpand(node.id, e)}
                 aria-label={isExpanded ? 'Collapse' : 'Expand'}
                 aria-expanded={isExpanded}
-                style={{ width: '20px', height: '20px', lineHeight: '20px', transition: 'background-color 0.2s' }}
+                style={{ 
+                  width: '20px', 
+                  height: '20px', 
+                  lineHeight: '20px', 
+                  transition: 'background-color 0.2s',
+                  outline: 'none'
+                }}
+                onFocus={(e) => {
+                  e.target.style.outline = '2px solid var(--tblr-primary, #206bc4)';
+                  e.target.style.outlineOffset = '2px';
+                }}
+                onBlur={(e) => {
+                  e.target.style.outline = 'none';
+                }}
               >
                 <svg 
                   xmlns="http://www.w3.org/2000/svg" 
@@ -365,7 +386,7 @@ const HierarchicalCompanyFilter = ({
   return (
     <>
       <div className="modal-backdrop fade show" style={{ zIndex: 1050 }}></div>
-      <div className="modal modal-blur fade show" style={{ display: 'block', zIndex: 1055 }} tabIndex="-1" onKeyDown={handleKeyDown}>
+      <div className="modal modal-blur fade show" style={{ display: 'block', zIndex: 1055 }} tabIndex="-1">
         <div className="modal-dialog modal-dialog-centered modal-lg">
           <div className="modal-content">
           <div className="modal-header">
@@ -383,6 +404,12 @@ const HierarchicalCompanyFilter = ({
                 placeholder="Search companies by name or account number..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleApply();
+                  }
+                }}
               />
             </div>
             
