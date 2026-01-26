@@ -56,7 +56,7 @@ router.use(checkDocumentAccess);
 // Get all credit notes (filtered by user's accessible companies)
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 50, search = '', companyId, companyIds, invoiceId, status, startDate, endDate } = req.query;
+    const { page = 1, limit = 50, search = '', creditNoteNumbers, companyId, companyIds, invoiceId, status, startDate, endDate } = req.query;
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const offset = (pageNum - 1) * limitNum;
@@ -104,7 +104,19 @@ router.get('/', async (req, res) => {
       }
     }
     
-    if (search) {
+    // Handle comma-separated credit note numbers (exact match) - takes priority over regular search
+    if (creditNoteNumbers) {
+      const numbers = creditNoteNumbers.split(',').map(n => n.trim()).filter(n => n);
+      console.log('🔍 [CreditNotes] Searching for credit note numbers:', numbers);
+      if (numbers.length > 0) {
+        // Use case-insensitive matching - search for any of the credit note numbers
+        whereConditions[Op.or] = numbers.map(num => ({
+          creditNoteNumber: { [Op.iLike]: num }
+        }));
+      }
+    }
+    // Otherwise use regular search (partial match)
+    else if (search) {
       whereConditions[Op.or] = [
         { creditNoteNumber: { [Op.iLike]: `%${search}%` } },
         { reason: { [Op.iLike]: `%${search}%` } },

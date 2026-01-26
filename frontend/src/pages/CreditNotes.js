@@ -18,10 +18,10 @@ const CreditNotes = () => {
   const [creditNotes, setCreditNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeSearchQuery, setActiveSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [companies, setCompanies] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 });
-  const debouncedSearch = useDebounce(searchQuery, 300);
   const [selectedCreditNotes, setSelectedCreditNotes] = useState([]);
   const selectAllCheckboxRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -86,10 +86,28 @@ const CreditNotes = () => {
         }
       }
       
+      // Check if search contains comma-separated credit note numbers
+      let searchParam = null;
+      let creditNoteNumbersParam = null;
+      
+      if (activeSearchQuery && activeSearchQuery.trim()) {
+        if (activeSearchQuery.includes(',')) {
+          // Comma-separated credit note numbers - exact match
+          const numbers = activeSearchQuery.split(',').map(n => n.trim()).filter(n => n);
+          if (numbers.length > 0) {
+            creditNoteNumbersParam = numbers.join(',');
+          }
+        } else if (activeSearchQuery.trim().length >= 3) {
+          // Regular search (requires 3+ chars)
+          searchParam = activeSearchQuery;
+        }
+      }
+      
       const params = {
         page: pagination.page,
         limit: pagination.limit,
-        ...(debouncedSearch && debouncedSearch.trim().length >= 3 && { search: debouncedSearch }),
+        ...(searchParam && { search: searchParam }),
+        ...(creditNoteNumbersParam && { creditNoteNumbers: creditNoteNumbersParam }),
         ...(statusFilter !== 'all' && { status: statusFilter }),
         ...(companyIdsParam && { companyIds: companyIdsParam }),
         sortBy,
@@ -129,7 +147,7 @@ const CreditNotes = () => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, debouncedSearch, statusFilter, selectedCompanyIds, sortBy, sortOrder, retentionFilter]);
+  }, [pagination.page, pagination.limit, activeSearchQuery, statusFilter, selectedCompanyIds, sortBy, sortOrder, retentionFilter]);
 
   const fetchCompanies = useCallback(async () => {
     try {
@@ -236,6 +254,7 @@ const CreditNotes = () => {
   // Reset all filters and sorting
   const handleResetFilters = () => {
     setSearchQuery('');
+    setActiveSearchQuery('');
     setStatusFilter('all');
     setSelectedCompanyIds([]);
     setSelectedCompanyFilters([]);
@@ -651,9 +670,9 @@ const CreditNotes = () => {
                 <div className="col-lg-9 col-md-8 col-12">
                   <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
                     {/* Search */}
-                    <div className="input-group input-group-flat" style={{ maxWidth: '280px' }}>
+                    <div className="input-group input-group-flat w-auto">
                       <span className="input-group-text">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon icon-1">
                           <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
                           <path d="M21 21l-6 -6"></path>
                         </svg>
@@ -662,17 +681,34 @@ const CreditNotes = () => {
                         ref={searchInputRef}
                         type="text"
                         className="form-control"
-                        placeholder="Search..."
+                        placeholder="Search for Credit Notes"
                         value={searchQuery}
-                        onChange={(e) => {
-                          setSearchQuery(e.target.value);
-                          setPagination(prev => ({ ...prev, page: 1 }));
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setActiveSearchQuery(searchQuery);
+                            setPagination(prev => ({ ...prev, page: 1 }));
+                          }
                         }}
-                        autocomplete="off"
+                        autoComplete="off"
                       />
                       <span className="input-group-text">
-                        <kbd>Ctrl+K</kbd>
+                        <kbd>ctrl + K</kbd>
                       </span>
+                      <button 
+                        className="btn btn-primary" 
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setActiveSearchQuery(searchQuery);
+                          setPagination(prev => ({ ...prev, page: 1 }));
+                        }}
+                      >
+                        Search
+                      </button>
                     </div>
                     {/* Status filter */}
                     <select
