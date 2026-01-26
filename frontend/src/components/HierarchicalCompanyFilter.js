@@ -512,37 +512,43 @@ const HierarchicalCompanyFilter = ({
             </div>
             
             {/* Pagination */}
-            {pagination.pages > 1 && (
+            {!loading && pagination.total > 0 && (
               <div className="d-flex justify-content-between align-items-center mt-3">
                 <div className="text-muted">
-                  Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} companies
+                  {pagination.pages > 1 ? (
+                    <>Page {pagination.page} of {pagination.pages} - Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} companies</>
+                  ) : (
+                    <>Showing {pagination.total} {pagination.total === 1 ? 'company' : 'companies'}</>
+                  )}
                 </div>
-                <div className="btn-group">
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-secondary"
-                    onClick={() => {
-                      const newPage = pagination.page - 1;
-                      setPagination(prev => ({ ...prev, page: newPage }));
-                      fetchHierarchy(searchQuery, newPage);
-                    }}
-                    disabled={pagination.page === 1 || loading}
-                  >
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-secondary"
-                    onClick={() => {
-                      const newPage = pagination.page + 1;
-                      setPagination(prev => ({ ...prev, page: newPage }));
-                      fetchHierarchy(searchQuery, newPage);
-                    }}
-                    disabled={pagination.page >= pagination.pages || loading}
-                  >
-                    Next
-                  </button>
-                </div>
+                {pagination.pages > 1 && (
+                  <div className="btn-group">
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-secondary"
+                      onClick={() => {
+                        const newPage = pagination.page - 1;
+                        setPagination(prev => ({ ...prev, page: newPage }));
+                        fetchHierarchy(searchQuery, newPage);
+                      }}
+                      disabled={pagination.page === 1 || loading}
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-secondary"
+                      onClick={() => {
+                        const newPage = pagination.page + 1;
+                        setPagination(prev => ({ ...prev, page: newPage }));
+                        fetchHierarchy(searchQuery, newPage);
+                      }}
+                      disabled={pagination.page >= pagination.pages || loading}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
