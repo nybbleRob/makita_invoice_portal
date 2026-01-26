@@ -83,10 +83,19 @@ const HierarchicalCompanyFilter = ({
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
-      } else if (e.key === 'Enter' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') {
-        // Only trigger if not typing in input/textarea and not clicking a button
-        e.preventDefault();
-        handleApply();
+      } else if (e.key === 'Enter') {
+        // Let buttons handle Enter naturally (they will trigger onClick)
+        // Only catch Enter when not in an interactive element
+        const isInteractive = e.target.tagName === 'INPUT' || 
+                             e.target.tagName === 'TEXTAREA' || 
+                             e.target.tagName === 'BUTTON' ||
+                             e.target.closest('button') !== null;
+        
+        if (!isInteractive) {
+          e.preventDefault();
+          handleApply();
+        }
+        // If in search input, let its own handler deal with it (already handled above)
       }
     };
 
@@ -398,6 +407,8 @@ const HierarchicalCompanyFilter = ({
             <div className="mb-3">
               <input
                 ref={searchInputRef}
+                id="company-filter-search"
+                name="company-filter-search"
                 type="text"
                 className="form-control"
                 placeholder="Search companies by name or account number..."
@@ -487,7 +498,11 @@ const HierarchicalCompanyFilter = ({
             <button type="button" className="btn btn-secondary" onClick={onClose}>
               Cancel
             </button>
-            <button type="button" className="btn btn-primary" onClick={handleApply}>
+            <button 
+              type="button" 
+              className="btn btn-primary" 
+              onClick={handleApply}
+            >
               Apply Filter ({tempSelectedIds.size} selected)
             </button>
           </div>
