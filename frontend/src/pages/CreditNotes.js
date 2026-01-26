@@ -995,54 +995,192 @@ const CreditNotes = () => {
               
               {/* Pagination Controls */}
               {pagination.total > pagination.limit && (
-                <div className="d-flex justify-content-between align-items-center mt-3">
-                  <div className="text-muted">
-                    Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} credit notes
-                  </div>
-                  <div className="d-flex gap-2">
-                    <button
-                      className="btn btn-sm btn-outline-primary"
-                      onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
-                      disabled={pagination.page === 1 || loading}
-                    >
-                      Previous
-                    </button>
-                    <div className="d-flex align-items-center gap-2">
-                      <span className="text-muted">Page</span>
-                      <input
-                        type="number"
-                        className="form-control form-control-sm"
-                        style={{ width: '70px' }}
-                        min="1"
-                        max={pagination.pages}
-                        defaultValue={pagination.page}
-                        key={pagination.page} // Reset input when page changes externally
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            const page = parseInt(e.target.value);
-                            if (page >= 1 && page <= pagination.pages) {
-                              setPagination(prev => ({ ...prev, page }));
-                            }
-                            e.target.blur();
-                          }
-                        }}
-                        onBlur={(e) => {
-                          const page = parseInt(e.target.value);
-                          if (page >= 1 && page <= pagination.pages && page !== pagination.page) {
-                            setPagination(prev => ({ ...prev, page }));
-                          }
-                        }}
-                      />
-                      <span className="text-muted">of {pagination.pages}</span>
+                <div className="card-footer">
+                  <div className="d-flex justify-content-between align-items-center">
+                    <div className="text-muted">
+                      Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} Credit Notes
                     </div>
-                    <button
-                      className="btn btn-sm btn-outline-primary"
-                      onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-                      disabled={pagination.page >= pagination.pages || loading}
-                    >
-                      Next
-                    </button>
+                    {(() => {
+                      // Calculate which page numbers to show
+                      const currentPage = pagination.page;
+                      const totalPages = pagination.pages;
+                      const pagesToShow = [];
+                      
+                      if (totalPages <= 7) {
+                        // Show all pages if 7 or fewer
+                        for (let i = 1; i <= totalPages; i++) {
+                          pagesToShow.push(i);
+                        }
+                      } else {
+                        // Show first page
+                        pagesToShow.push(1);
+                        
+                        if (currentPage <= 4) {
+                          // Near the start: 1, 2, 3, 4, 5, ..., last
+                          for (let i = 2; i <= 5; i++) {
+                            pagesToShow.push(i);
+                          }
+                          pagesToShow.push('ellipsis');
+                          pagesToShow.push(totalPages);
+                        } else if (currentPage >= totalPages - 3) {
+                          // Near the end: 1, ..., last-4, last-3, last-2, last-1, last
+                          pagesToShow.push('ellipsis');
+                          for (let i = totalPages - 4; i <= totalPages; i++) {
+                            pagesToShow.push(i);
+                          }
+                        } else {
+                          // In the middle: 1, ..., current-1, current, current+1, ..., last
+                          pagesToShow.push('ellipsis');
+                          for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+                            pagesToShow.push(i);
+                          }
+                          pagesToShow.push('ellipsis');
+                          pagesToShow.push(totalPages);
+                        }
+                      }
+                      
+                      return (
+                        <div className="d-flex align-items-center gap-2">
+                          {/* Tabler-style pagination */}
+                          <ul className="pagination m-0">
+                            {/* First page button */}
+                            <li className={`page-item ${pagination.page === 1 || loading ? 'disabled' : ''}`}>
+                              <a 
+                                className="page-link" 
+                                href="#" 
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  if (pagination.page > 1 && !loading) {
+                                    setPagination(prev => ({ ...prev, page: 1 }));
+                                  }
+                                }}
+                                tabIndex={pagination.page === 1 || loading ? -1 : 0}
+                                aria-disabled={pagination.page === 1 || loading}
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" className="icon">
+                                  <path d="M11 7l-5 5l5 5" />
+                                  <path d="M17 7l-5 5l5 5" />
+                                </svg>
+                              </a>
+                            </li>
+                            {/* Previous page button */}
+                            <li className={`page-item ${pagination.page === 1 || loading ? 'disabled' : ''}`}>
+                              <a 
+                                className="page-link" 
+                                href="#" 
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  if (pagination.page > 1 && !loading) {
+                                    setPagination(prev => ({ ...prev, page: prev.page - 1 }));
+                                  }
+                                }}
+                                tabIndex={pagination.page === 1 || loading ? -1 : 0}
+                                aria-disabled={pagination.page === 1 || loading}
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" className="icon">
+                                  <path d="M15 6l-6 6l6 6" />
+                                </svg>
+                              </a>
+                            </li>
+                            {/* Page numbers */}
+                            {pagesToShow.map((page, index) => {
+                              if (page === 'ellipsis') {
+                                return (
+                                  <li key={`ellipsis-${index}`} className="page-item disabled">
+                                    <span className="page-link">...</span>
+                                  </li>
+                                );
+                              }
+                              return (
+                                <li key={page} className={`page-item ${page === currentPage ? 'active' : ''}`}>
+                                  <a 
+                                    className="page-link" 
+                                    href="#" 
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      if (page !== currentPage && !loading) {
+                                        setPagination(prev => ({ ...prev, page }));
+                                      }
+                                    }}
+                                  >
+                                    {page}
+                                  </a>
+                                </li>
+                              );
+                            })}
+                            {/* Next page button */}
+                            <li className={`page-item ${pagination.page >= pagination.pages || loading ? 'disabled' : ''}`}>
+                              <a 
+                                className="page-link" 
+                                href="#" 
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  if (pagination.page < pagination.pages && !loading) {
+                                    setPagination(prev => ({ ...prev, page: prev.page + 1 }));
+                                  }
+                                }}
+                                tabIndex={pagination.page >= pagination.pages || loading ? -1 : 0}
+                                aria-disabled={pagination.page >= pagination.pages || loading}
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" className="icon">
+                                  <path d="M9 6l6 6l-6 6" />
+                                </svg>
+                              </a>
+                            </li>
+                            {/* Last page button */}
+                            <li className={`page-item ${pagination.page >= pagination.pages || loading ? 'disabled' : ''}`}>
+                              <a 
+                                className="page-link" 
+                                href="#" 
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  if (pagination.page < pagination.pages && !loading) {
+                                    setPagination(prev => ({ ...prev, page: pagination.pages }));
+                                  }
+                                }}
+                                tabIndex={pagination.page >= pagination.pages || loading ? -1 : 0}
+                                aria-disabled={pagination.page >= pagination.pages || loading}
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" className="icon">
+                                  <path d="M7 7l5 5l-5 5" />
+                                  <path d="M13 7l5 5l-5 5" />
+                                </svg>
+                              </a>
+                            </li>
+                          </ul>
+                          {/* Number input box */}
+                          <div className="d-flex align-items-center gap-2">
+                            <span className="text-muted">Page</span>
+                            <input
+                              type="number"
+                              className="form-control form-control-sm"
+                              style={{ width: '70px' }}
+                              min="1"
+                              max={pagination.pages}
+                              defaultValue={pagination.page}
+                              key={pagination.page} // Reset input when page changes externally
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  const page = parseInt(e.target.value);
+                                  if (page >= 1 && page <= pagination.pages) {
+                                    setPagination(prev => ({ ...prev, page }));
+                                  }
+                                  e.target.blur();
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const page = parseInt(e.target.value);
+                                if (page >= 1 && page <= pagination.pages && page !== pagination.page) {
+                                  setPagination(prev => ({ ...prev, page }));
+                                }
+                              }}
+                            />
+                            <span className="text-muted">of {pagination.pages}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}

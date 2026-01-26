@@ -39,7 +39,6 @@ const Invoices = () => {
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const selectAllCheckboxRef = useRef(null);
   const searchInputRef = useRef(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
   
   // Delete modal states
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -116,8 +115,6 @@ const Invoices = () => {
           pages: 0
         }));
       }
-      setLastUpdated(new Date());
-      setLastUpdated(new Date());
     } catch (error) {
       console.error('Error fetching invoices:', error);
       console.error('Error response:', error.response?.data);
@@ -1044,18 +1041,7 @@ const Invoices = () => {
                 <div className="card-footer">
                   <div className="d-flex justify-content-between align-items-center">
                     <div className="text-muted">
-                      {lastUpdated && (() => {
-                        const diffMs = Date.now() - lastUpdated.getTime();
-                        const diffMins = Math.floor(diffMs / 60000);
-                        const diffSecs = Math.floor((diffMs % 60000) / 1000);
-                        if (diffMins === 0) {
-                          return `Last updated ${diffSecs} ${diffSecs === 1 ? 'second' : 'seconds'} ago`;
-                        } else if (diffMins === 1) {
-                          return 'Last updated 1 min ago';
-                        } else {
-                          return `Last updated ${diffMins} mins ago`;
-                        }
-                      })()}
+                      Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} Invoices
                     </div>
                     {(() => {
                       // Calculate which page numbers to show
