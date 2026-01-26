@@ -238,10 +238,11 @@ router.get('/hierarchy', auth, checkDocumentAccess, async (req, res) => {
     }
     
     // Fetch all accessible companies (we need all to build the tree)
+    // Sort by referenceNo numerically when searching, otherwise by name
     const companies = await Company.findAll({
       where,
       attributes: ['id', 'name', 'referenceNo', 'code', 'type', 'parentId', 'isActive'],
-      order: [['name', 'ASC']]
+      order: search ? [['referenceNo', 'ASC'], ['name', 'ASC']] : [['name', 'ASC']]
     });
     
     // Build hierarchical structure
