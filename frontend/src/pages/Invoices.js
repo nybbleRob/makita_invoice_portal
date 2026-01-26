@@ -94,6 +94,7 @@ const Invoices = () => {
         if (activeSearchQuery.includes(',')) {
           // Comma-separated invoice numbers - exact match
           const numbers = activeSearchQuery.split(',').map(n => n.trim()).filter(n => n);
+          console.log('🔍 Comma-separated search detected:', numbers);
           if (numbers.length > 0) {
             invoiceNumbersParam = numbers.join(',');
           }
@@ -102,6 +103,8 @@ const Invoices = () => {
           searchParam = activeSearchQuery;
         }
       }
+      
+      console.log('🔍 Search params:', { searchParam, invoiceNumbersParam, activeSearchQuery });
       
       const params = {
         page: pagination.page,
@@ -746,7 +749,7 @@ const Invoices = () => {
                         ref={searchInputRef}
                         type="text"
                         className="form-control"
-                        placeholder="Search... (comma-separated invoice numbers supported)"
+                        placeholder="Search for Invoices"
                         value={searchQuery}
                         onChange={(e) => {
                           // ONLY update state - do NOT trigger search

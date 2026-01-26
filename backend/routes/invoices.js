@@ -120,8 +120,12 @@ router.get('/', async (req, res) => {
     // Handle comma-separated invoice numbers (exact match) - takes priority over regular search
     if (invoiceNumbers) {
       const numbers = invoiceNumbers.split(',').map(n => n.trim()).filter(n => n);
+      console.log('🔍 [Invoices] Searching for invoice numbers:', numbers);
       if (numbers.length > 0) {
-        whereConditions.invoiceNumber = { [Op.in]: numbers };
+        // Use case-insensitive matching - search for any of the invoice numbers
+        searchConditions.push(...numbers.map(num => ({
+          invoiceNumber: { [Op.iLike]: num }
+        })));
       }
     }
     // Otherwise use regular search (partial match)
