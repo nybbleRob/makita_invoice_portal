@@ -155,11 +155,17 @@ const Invoices = () => {
     }
   }, []);
 
+  // Initial fetch of companies (only once)
+  useEffect(() => {
+    fetchCompanies();
+  }, [fetchCompanies]);
+
+  // Fetch invoices when filters/pagination change
   useEffect(() => {
     fetchInvoices();
-    fetchCompanies();
     setSelectedInvoices([]); // Clear selections on filter change
-  }, [fetchInvoices, fetchCompanies]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagination.page, pagination.limit, activeSearchQuery, statusFilter, selectedCompanyIds, sortBy, sortOrder, retentionFilter]);
 
   // Ctrl+K keyboard shortcut to focus search
   useEffect(() => {
@@ -256,6 +262,7 @@ const Invoices = () => {
   // Reset all filters and sorting
   const handleResetFilters = () => {
     setSearchQuery('');
+    setActiveSearchQuery(''); // Clear the active search query
     setStatusFilter('all');
     setSelectedCompanyIds([]);
     setSelectedCompanyFilters([]);
