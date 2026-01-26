@@ -516,9 +516,9 @@ const HierarchicalCompanyFilter = ({
               <div className="d-flex justify-content-between align-items-center mt-3">
                 <div className="text-muted">
                   {pagination.pages > 1 ? (
-                    <>Page {pagination.page} of {pagination.pages} - Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} companies</>
+                    <>Page {pagination.page} of {pagination.pages} - Showing root company {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} root companies</>
                   ) : (
-                    <>Showing {pagination.total} {pagination.total === 1 ? 'company' : 'companies'}</>
+                    <>Showing {pagination.total} root {pagination.total === 1 ? 'company' : 'companies'}</>
                   )}
                 </div>
                 {pagination.pages > 1 && (

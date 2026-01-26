@@ -284,9 +284,9 @@ router.get('/hierarchy', auth, checkDocumentAccess, async (req, res) => {
     rootCompanies.forEach(sortChildren);
     rootCompanies.sort((a, b) => a.name.localeCompare(b.name));
     
-    // Paginate root companies only (but include full subtrees)
-    const total = rootCompanies.length;
-    const pages = Math.ceil(total / limitNum);
+    // Paginate root companies only (but include full subtrees for each root)
+    const totalRootCompanies = rootCompanies.length;
+    const pages = Math.ceil(totalRootCompanies / limitNum);
     const offset = (pageNum - 1) * limitNum;
     const paginatedRootCompanies = rootCompanies.slice(offset, offset + limitNum);
     
@@ -295,7 +295,7 @@ router.get('/hierarchy', auth, checkDocumentAccess, async (req, res) => {
       pagination: {
         page: pageNum,
         limit: limitNum,
-        total: total,
+        total: totalRootCompanies,
         pages: pages
       }
     });
