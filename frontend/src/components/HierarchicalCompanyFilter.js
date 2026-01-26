@@ -71,6 +71,12 @@ const HierarchicalCompanyFilter = ({
     }, 100);
   }, []);
 
+  // Apply selection (defined early so it can be used in keyboard handler)
+  const handleApply = useCallback(() => {
+    onSelectionChange(Array.from(tempSelectedIds));
+    if (onApply) onApply();
+  }, [tempSelectedIds, onSelectionChange, onApply]);
+
   // Attach keyboard handler to document to catch all key events
   useEffect(() => {
     const handleDocumentKeyDown = (e) => {
@@ -226,13 +232,6 @@ const HierarchicalCompanyFilter = ({
   const clearAll = useCallback(() => {
     setTempSelectedIds(new Set());
   }, []);
-
-  // Apply selection
-  const handleApply = useCallback(() => {
-    onSelectionChange(Array.from(tempSelectedIds));
-    if (onApply) onApply();
-  }, [tempSelectedIds, onSelectionChange, onApply]);
-
 
   // Get selected company names for display
   const selectedCompanyNames = useMemo(() => {
