@@ -33,6 +33,14 @@ const Unallocated = () => {
   const [documentToDelete, setDocumentToDelete] = useState(null);
   const [showSingleDeleteModal, setShowSingleDeleteModal] = useState(false);
   const [singleDeleteReason, setSingleDeleteReason] = useState('');
+  
+  // Bulk allocation states
+  const [showAllocationModal, setShowAllocationModal] = useState(false);
+  const [allocationStatus, setAllocationStatus] = useState(null);
+  const [allocationResults, setAllocationResults] = useState(null);
+  const [allocationPollingInterval, setAllocationPollingInterval] = useState(null);
+  const [allocating, setAllocating] = useState(false);
+  
   const debouncedSearch = useDebounce(searchQuery, 300);
   const debouncedAccountNumber = useDebounce(accountNumberFilter, 300);
   const debouncedInvoiceNumber = useDebounce(invoiceNumberFilter, 300);
@@ -279,6 +287,168 @@ const Unallocated = () => {
     }
   };
 
+  // Bulk allocation functions
+  const handleBulkAllocate = async (fileIds = []) => {
+    setAllocating(true);
+    setShowAllocationModal(true);
+    setAllocationStatus({ processedFiles: 0, totalFiles: fileIds.length || pagination.total, status: 'processing' });
+    setAllocationResults(null);
+
+    try {
+      const response = await api.post('/api/unallocated/bulk-allocate', {
+        fileIds: fileIds.length > 0 ? fileIds : [] // Empty array means "all"
+      });
+
+      if (response.data.success) {
+        // Start polling for status
+        pollAllocationStatus(response.data.allocationId);
+      } else {
+        toast.error(response.data.message || 'Error starting allocation');
+        setShowAllocationModal(false);
+        setAllocationStatus(null);
+        setAllocating(false);
+      }
+    } catch (error) {
+      console.error('Error starting bulk allocation:', error);
+      toast.error('Error starting allocation: ' + (error.response?.data?.message || error.message));
+      setShowAllocationModal(false);
+      setAllocationStatus(null);
+      setAllocating(false);
+    }
+  };
+
+  const pollAllocationStatus = async (allocationId) => {
+    let resultsFetchRetries = 0;
+    const MAX_RESULTS_RETRIES = 5;
+
+    const pollOnce = async () => {
+      try {
+        const statusResponse = await api.get(`/api/unallocated/allocate/${allocationId}`);
+        const allocationSession = statusResponse.data.allocation;
+
+        // Check if cancelled
+        if (allocationSession.cancelled || allocationSession.status === 'cancelled') {
+          console.log('Allocation was cancelled');
+          setAllocationStatus(null);
+          setShowAllocationModal(false);
+          setAllocating(false);
+          if (allocationPollingInterval) {
+            clearInterval(allocationPollingInterval);
+            setAllocationPollingInterval(null);
+          }
+          toast.info('Allocation was cancelled');
+          fetchDocuments();
+          return true; // Stop polling
+        }
+
+        // Check if failed
+        if (allocationSession.status === 'failed') {
+          console.log('Allocation failed');
+          setAllocationStatus(null);
+          setShowAllocationModal(false);
+          setAllocating(false);
+          if (allocationPollingInterval) {
+            clearInterval(allocationPollingInterval);
+            setAllocationPollingInterval(null);
+          }
+          toast.error('Allocation failed. Please try again.');
+          return true; // Stop polling
+        }
+
+        // Update status
+        setAllocationStatus(allocationSession);
+
+        // If processing is complete, fetch full results
+        if (allocationSession.status === 'completed') {
+          try {
+            const resultsResponse = await api.get(`/api/unallocated/allocate/${allocationId}/results`);
+            const allocationData = resultsResponse.data.allocation;
+            setAllocationResults(allocationData);
+            setAllocationStatus({ ...allocationSession, ...allocationData });
+
+            // Auto-close processing modal and show results modal
+            setShowAllocationModal(false);
+            setAllocating(false);
+
+            // Refresh documents list
+            fetchDocuments();
+
+            // Clear selection
+            setSelectedFiles(new Set());
+
+            return true; // Stop polling
+          } catch (error) {
+            console.error('Error fetching allocation results:', error);
+            resultsFetchRetries++;
+
+            // After max retries, close modal and show basic success message
+            if (resultsFetchRetries >= MAX_RESULTS_RETRIES) {
+              console.log('Max retries reached for fetching results, closing modal');
+              setShowAllocationModal(false);
+              setAllocating(false);
+              fetchDocuments();
+              setSelectedFiles(new Set());
+              toast.success(`Allocation completed! Processed ${allocationSession.processedFiles || allocationSession.totalFiles} file(s).`);
+              return true; // Stop polling
+            }
+            // Continue polling to retry
+          }
+        }
+
+        return false; // Continue polling
+      } catch (error) {
+        console.error('Error polling allocation status:', error);
+        setAllocationStatus(null);
+        setShowAllocationModal(false);
+        setAllocating(false);
+        setAllocationPollingInterval(null);
+        toast.error('Error checking allocation status');
+        return true; // Stop polling on error
+      }
+    };
+
+    // Poll immediately
+    const shouldStop = await pollOnce();
+    if (shouldStop) return;
+
+    // Then poll every 1 second
+    const intervalId = setInterval(async () => {
+      const shouldStop = await pollOnce();
+      if (shouldStop) {
+        clearInterval(intervalId);
+        setAllocationPollingInterval(null);
+      }
+    }, 1000);
+
+    setAllocationPollingInterval(intervalId);
+  };
+
+  const handleCancelAllocation = async () => {
+    if (allocationPollingInterval) {
+      clearInterval(allocationPollingInterval);
+      setAllocationPollingInterval(null);
+    }
+
+    // Try to cancel on the server if we have an allocation ID
+    if (allocationStatus?.allocationId) {
+      try {
+        await api.post(`/api/unallocated/allocate/${allocationStatus.allocationId}/cancel`);
+      } catch (error) {
+        console.error('Error cancelling allocation:', error);
+      }
+    }
+
+    setShowAllocationModal(false);
+    setAllocationStatus(null);
+    setAllocationResults(null);
+    setAllocating(false);
+    fetchDocuments();
+  };
+
+  const handleCloseAllocationResults = () => {
+    setAllocationResults(null);
+  };
+
   const handleDeleteDocument = (document) => {
     setDocumentToDelete(document);
     setShowSingleDeleteModal(true);
@@ -426,28 +596,54 @@ const Unallocated = () => {
                     </select>
                     {/* Bulk actions */}
                     {selectedFiles.size > 0 && (
-                      <button
-                        className="btn btn-danger"
-                        onClick={() => {
-                          setShowDeleteModal(true);
-                          setDeleteReason('');
-                        }}
-                        disabled={deleting}
-                      >
-                        Delete Selected ({selectedFiles.size})
-                      </button>
+                      <>
+                        <button
+                          className="btn btn-success"
+                          onClick={() => handleBulkAllocate([...selectedFiles])}
+                          disabled={allocating}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-check me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M5 12l5 5l10 -10"/>
+                          </svg>
+                          Allocate Selected ({selectedFiles.size})
+                        </button>
+                        <button
+                          className="btn btn-danger"
+                          onClick={() => {
+                            setShowDeleteModal(true);
+                            setDeleteReason('');
+                          }}
+                          disabled={deleting}
+                        >
+                          Delete Selected ({selectedFiles.size})
+                        </button>
+                      </>
                     )}
                     {currentUser?.role && ['global_admin', 'administrator'].includes(currentUser.role) && pagination.total > 0 && (
-                      <button
-                        className="btn btn-danger"
-                        onClick={() => {
-                          setShowClearAllModal(true);
-                          setClearAllReason('');
-                        }}
-                        disabled={clearingAll}
-                      >
-                        Clear All ({pagination.total})
-                      </button>
+                      <>
+                        <button
+                          className="btn btn-success"
+                          onClick={() => handleBulkAllocate([])}
+                          disabled={allocating}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-check me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M5 12l5 5l10 -10"/>
+                          </svg>
+                          Allocate All ({pagination.total})
+                        </button>
+                        <button
+                          className="btn btn-danger"
+                          onClick={() => {
+                            setShowClearAllModal(true);
+                            setClearAllReason('');
+                          }}
+                          disabled={clearingAll}
+                        >
+                          Clear All ({pagination.total})
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -1422,6 +1618,195 @@ const Unallocated = () => {
                   disabled={deleting || !deleteReason.trim()}
                 >
                   {deleting ? 'Deleting...' : `Delete ${selectedFiles.size} File(s)`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Allocation Processing Modal */}
+      {showAllocationModal && (
+        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Allocating Documents</h5>
+                <button type="button" className="btn-close" onClick={handleCancelAllocation}></button>
+              </div>
+              <div className="modal-body text-center py-4">
+                <div className="alert alert-info mb-3">
+                  <strong>Note:</strong> The system will automatically detect whether each document is an Invoice or Credit Note and route it to the appropriate screen.
+                </div>
+                <div className="spinner-border text-primary mb-3" role="status">
+                  <span className="visually-hidden">Processing...</span>
+                </div>
+                <h3>Processing {allocationStatus?.totalFiles || 0} file(s)...</h3>
+                <p className="text-muted">
+                  Processed {allocationStatus?.processedFiles || 0} of {allocationStatus?.totalFiles || 0} files
+                </p>
+                {allocationStatus?.currentFile && (
+                  <p className="text-muted small">
+                    Current: {allocationStatus.currentFile}
+                  </p>
+                )}
+                {allocationStatus && allocationStatus.totalFiles > 0 && (
+                  <div className="progress">
+                    <div 
+                      className="progress-bar progress-bar-striped progress-bar-animated" 
+                      role="progressbar" 
+                      style={{ width: `${((allocationStatus?.processedFiles || 0) / allocationStatus.totalFiles) * 100}%` }}
+                    >
+                      {Math.round(((allocationStatus?.processedFiles || 0) / allocationStatus.totalFiles) * 100)}%
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-danger" onClick={handleCancelAllocation}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Allocation Results Modal */}
+      {allocationResults && (
+        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
+          <div className="modal-dialog modal-xl">
+            <div className="modal-content">
+              <div className="modal-header bg-success-lt">
+                <h5 className="modal-title">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-md me-2" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                    <path d="M5 12l5 5l10 -10"/>
+                  </svg>
+                  Allocation Complete
+                </h5>
+                <button type="button" className="btn-close" onClick={handleCloseAllocationResults}></button>
+              </div>
+              <div className="modal-body">
+                {/* Summary Cards */}
+                <div className="row mb-4">
+                  <div className="col-md-3">
+                    <div className="card card-sm">
+                      <div className="card-body">
+                        <div className="d-flex align-items-center">
+                          <span className="bg-primary text-white avatar me-3">
+                            {allocationResults.totalFiles}
+                          </span>
+                          <div>
+                            <div className="font-weight-medium">Total Files</div>
+                            <div className="text-muted">Processed</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-3">
+                    <div className="card card-sm">
+                      <div className="card-body">
+                        <div className="d-flex align-items-center">
+                          <span className="bg-success text-white avatar me-3">
+                            {allocationResults.summary?.successful || 0}
+                          </span>
+                          <div>
+                            <div className="font-weight-medium">Successful</div>
+                            <div className="text-muted">Allocated</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-3">
+                    <div className="card card-sm">
+                      <div className="card-body">
+                        <div className="d-flex align-items-center">
+                          <span className="bg-danger text-white avatar me-3">
+                            {allocationResults.summary?.failed || 0}
+                          </span>
+                          <div>
+                            <div className="font-weight-medium">Failed</div>
+                            <div className="text-muted">Not allocated</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-3">
+                    <div className="card card-sm">
+                      <div className="card-body">
+                        <div className="d-flex align-items-center">
+                          <span className="bg-info text-white avatar me-3">
+                            {(allocationResults.summary?.invoices || 0) + (allocationResults.summary?.creditNotes || 0)}
+                          </span>
+                          <div>
+                            <div className="font-weight-medium">
+                              {allocationResults.summary?.invoices || 0} Inv / {allocationResults.summary?.creditNotes || 0} CN
+                            </div>
+                            <div className="text-muted">Created</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Results Table */}
+                <div className="table-responsive" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  <table className="table table-vcenter table-striped">
+                    <thead>
+                      <tr>
+                        <th>File Name</th>
+                        <th>Status</th>
+                        <th>Document Type</th>
+                        <th>Document Number</th>
+                        <th>Company</th>
+                        <th>Error</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allocationResults.results?.map((result, index) => (
+                        <tr key={index}>
+                          <td>
+                            <span className="text-truncate" style={{ maxWidth: '200px', display: 'inline-block' }} title={result.fileName}>
+                              {result.fileName}
+                            </span>
+                          </td>
+                          <td>
+                            {result.success ? (
+                              <span className="badge bg-success">Success</span>
+                            ) : (
+                              <span className="badge bg-danger">Failed</span>
+                            )}
+                          </td>
+                          <td>
+                            {result.success && (
+                              <span className={`badge ${result.documentType === 'invoice' ? 'bg-blue' : 'bg-purple'}`}>
+                                {result.documentType === 'invoice' ? 'Invoice' : 'Credit Note'}
+                              </span>
+                            )}
+                          </td>
+                          <td>{result.documentNumber || '-'}</td>
+                          <td>{result.companyName || '-'}</td>
+                          <td>
+                            {result.error && (
+                              <span className="text-danger small" title={result.error}>
+                                {result.error.length > 50 ? result.error.substring(0, 50) + '...' : result.error}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-primary" onClick={handleCloseAllocationResults}>
+                  Close
                 </button>
               </div>
             </div>

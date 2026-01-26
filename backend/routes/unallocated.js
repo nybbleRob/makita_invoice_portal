@@ -1262,5 +1262,507 @@ router.post('/:id/attempt-allocation', async (req, res) => {
   }
 });
 
+// ============================================================================
+// BULK ALLOCATION ENDPOINTS
+// ============================================================================
+
+const allocationStore = require('../utils/allocationStore');
+
+/**
+ * Helper function to attempt allocation for a single file
+ * Reuses the logic from POST /:id/attempt-allocation
+ * Returns { success, error, documentType, documentId, documentNumber, companyId, companyName }
+ */
+async function attemptAllocationForFile(file, userId, userEmail, userRole, ip, userAgent) {
+  const parsedData = file.parsedData || {};
+  
+  // Extract account number from parsed data
+  const accountNumber = parsedData.accountNumber || parsedData.customerNumber || 
+                       parsedData.account_no || parsedData.accountNo || 
+                       parsedData.customer_number || null;
+  
+  if (!accountNumber) {
+    return {
+      success: false,
+      error: 'No account number found in parsed data',
+      parsedFields: Object.keys(parsedData)
+    };
+  }
+
+  // Try to match to a company
+  const accountStr = accountNumber.toString().trim();
+  const accountStrNormalized = accountStr.replace(/[^\d]/g, '');
+  const accountInt = parseInt(accountStrNormalized, 10);
+
+  let matchedCompany = null;
+
+  // Try referenceNo (integer) match first
+  if (!isNaN(accountInt)) {
+    matchedCompany = await Company.findOne({
+      where: { referenceNo: accountInt, isActive: true }
+    });
+  }
+
+  // Try code match
+  if (!matchedCompany) {
+    matchedCompany = await Company.findOne({
+      where: { 
+        code: { [Op.in]: [accountStr, accountStrNormalized] },
+        isActive: true
+      }
+    });
+  }
+
+  if (!matchedCompany) {
+    return {
+      success: false,
+      error: `No matching company found for account number: ${accountNumber}`,
+      searchedValues: { original: accountNumber, normalized: accountStrNormalized, asInteger: accountInt }
+    };
+  }
+
+  // Determine document type
+  const docType = (parsedData.documentType || '').toLowerCase();
+  const isCredit = docType.includes('credit') || docType === 'credit_note' || docType === 'creditnote';
+  const isInvoice = !isCredit;
+
+  // Parse date
+  const dateValue = parsedData.invoiceDate || parsedData.date || parsedData.taxPoint || new Date().toISOString();
+  let issueDate;
+  try {
+    if (typeof dateValue === 'string') {
+      const ddmmyyyy = dateValue.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (ddmmyyyy) {
+        issueDate = new Date(parseInt(ddmmyyyy[3]), parseInt(ddmmyyyy[2]) - 1, parseInt(ddmmyyyy[1]));
+      } else {
+        issueDate = new Date(dateValue);
+      }
+    } else {
+      issueDate = new Date(dateValue);
+    }
+    if (isNaN(issueDate.getTime())) {
+      issueDate = new Date();
+    }
+  } catch (e) {
+    issueDate = new Date();
+  }
+
+  // Parse amount
+  const amountValue = parsedData.totalAmount || parsedData.amount || parsedData.invoiceTotal || 0;
+  let amount = 0;
+  if (typeof amountValue === 'string') {
+    amount = parseFloat(amountValue.replace(/[^0-9.-]/g, '')) || 0;
+  } else if (typeof amountValue === 'number') {
+    amount = amountValue;
+  }
+
+  // Parse VAT amount
+  const vatValue = parsedData.vatAmount || parsedData.vatTotal || 0;
+  let vatAmount = 0;
+  if (typeof vatValue === 'string') {
+    vatAmount = parseFloat(vatValue.replace(/[^0-9.-]/g, '')) || 0;
+  } else if (typeof vatValue === 'number') {
+    vatAmount = vatValue;
+  }
+
+  let document = null;
+
+  // Create invoice or credit note
+  if (isInvoice) {
+    const invoiceNumber = parsedData.invoiceNumber || parsedData.documentNumber || 
+                         `INV-${Date.now()}-${file.fileHash?.substring(0, 8) || 'ALLOC'}`;
+
+    // Check for duplicate invoice number
+    const existingInvoice = await Invoice.findOne({
+      where: { 
+        companyId: matchedCompany.id,
+        invoiceNumber: invoiceNumber,
+        deletedAt: null
+      }
+    });
+
+    if (existingInvoice) {
+      return {
+        success: false,
+        error: `Invoice ${invoiceNumber} already exists for company ${matchedCompany.name}`,
+        existingInvoiceId: existingInvoice.id
+      };
+    }
+
+    document = await Invoice.create({
+      companyId: matchedCompany.id,
+      invoiceNumber: invoiceNumber,
+      issueDate: issueDate,
+      amount: amount,
+      taxAmount: vatAmount,
+      documentStatus: 'ready',
+      status: 'ready',
+      viewedAt: null,
+      fileUrl: file.filePath,
+      uploadedById: userId,
+      metadata: {
+        allocatedFrom: 'unallocated',
+        allocatedAt: new Date().toISOString(),
+        allocatedBy: userEmail,
+        originalFileId: file.id,
+        parsedData: parsedData
+      }
+    });
+
+    console.log(`✅ Created invoice ${invoiceNumber} for company ${matchedCompany.name} from unallocated file ${file.id}`);
+  } else {
+    const creditNoteNumber = parsedData.creditNumber || parsedData.creditNoteNumber || 
+                             parsedData.documentNumber || `CN-${Date.now()}-${file.fileHash?.substring(0, 8) || 'ALLOC'}`;
+
+    // Check for duplicate credit note number
+    const existingCreditNote = await CreditNote.findOne({
+      where: { 
+        companyId: matchedCompany.id,
+        creditNoteNumber: creditNoteNumber,
+        deletedAt: null
+      }
+    });
+
+    if (existingCreditNote) {
+      return {
+        success: false,
+        error: `Credit Note ${creditNoteNumber} already exists for company ${matchedCompany.name}`,
+        existingCreditNoteId: existingCreditNote.id
+      };
+    }
+
+    document = await CreditNote.create({
+      companyId: matchedCompany.id,
+      creditNoteNumber: creditNoteNumber,
+      issueDate: issueDate,
+      amount: amount,
+      taxAmount: vatAmount,
+      documentStatus: 'ready',
+      status: 'ready',
+      viewedAt: null,
+      fileUrl: file.filePath,
+      uploadedById: userId,
+      metadata: {
+        allocatedFrom: 'unallocated',
+        allocatedAt: new Date().toISOString(),
+        allocatedBy: userEmail,
+        originalFileId: file.id,
+        parsedData: parsedData
+      }
+    });
+
+    console.log(`✅ Created credit note ${creditNoteNumber} for company ${matchedCompany.name} from unallocated file ${file.id}`);
+  }
+
+  // Move file from unprocessed to processed folder
+  const oldFilePath = file.filePath;
+  let newFilePath = oldFilePath;
+  
+  if (oldFilePath && fs.existsSync(oldFilePath)) {
+    try {
+      const docTypeFolder = isInvoice ? 'invoices' : 'creditnotes';
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      
+      const processedDir = path.join(PROCESSED_BASE, docTypeFolder, String(year), month, day);
+      ensureDir(processedDir);
+      
+      const fileName = path.basename(oldFilePath);
+      newFilePath = path.join(processedDir, fileName);
+      
+      let counter = 1;
+      while (fs.existsSync(newFilePath)) {
+        const ext = path.extname(fileName);
+        const base = path.basename(fileName, ext);
+        newFilePath = path.join(processedDir, `${base}_${counter}${ext}`);
+        counter++;
+      }
+      
+      fs.renameSync(oldFilePath, newFilePath);
+      console.log(`📁 Moved file from ${oldFilePath} to ${newFilePath}`);
+      
+      document.fileUrl = newFilePath;
+      await document.save();
+    } catch (moveError) {
+      console.error(`⚠️ Failed to move file: ${moveError.message}`);
+    }
+  }
+
+  // Update file status to allocated
+  file.status = 'parsed';
+  file.companyId = matchedCompany.id;
+  file.filePath = newFilePath;
+  file.failureReason = null;
+  const metadata = file.metadata || {};
+  metadata.allocatedAt = new Date().toISOString();
+  metadata.allocatedBy = userEmail;
+  metadata.allocatedDocumentId = document.id;
+  metadata.allocatedDocumentType = isInvoice ? 'invoice' : 'credit_note';
+  metadata.previousFilePath = oldFilePath;
+  file.metadata = metadata;
+  await file.save();
+
+  // Log activity
+  await logActivity({
+    type: ActivityType.UNALLOCATED_ALLOCATED,
+    userId: userId,
+    userEmail: userEmail,
+    userRole: userRole,
+    action: `Allocated unallocated file ${file.fileName} to ${matchedCompany.name}`,
+    details: { 
+      fileId: file.id, 
+      fileName: file.fileName, 
+      companyId: matchedCompany.id,
+      companyName: matchedCompany.name,
+      documentType: isInvoice ? 'invoice' : 'credit_note',
+      documentId: document.id,
+      documentNumber: isInvoice ? document.invoiceNumber : document.creditNoteNumber
+    },
+    companyId: matchedCompany.id,
+    companyName: matchedCompany.name,
+    ipAddress: ip,
+    userAgent: userAgent
+  });
+
+  return {
+    success: true,
+    documentType: isInvoice ? 'invoice' : 'credit_note',
+    documentId: document.id,
+    documentNumber: isInvoice ? document.invoiceNumber : document.creditNoteNumber,
+    companyId: matchedCompany.id,
+    companyName: matchedCompany.name
+  };
+}
+
+// POST /api/unallocated/bulk-allocate - Start bulk allocation
+router.post('/bulk-allocate', requirePermission('UNALLOCATED_REALLOCATE'), async (req, res) => {
+  try {
+    const { fileIds } = req.body;
+    
+    // If fileIds is empty or not provided, get all unallocated files
+    let filesToProcess;
+    if (!fileIds || fileIds.length === 0) {
+      filesToProcess = await File.findAll({
+        where: {
+          status: { [Op.in]: ['unallocated', 'failed'] },
+          deletedAt: null
+        },
+        attributes: ['id']
+      });
+    } else {
+      filesToProcess = await File.findAll({
+        where: {
+          id: { [Op.in]: fileIds },
+          status: { [Op.in]: ['unallocated', 'failed'] },
+          deletedAt: null
+        },
+        attributes: ['id']
+      });
+    }
+    
+    const fileIdList = filesToProcess.map(f => f.id);
+    
+    if (fileIdList.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No unallocated files found to process'
+      });
+    }
+    
+    // Create allocation session
+    const allocationId = `alloc-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    await allocationStore.createAllocation(allocationId, fileIdList.length, fileIdList, req.user.userId);
+    
+    console.log(`🚀 [Allocation ${allocationId}] Starting bulk allocation of ${fileIdList.length} files`);
+    
+    // Process files asynchronously (don't await)
+    processAllocationAsync(allocationId, fileIdList, req.user, req.ip, req.get('user-agent'));
+    
+    res.json({
+      success: true,
+      allocationId: allocationId,
+      totalFiles: fileIdList.length,
+      message: `Started allocation of ${fileIdList.length} file(s)`
+    });
+  } catch (error) {
+    console.error('Error starting bulk allocation:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+/**
+ * Process allocation asynchronously
+ */
+async function processAllocationAsync(allocationId, fileIds, user, ip, userAgent) {
+  for (const fileId of fileIds) {
+    // Check if cancelled
+    const isCancelled = await allocationStore.isCancelled(allocationId);
+    if (isCancelled) {
+      console.log(`🛑 [Allocation ${allocationId}] Cancelled by user`);
+      break;
+    }
+    
+    try {
+      const file = await File.findOne({
+        where: {
+          id: fileId,
+          status: { [Op.in]: ['unallocated', 'failed'] },
+          deletedAt: null
+        }
+      });
+      
+      if (!file) {
+        await allocationStore.addResult(allocationId, {
+          fileId: fileId,
+          fileName: 'Unknown',
+          success: false,
+          error: 'File not found or already processed'
+        });
+        continue;
+      }
+      
+      // Update current file
+      await allocationStore.updateAllocation(allocationId, { currentFile: file.fileName });
+      
+      // Attempt allocation
+      const result = await attemptAllocationForFile(file, user.userId, user.email, user.role, ip, userAgent);
+      
+      await allocationStore.addResult(allocationId, {
+        fileId: file.id,
+        fileName: file.fileName,
+        ...result
+      });
+      
+    } catch (error) {
+      console.error(`❌ [Allocation ${allocationId}] Error processing file ${fileId}:`, error.message);
+      await allocationStore.addResult(allocationId, {
+        fileId: fileId,
+        fileName: 'Unknown',
+        success: false,
+        error: error.message
+      });
+    }
+  }
+  
+  // Mark as completed if not already
+  const session = await allocationStore.getAllocation(allocationId);
+  if (session && session.status !== 'cancelled') {
+    await allocationStore.updateAllocation(allocationId, {
+      status: 'completed',
+      completedAt: new Date().toISOString()
+    });
+    console.log(`✅ [Allocation ${allocationId}] Completed`);
+  }
+}
+
+// GET /api/unallocated/allocate/:allocationId - Get allocation status
+router.get('/allocate/:allocationId', async (req, res) => {
+  try {
+    const { allocationId } = req.params;
+    const allocationSession = await allocationStore.getAllocation(allocationId);
+    
+    if (!allocationSession) {
+      return res.status(404).json({
+        success: false,
+        message: 'Allocation session not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      allocation: {
+        allocationId: allocationSession.allocationId,
+        totalFiles: allocationSession.totalFiles,
+        processedFiles: allocationSession.processedFiles || 0,
+        currentFile: allocationSession.currentFile || null,
+        status: allocationSession.status,
+        cancelled: allocationSession.cancelled || false,
+        createdAt: allocationSession.createdAt,
+        completedAt: allocationSession.completedAt
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching allocation status:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// GET /api/unallocated/allocate/:allocationId/results - Get detailed allocation results
+router.get('/allocate/:allocationId/results', async (req, res) => {
+  try {
+    const { allocationId } = req.params;
+    const allocationSession = await allocationStore.getAllocation(allocationId);
+    
+    if (!allocationSession) {
+      return res.status(404).json({
+        success: false,
+        message: 'Allocation session not found'
+      });
+    }
+    
+    // Calculate summary statistics
+    const successful = allocationSession.results.filter(r => r.success).length;
+    const failed = allocationSession.results.filter(r => !r.success).length;
+    const invoices = allocationSession.results.filter(r => r.success && r.documentType === 'invoice').length;
+    const creditNotes = allocationSession.results.filter(r => r.success && r.documentType === 'credit_note').length;
+    
+    res.json({
+      success: true,
+      allocation: {
+        allocationId: allocationSession.allocationId,
+        totalFiles: allocationSession.totalFiles,
+        processedFiles: allocationSession.processedFiles,
+        status: allocationSession.status,
+        createdAt: allocationSession.createdAt,
+        completedAt: allocationSession.completedAt,
+        summary: {
+          successful,
+          failed,
+          invoices,
+          creditNotes
+        },
+        results: allocationSession.results
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching allocation results:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// POST /api/unallocated/allocate/:allocationId/cancel - Cancel an allocation
+router.post('/allocate/:allocationId/cancel', async (req, res) => {
+  try {
+    const { allocationId } = req.params;
+    const cancelled = await allocationStore.cancelAllocation(allocationId);
+    
+    if (!cancelled) {
+      return res.status(404).json({
+        success: false,
+        message: 'Allocation session not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Allocation cancelled'
+    });
+  } catch (error) {
+    console.error('Error cancelling allocation:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
 module.exports = router;
 
