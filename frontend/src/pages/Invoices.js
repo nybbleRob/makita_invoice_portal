@@ -40,7 +40,6 @@ const Invoices = () => {
   const selectAllCheckboxRef = useRef(null);
   const searchInputRef = useRef(null);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(null);
   
   // Delete modal states
   const [showDeleteModal, setShowDeleteModal] = useState(false);
