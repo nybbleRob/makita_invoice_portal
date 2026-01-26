@@ -89,7 +89,7 @@ const CreditNotes = () => {
       const params = {
         page: pagination.page,
         limit: pagination.limit,
-        search: debouncedSearch,
+        ...(debouncedSearch && debouncedSearch.trim().length >= 3 && { search: debouncedSearch }),
         ...(statusFilter !== 'all' && { status: statusFilter }),
         ...(companyIdsParam && { companyIds: companyIdsParam }),
         sortBy,

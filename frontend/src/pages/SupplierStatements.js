@@ -48,7 +48,7 @@ const SupplierStatements = () => {
       const params = {
         page: pagination.page,
         limit: pagination.limit,
-        search: debouncedSearch,
+        ...(debouncedSearch && debouncedSearch.trim().length >= 3 && { search: debouncedSearch }),
         documentType: 'statement',
         sortBy,
         sortOrder,

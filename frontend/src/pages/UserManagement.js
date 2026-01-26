@@ -169,7 +169,7 @@ const UserManagement = () => {
       const params = {
         page: usersPage,
         limit: usersPerPage,
-        search: debouncedSearch,
+        ...(debouncedSearch && debouncedSearch.trim().length >= 3 && { search: debouncedSearch }),
         role: roleFilter !== 'all' ? roleFilter : undefined,
         companyIds: selectedCompanyFilters.length > 0 
           ? selectedCompanyFilters.map(c => c.id).join(',') 

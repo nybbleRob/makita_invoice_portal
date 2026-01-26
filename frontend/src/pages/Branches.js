@@ -56,8 +56,8 @@ const Branches = () => {
   useEffect(() => {
     let filtered = [...branches];
 
-    // Search filter
-    if (searchQuery.trim()) {
+    // Search filter - only filter if 3+ characters
+    if (searchQuery.trim().length >= 3) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
         (branch) =>

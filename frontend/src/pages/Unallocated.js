@@ -64,7 +64,7 @@ const Unallocated = () => {
       const params = {
         page: pagination.page,
         limit: pagination.limit,
-        search: debouncedSearch,
+        ...(debouncedSearch && debouncedSearch.trim().length >= 3 && { search: debouncedSearch }),
         ...(reasonFilter !== 'all' && { failureReason: reasonFilter }),
         ...(debouncedAccountNumber && { accountNumber: debouncedAccountNumber }),
         ...(debouncedInvoiceNumber && { invoiceNumber: debouncedInvoiceNumber }),

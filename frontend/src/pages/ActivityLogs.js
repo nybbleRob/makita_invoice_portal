@@ -105,7 +105,7 @@ const ActivityLogs = () => {
         limit: pagination.limit.toString()
       });
       
-      if (debouncedSearch) params.append('search', debouncedSearch);
+      if (debouncedSearch && debouncedSearch.trim().length >= 3) params.append('search', debouncedSearch);
       if (userFilter) params.append('userId', userFilter);
       if (selectedCompanyIds.length > 0) params.append('companyIds', selectedCompanyIds.join(','));
       if (roleFilter) params.append('role', roleFilter);

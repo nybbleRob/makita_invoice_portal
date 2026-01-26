@@ -296,7 +296,7 @@ const Companies = () => {
         limit: pagination.limit
       };
       
-      if (debouncedSearch.trim()) {
+      if (debouncedSearch && debouncedSearch.trim().length >= 3) {
         params.search = debouncedSearch.trim();
       }
       
