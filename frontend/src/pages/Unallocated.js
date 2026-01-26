@@ -449,6 +449,14 @@ const Unallocated = () => {
     setAllocationResults(null);
   };
 
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setActiveSearchQuery('');
+    setReasonFilter('all');
+    setSelectedFiles(new Set());
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
   const handleDeleteDocument = (document) => {
     setDocumentToDelete(document);
     setShowSingleDeleteModal(true);
@@ -538,7 +546,7 @@ const Unallocated = () => {
                 <div className="col-lg-9 col-md-8 col-12">
                   <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
                     {/* Search */}
-                    <div className="input-group input-group-flat" style={{ maxWidth: '280px' }}>
+                    <div className="input-group input-group-flat" style={{ maxWidth: '400px' }}>
                       <span className="input-group-text">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon icon-1">
                           <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
@@ -594,6 +602,14 @@ const Unallocated = () => {
                       <option value="duplicate">Duplicate</option>
                       <option value="other">Other</option>
                     </select>
+                    {/* Reset button */}
+                    <button
+                      className="btn btn-outline-secondary"
+                      onClick={handleResetFilters}
+                      title="Reset all filters and sorting"
+                    >
+                      Reset
+                    </button>
                     {/* Bulk actions */}
                     {selectedFiles.size > 0 && (
                       <>
