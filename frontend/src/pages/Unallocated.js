@@ -1795,14 +1795,14 @@ const Unallocated = () => {
                           </td>
                           <td>
                             {result.success ? (
-                              <span className="badge bg-success">Success</span>
+                              <span className="badge bg-success-lt text-success">Success</span>
                             ) : (
-                              <span className="badge bg-danger">Failed</span>
+                              <span className="badge bg-danger-lt text-danger">Failed</span>
                             )}
                           </td>
                           <td>
                             {result.success && (
-                              <span className={`badge ${result.documentType === 'invoice' ? 'bg-blue' : 'bg-purple'}`}>
+                              <span className={`badge ${result.documentType === 'invoice' ? 'bg-blue-lt text-blue' : 'bg-purple-lt text-purple'}`}>
                                 {result.documentType === 'invoice' ? 'Invoice' : 'Credit Note'}
                               </span>
                             )}
