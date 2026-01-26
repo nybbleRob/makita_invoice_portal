@@ -427,14 +427,18 @@ const HierarchicalCompanyFilter = ({
                   className="form-control"
                   placeholder="Search companies by name or account number..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    // ONLY update state - do NOT trigger search
+                    setSearchQuery(e.target.value);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
+                      e.stopPropagation();
                       handleSearch();
                     }
                   }}
-                  autocomplete="off"
+                  autoComplete="off"
                 />
                 <span className="input-group-text">
                   <kbd>ctrl + K</kbd>
@@ -442,7 +446,11 @@ const HierarchicalCompanyFilter = ({
                 <button 
                   className="btn btn-primary" 
                   type="button"
-                  onClick={handleSearch}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSearch();
+                  }}
                 >
                   Search
                 </button>
