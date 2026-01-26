@@ -11,6 +11,7 @@ const Unallocated = () => {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeSearchQuery, setActiveSearchQuery] = useState('');
   const [reasonFilter, setReasonFilter] = useState('all');
   const searchInputRef = useRef(null);
   const [accountNumberFilter] = useState('');
@@ -41,7 +42,7 @@ const Unallocated = () => {
     fetchDocuments();
     // Clear selections when page changes or filters change
     setSelectedFiles(new Set());
-  }, [pagination.page, debouncedSearch, reasonFilter, debouncedAccountNumber, debouncedInvoiceNumber, debouncedDate]);
+  }, [pagination.page, activeSearchQuery, reasonFilter, debouncedAccountNumber, debouncedInvoiceNumber, debouncedDate]);
 
   // Ctrl+K keyboard shortcut to focus search
   useEffect(() => {
@@ -61,10 +62,29 @@ const Unallocated = () => {
   const fetchDocuments = async () => {
     try {
       setLoading(true);
+      
+      // Check if search contains comma-separated document numbers
+      let searchParam = null;
+      let documentNumbersParam = null;
+      
+      if (activeSearchQuery && activeSearchQuery.trim()) {
+        if (activeSearchQuery.includes(',')) {
+          // Comma-separated document numbers - exact match
+          const numbers = activeSearchQuery.split(',').map(n => n.trim()).filter(n => n);
+          if (numbers.length > 0) {
+            documentNumbersParam = numbers.join(',');
+          }
+        } else if (activeSearchQuery.trim().length >= 3) {
+          // Regular search (requires 3+ chars)
+          searchParam = activeSearchQuery;
+        }
+      }
+      
       const params = {
         page: pagination.page,
         limit: pagination.limit,
-        ...(debouncedSearch && debouncedSearch.trim().length >= 3 && { search: debouncedSearch }),
+        ...(searchParam && { search: searchParam }),
+        ...(documentNumbersParam && { documentNumbers: documentNumbersParam }),
         ...(reasonFilter !== 'all' && { failureReason: reasonFilter }),
         ...(debouncedAccountNumber && { accountNumber: debouncedAccountNumber }),
         ...(debouncedInvoiceNumber && { invoiceNumber: debouncedInvoiceNumber }),
@@ -350,7 +370,7 @@ const Unallocated = () => {
                     {/* Search */}
                     <div className="input-group input-group-flat" style={{ maxWidth: '280px' }}>
                       <span className="input-group-text">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon icon-1">
                           <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
                           <path d="M21 21l-6 -6"></path>
                         </svg>
@@ -359,17 +379,34 @@ const Unallocated = () => {
                         ref={searchInputRef}
                         type="text"
                         className="form-control"
-                        placeholder="Search..."
+                        placeholder="Search for Documents"
                         value={searchQuery}
-                        onChange={(e) => {
-                          setSearchQuery(e.target.value);
-                          setPagination(prev => ({ ...prev, page: 1 }));
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setActiveSearchQuery(searchQuery);
+                            setPagination(prev => ({ ...prev, page: 1 }));
+                          }
                         }}
-                        autocomplete="off"
+                        autoComplete="off"
                       />
                       <span className="input-group-text">
-                        <kbd>Ctrl+K</kbd>
+                        <kbd>ctrl + K</kbd>
                       </span>
+                      <button 
+                        className="btn btn-primary" 
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setActiveSearchQuery(searchQuery);
+                          setPagination(prev => ({ ...prev, page: 1 }));
+                        }}
+                      >
+                        Search
+                      </button>
                     </div>
                     {/* Reason filter */}
                     <select

@@ -132,7 +132,7 @@ router.get('/', async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const { page = 1, limit = 50, search = '', failureReason, accountNumber, invoiceNumber, date } = req.query;
+    const { page = 1, limit = 50, search = '', documentNumbers, failureReason, accountNumber, invoiceNumber, date } = req.query;
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const offset = (pageNum - 1) * limitNum;
@@ -203,7 +203,33 @@ router.get('/', async (req, res) => {
       );
     }
 
-    if (search) {
+    // Handle comma-separated document numbers (exact match) - takes priority over regular search
+    if (documentNumbers) {
+      const numbers = documentNumbers.split(',').map(n => n.trim()).filter(n => n);
+      console.log('🔍 [Unallocated] Searching for document numbers:', numbers);
+      if (numbers.length > 0) {
+        // Search for any of the document numbers in parsedData (invoiceNumber, documentNumber, creditNumber)
+        where[Op.and] = where[Op.and] || [];
+        where[Op.and].push({
+          [Op.or]: numbers.flatMap(num => [
+            sequelize.where(
+              sequelize.cast(sequelize.col('File.parsedData'), 'text'),
+              { [Op.iLike]: `%"invoiceNumber":"${num}"%` }
+            ),
+            sequelize.where(
+              sequelize.cast(sequelize.col('File.parsedData'), 'text'),
+              { [Op.iLike]: `%"documentNumber":"${num}"%` }
+            ),
+            sequelize.where(
+              sequelize.cast(sequelize.col('File.parsedData'), 'text'),
+              { [Op.iLike]: `%"creditNumber":"${num}"%` }
+            )
+          ])
+        });
+      }
+    }
+    // Otherwise use regular search (partial match)
+    else if (search) {
       const searchConditions = [
         { fileName: { [Op.iLike]: `%${search}%` } },
         { errorMessage: { [Op.iLike]: `%${search}%` } },

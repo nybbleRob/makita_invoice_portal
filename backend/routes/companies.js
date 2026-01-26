@@ -308,7 +308,7 @@ router.get('/hierarchy', auth, checkDocumentAccess, async (req, res) => {
 // Get all companies
 router.get('/', auth, checkDocumentAccess, async (req, res) => {
   try {
-    const { type, types, search, isActive, page, limit, companyIds } = req.query;
+    const { type, types, search, accountNumbers, isActive, page, limit, companyIds } = req.query;
     
     // Support both paginated and non-paginated requests
     const usePagination = page !== undefined && limit !== undefined;
@@ -367,7 +367,20 @@ router.get('/', auth, checkDocumentAccess, async (req, res) => {
       where.isActive = isActive === 'true';
     }
     
-    if (search) {
+    // Handle comma-separated account numbers (referenceNo) - takes priority over regular search
+    if (accountNumbers) {
+      const numbers = accountNumbers.split(',').map(n => n.trim()).filter(n => n);
+      console.log('🔍 [Companies] Searching for account numbers:', numbers);
+      if (numbers.length > 0) {
+        // Search for exact match on referenceNo (integer column)
+        const numericNumbers = numbers.map(n => parseInt(n)).filter(n => !isNaN(n));
+        if (numericNumbers.length > 0) {
+          where.referenceNo = { [Op.in]: numericNumbers };
+        }
+      }
+    }
+    // Otherwise use regular search (partial match)
+    else if (search) {
       const searchConditions = [
         { name: { [Op.iLike]: `%${search}%` } },
         { code: { [Op.iLike]: `%${search}%` } }

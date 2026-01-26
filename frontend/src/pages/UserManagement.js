@@ -78,16 +78,8 @@ const UserManagement = () => {
   const usersPerPage = 50;
   const searchInputRef = useRef(null);
   
-  // Debounced search for server-side filtering
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchQuery);
-      setUsersPage(1); // Reset to page 1 when search changes
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
+  // Active search query - only updates when Search button is clicked or Enter is pressed
+  const [activeSearchQuery, setActiveSearchQuery] = useState('');
 
   useEffect(() => {
     fetchManageableRoles();
@@ -97,7 +89,7 @@ const UserManagement = () => {
   useEffect(() => {
     fetchUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [usersPage, debouncedSearch, roleFilter, selectedCompanyFilters]);
+  }, [usersPage, activeSearchQuery, roleFilter, selectedCompanyFilters]);
 
   // Ctrl+K keyboard shortcut to focus search
   useEffect(() => {
@@ -169,7 +161,7 @@ const UserManagement = () => {
       const params = {
         page: usersPage,
         limit: usersPerPage,
-        ...(debouncedSearch && debouncedSearch.trim().length >= 3 && { search: debouncedSearch }),
+        ...(activeSearchQuery && activeSearchQuery.trim().length >= 3 && { search: activeSearchQuery }),
         role: roleFilter !== 'all' ? roleFilter : undefined,
         companyIds: selectedCompanyFilters.length > 0 
           ? selectedCompanyFilters.map(c => c.id).join(',') 
@@ -954,9 +946,9 @@ const UserManagement = () => {
               <div className="col-lg-9 col-md-8 col-12">
                 <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
                     {/* Search */}
-                    <div className="input-group input-group-flat" style={{ maxWidth: '280px' }}>
+                    <div className="input-group input-group-flat w-auto">
                       <span className="input-group-text">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon icon-1">
                           <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
                           <path d="M21 21l-6 -6"></path>
                         </svg>
@@ -965,14 +957,34 @@ const UserManagement = () => {
                         ref={searchInputRef}
                         type="text"
                         className="form-control"
-                        placeholder="Search..."
+                        placeholder="Search for Users"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        autocomplete="off"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setActiveSearchQuery(searchQuery);
+                            setUsersPage(1);
+                          }
+                        }}
+                        autoComplete="off"
                       />
                       <span className="input-group-text">
-                        <kbd>Ctrl+K</kbd>
+                        <kbd>ctrl + K</kbd>
                       </span>
+                      <button 
+                        className="btn btn-primary" 
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setActiveSearchQuery(searchQuery);
+                          setUsersPage(1);
+                        }}
+                      >
+                        Search
+                      </button>
                     </div>
                     {/* Status Filter */}
                     <select

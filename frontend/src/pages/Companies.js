@@ -18,6 +18,7 @@ const Companies = () => {
   const [loading, setLoading] = useState(true);
   const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeSearchQuery, setActiveSearchQuery] = useState('');
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 });
   const [typeFilters, setTypeFilters] = useState({
     CORP: true,
@@ -160,7 +161,7 @@ const Companies = () => {
   useEffect(() => {
     fetchCompanies();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.page, pagination.limit, debouncedSearch, typeFilters, statusFilter, selectedParentIds]);
+  }, [pagination.page, pagination.limit, activeSearchQuery, typeFilters, statusFilter, selectedParentIds]);
 
   // Handle edit from CompanyView page
   useEffect(() => {
@@ -279,6 +280,7 @@ const Companies = () => {
 
   const handleResetFilters = () => {
     setSearchQuery('');
+    setActiveSearchQuery('');
     setStatusFilter('all');
     setTypeFilters({ CORP: true, SUB: true, BRANCH: true });
     setSelectedParentIds([]);
@@ -296,8 +298,18 @@ const Companies = () => {
         limit: pagination.limit
       };
       
-      if (debouncedSearch && debouncedSearch.trim().length >= 3) {
-        params.search = debouncedSearch.trim();
+      // Check if search contains comma-separated account numbers
+      if (activeSearchQuery && activeSearchQuery.trim()) {
+        if (activeSearchQuery.includes(',')) {
+          // Comma-separated account numbers - exact match
+          const numbers = activeSearchQuery.split(',').map(n => n.trim()).filter(n => n);
+          if (numbers.length > 0) {
+            params.accountNumbers = numbers.join(',');
+          }
+        } else if (activeSearchQuery.trim().length >= 3) {
+          // Regular search (requires 3+ chars)
+          params.search = activeSearchQuery.trim();
+        }
       }
       
       // Add type filter - if not all types selected, filter by selected types
@@ -1344,9 +1356,9 @@ const Companies = () => {
                 <div className="col-lg-9 col-md-8 col-12">
                   <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
                     {/* Search */}
-                    <div className="input-group input-group-flat" style={{ maxWidth: '280px' }}>
+                    <div className="input-group input-group-flat w-auto">
                       <span className="input-group-text">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon icon-1">
                           <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
                           <path d="M21 21l-6 -6"></path>
                         </svg>
@@ -1355,14 +1367,34 @@ const Companies = () => {
                         ref={searchInputRef}
                         type="text"
                         className="form-control"
-                        placeholder="Search..."
+                        placeholder="Search for Companies"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        autocomplete="off"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setActiveSearchQuery(searchQuery);
+                            setPagination(prev => ({ ...prev, page: 1 }));
+                          }
+                        }}
+                        autoComplete="off"
                       />
                       <span className="input-group-text">
-                        <kbd>Ctrl+K</kbd>
+                        <kbd>ctrl + K</kbd>
                       </span>
+                      <button 
+                        className="btn btn-primary" 
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setActiveSearchQuery(searchQuery);
+                          setPagination(prev => ({ ...prev, page: 1 }));
+                        }}
+                      >
+                        Search
+                      </button>
                     </div>
                     {/* Status Filter */}
                     <select
