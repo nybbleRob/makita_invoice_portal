@@ -275,15 +275,25 @@ router.get('/hierarchy', auth, checkDocumentAccess, async (req, res) => {
       }
     });
     
-    // Sort children recursively
+    // Sort children recursively - by referenceNo when searching, otherwise by name
     const sortChildren = (node) => {
       if (node.children && node.children.length > 0) {
-        node.children.sort((a, b) => a.name.localeCompare(b.name));
+        if (search) {
+          // Sort by referenceNo numerically when searching
+          node.children.sort((a, b) => (a.referenceNo || 0) - (b.referenceNo || 0));
+        } else {
+          node.children.sort((a, b) => a.name.localeCompare(b.name));
+        }
         node.children.forEach(sortChildren);
       }
     };
     rootCompanies.forEach(sortChildren);
-    rootCompanies.sort((a, b) => a.name.localeCompare(b.name));
+    if (search) {
+      // Sort by referenceNo numerically when searching
+      rootCompanies.sort((a, b) => (a.referenceNo || 0) - (b.referenceNo || 0));
+    } else {
+      rootCompanies.sort((a, b) => a.name.localeCompare(b.name));
+    }
     
     // Paginate root companies only (but include full subtrees for each root)
     const totalRootCompanies = rootCompanies.length;
