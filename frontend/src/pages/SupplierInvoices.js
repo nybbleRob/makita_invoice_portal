@@ -271,9 +271,9 @@ const SupplierInvoices = () => {
                 <div className="col-lg-9 col-md-8 col-12">
                   <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
                     {/* Search */}
-                    <div className="input-group input-group-flat" style={{ maxWidth: '250px' }}>
+                    <div className="input-group input-group-flat" style={{ maxWidth: '280px' }}>
                       <span className="input-group-text">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon">
                           <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
                           <path d="M21 21l-6 -6"></path>
                         </svg>
@@ -288,7 +288,11 @@ const SupplierInvoices = () => {
                           setSearchQuery(e.target.value);
                           setPagination(prev => ({ ...prev, page: 1 }));
                         }}
+                        autocomplete="off"
                       />
+                      <span className="input-group-text">
+                        <kbd>Ctrl+K</kbd>
+                      </span>
                     </div>
                     {/* Supplier filter */}
                     <select

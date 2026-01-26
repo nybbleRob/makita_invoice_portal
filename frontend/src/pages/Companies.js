@@ -1358,6 +1358,7 @@ const Companies = () => {
                         placeholder="Search..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
+                        autocomplete="off"
                       />
                       <span className="input-group-text">
                         <kbd>Ctrl+K</kbd>

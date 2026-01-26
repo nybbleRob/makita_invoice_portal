@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
@@ -38,6 +38,7 @@ const ActivityLogs = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [userFilter, setUserFilter] = useState('');
   const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
+  const searchInputRef = useRef(null);
   const [showCompanyFilterModal, setShowCompanyFilterModal] = useState(false);
   const [roleFilter, setRoleFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -155,6 +156,21 @@ const ActivityLogs = () => {
       fetchLogs(1);
     }
   }, [user, fetchLogs]);
+
+  // Ctrl+K keyboard shortcut to focus search
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
   
   // Clear all logs
   const handleClearLogs = async () => {
@@ -418,20 +434,25 @@ const ActivityLogs = () => {
               <div className="row g-3">
                 <div className="col-md-3">
                   <label className="form-label">Search</label>
-                  <div className="input-group">
+                  <div className="input-group input-group-flat" style={{ maxWidth: '280px' }}>
                     <span className="input-group-text">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <path d="m21 21-4.35-4.35"></path>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon">
+                        <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
+                        <path d="M21 21l-6 -6"></path>
                       </svg>
                     </span>
                     <input
+                      ref={searchInputRef}
                       type="text"
                       className="form-control"
-                      placeholder="Search actions, emails..."
+                      placeholder="Search..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
+                      autocomplete="off"
                     />
+                    <span className="input-group-text">
+                      <kbd>Ctrl+K</kbd>
+                    </span>
                   </div>
                 </div>
                 

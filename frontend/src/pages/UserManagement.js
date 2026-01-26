@@ -76,6 +76,7 @@ const UserManagement = () => {
   const [usersPage, setUsersPage] = useState(1);
   const [usersPagination, setUsersPagination] = useState({ total: 0, pages: 0 });
   const usersPerPage = 50;
+  const searchInputRef = useRef(null);
   
   // Debounced search for server-side filtering
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -97,6 +98,21 @@ const UserManagement = () => {
     fetchUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usersPage, debouncedSearch, roleFilter, selectedCompanyFilters]);
+
+  // Ctrl+K keyboard shortcut to focus search
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Handle edit user from UserView navigation
   useEffect(() => {
@@ -938,31 +954,25 @@ const UserManagement = () => {
               <div className="col-lg-9 col-md-8 col-12">
                 <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
                     {/* Search */}
-                    <div className="input-group input-group-flat w-auto">
+                    <div className="input-group input-group-flat" style={{ maxWidth: '280px' }}>
                       <span className="input-group-text">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="24"
-                          height="24"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="icon icon-1"
-                        >
-                          <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
-                          <path d="M21 21l-6 -6" />
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon">
+                          <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
+                          <path d="M21 21l-6 -6"></path>
                         </svg>
                       </span>
                       <input
+                        ref={searchInputRef}
                         type="text"
                         className="form-control"
-                        placeholder="Search users..."
+                        placeholder="Search..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
+                        autocomplete="off"
                       />
+                      <span className="input-group-text">
+                        <kbd>Ctrl+K</kbd>
+                      </span>
                     </div>
                     {/* Status Filter */}
                     <select

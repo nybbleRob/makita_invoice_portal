@@ -365,6 +365,7 @@ const Unallocated = () => {
                           setSearchQuery(e.target.value);
                           setPagination(prev => ({ ...prev, page: 1 }));
                         }}
+                        autocomplete="off"
                       />
                       <span className="input-group-text">
                         <kbd>Ctrl+K</kbd>
