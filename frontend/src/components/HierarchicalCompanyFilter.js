@@ -84,18 +84,26 @@ const HierarchicalCompanyFilter = ({
         e.preventDefault();
         onClose();
       } else if (e.key === 'Enter') {
-        // Let buttons handle Enter naturally (they will trigger onClick)
-        // Only catch Enter when not in an interactive element
-        const isInteractive = e.target.tagName === 'INPUT' || 
-                             e.target.tagName === 'TEXTAREA' || 
-                             e.target.tagName === 'BUTTON' ||
-                             e.target.closest('button') !== null;
+        // Don't interfere with buttons or inputs - let them handle Enter naturally
+        const isInput = e.target.tagName === 'INPUT';
+        const isTextarea = e.target.tagName === 'TEXTAREA';
+        const isButton = e.target.tagName === 'BUTTON' || e.target.closest('button') !== null;
         
-        if (!isInteractive) {
+        // If in search input, let its own handler deal with it
+        if (isInput && e.target === searchInputRef.current) {
+          return; // Let the search input's onKeyDown handle it
+        }
+        
+        // Don't interfere with buttons - Bootstrap handles Enter on buttons automatically
+        if (isButton) {
+          return; // Let button's onClick handle it naturally
+        }
+        
+        // Only catch Enter for non-interactive elements (like the modal itself)
+        if (!isInput && !isTextarea && !isButton) {
           e.preventDefault();
           handleApply();
         }
-        // If in search input, let its own handler deal with it (already handled above)
       }
     };
 
