@@ -270,10 +270,12 @@ const HierarchicalCompanyFilter = ({
     setTempSelectedIds(allIds);
   }, [companies]);
 
-  // Clear all selections
+  // Clear all selections and reset search
   const clearAll = useCallback(() => {
     setTempSelectedIds(new Set());
-  }, []);
+    setSearchQuery('');
+    fetchHierarchy('', 1);
+  }, [fetchHierarchy]);
 
   // Get selected company names for display
   const selectedCompanyNames = useMemo(() => {
