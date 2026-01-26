@@ -20,6 +20,7 @@ const HierarchicalCompanyFilter = ({
   const searchInputRef = useRef(null);
   const [initialFetchDone, setInitialFetchDone] = useState(false);
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 });
+  const paginationLimit = 50; // Fixed limit
 
   // Sync tempSelectedIds with prop when modal opens/reopens
   useEffect(() => {
@@ -32,7 +33,7 @@ const HierarchicalCompanyFilter = ({
       setLoading(true);
       const params = {
         page,
-        limit: pagination.limit,
+        limit: paginationLimit,
         ...(search && { search })
       };
       const response = await api.get('/api/companies/hierarchy', { params });
@@ -40,7 +41,12 @@ const HierarchicalCompanyFilter = ({
       const paginationData = response.data.pagination || { page: 1, limit: 50, total: 0, pages: 0 };
       
       setCompanies(companiesData);
-      setPagination(paginationData);
+      const updatedPagination = {
+        ...paginationData,
+        limit: paginationLimit // Ensure limit is always correct
+      };
+      console.log('Setting pagination:', updatedPagination, 'pages > 1?', updatedPagination.pages > 1);
+      setPagination(updatedPagination);
       
       // Auto-expand all when searching, otherwise start collapsed
       if (search) {
@@ -67,17 +73,18 @@ const HierarchicalCompanyFilter = ({
     } finally {
       setLoading(false);
     }
-  }, [initialFetchDone, pagination.limit]);
+  }, [initialFetchDone]);
 
   // Initial fetch
   useEffect(() => {
-    fetchHierarchy();
+    fetchHierarchy('', 1);
     // Focus search input on mount
     setTimeout(() => {
       if (searchInputRef.current) {
         searchInputRef.current.focus();
       }
     }, 100);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Apply selection (defined early so it can be used in keyboard handler)
@@ -518,10 +525,10 @@ const HierarchicalCompanyFilter = ({
                   {pagination.pages > 1 ? (
                     <>Page {pagination.page} of {pagination.pages} - Showing root company {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} root companies</>
                   ) : (
-                    <>Showing {pagination.total} root {pagination.total === 1 ? 'company' : 'companies'}</>
+                    <>Showing {pagination.total} root {pagination.total === 1 ? 'company' : 'companies'} (pages: {pagination.pages})</>
                   )}
                 </div>
-                {pagination.pages > 1 && (
+                {pagination.pages > 1 ? (
                   <div className="btn-group">
                     <button
                       type="button"
@@ -547,6 +554,10 @@ const HierarchicalCompanyFilter = ({
                     >
                       Next
                     </button>
+                  </div>
+                ) : (
+                  <div className="text-muted small">
+                    (No pagination - {pagination.total} total, {pagination.pages} pages)
                   </div>
                 )}
               </div>
