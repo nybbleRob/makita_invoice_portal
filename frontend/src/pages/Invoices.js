@@ -35,7 +35,8 @@ const Invoices = () => {
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState('DESC');
   const [retentionFilter, setRetentionFilter] = useState('all');
-  const debouncedSearch = useDebounce(searchQuery, 300);
+  // Active search query - only updates when search button is clicked or Enter is pressed
+  const [activeSearchQuery, setActiveSearchQuery] = useState('');
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const selectAllCheckboxRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -88,7 +89,7 @@ const Invoices = () => {
       const params = {
         page: pagination.page,
         limit: pagination.limit,
-        ...(debouncedSearch && debouncedSearch.trim().length >= 3 && { search: debouncedSearch }),
+        ...(activeSearchQuery && activeSearchQuery.trim().length >= 3 && { search: activeSearchQuery }),
         ...(statusFilter !== 'all' && { status: statusFilter }),
         ...(companyIdsParam && { companyIds: companyIdsParam }),
         sortBy,
@@ -128,7 +129,7 @@ const Invoices = () => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, debouncedSearch, statusFilter, selectedCompanyIds, sortBy, sortOrder, retentionFilter]);
+  }, [pagination.page, pagination.limit, activeSearchQuery, statusFilter, selectedCompanyIds, sortBy, sortOrder, retentionFilter]);
 
   const fetchCompanies = useCallback(async () => {
     try {
@@ -709,9 +710,9 @@ const Invoices = () => {
                 <div className="col-lg-9 col-md-8 col-12">
                   <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
                     {/* Search */}
-                    <div className="input-group input-group-flat" style={{ maxWidth: '280px' }}>
+                    <div className="input-group input-group-flat w-auto">
                       <span className="input-group-text">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon icon-1">
                           <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
                           <path d="M21 21l-6 -6"></path>
                         </svg>
@@ -723,14 +724,34 @@ const Invoices = () => {
                         placeholder="Search..."
                         value={searchQuery}
                         onChange={(e) => {
+                          // ONLY update state - do NOT trigger search
                           setSearchQuery(e.target.value);
-                          setPagination(prev => ({ ...prev, page: 1 }));
                         }}
-                        autocomplete="off"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setActiveSearchQuery(searchQuery);
+                            setPagination(prev => ({ ...prev, page: 1 }));
+                          }
+                        }}
+                        autoComplete="off"
                       />
                       <span className="input-group-text">
-                        <kbd>Ctrl+K</kbd>
+                        <kbd>ctrl + K</kbd>
                       </span>
+                      <button 
+                        className="btn btn-primary" 
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setActiveSearchQuery(searchQuery);
+                          setPagination(prev => ({ ...prev, page: 1 }));
+                        }}
+                      >
+                        Search
+                      </button>
                     </div>
                     {/* Status filter */}
                     <select
