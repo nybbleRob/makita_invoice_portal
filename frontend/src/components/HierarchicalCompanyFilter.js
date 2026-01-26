@@ -19,6 +19,7 @@ const HierarchicalCompanyFilter = ({
   const [tempSelectedIds, setTempSelectedIds] = useState(new Set(selectedCompanyIds.map(id => String(id))));
   const searchInputRef = useRef(null);
   const [initialFetchDone, setInitialFetchDone] = useState(false);
+  const hasSkippedInitialSearch = useRef(false); // Track if we've skipped the first debounced search cycle
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 });
   const paginationLimit = 50; // Fixed limit
 
@@ -132,6 +133,12 @@ const HierarchicalCompanyFilter = ({
   // Debounced search - only trigger for actual search changes
   useEffect(() => {
     if (!initialFetchDone) return; // Skip during initial load
+    
+    // Skip the first cycle after initialFetchDone becomes true (prevents double API call)
+    if (!hasSkippedInitialSearch.current) {
+      hasSkippedInitialSearch.current = true;
+      return;
+    }
     
     const timer = setTimeout(() => {
       // Reset to page 1 when searching
@@ -519,47 +526,89 @@ const HierarchicalCompanyFilter = ({
             </div>
             
             {/* Pagination */}
-            {!loading && pagination.total > 0 && (
+            {!loading && pagination.total > 0 && pagination.pages > 1 && (
               <div className="d-flex justify-content-between align-items-center mt-3">
-                <div className="text-muted">
-                  {pagination.pages > 1 ? (
-                    <>Page {pagination.page} of {pagination.pages} - Showing root company {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} root companies</>
-                  ) : (
-                    <>Showing {pagination.total} root {pagination.total === 1 ? 'company' : 'companies'} (pages: {pagination.pages})</>
-                  )}
+                <div className="text-muted small">
+                  Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} root companies
                 </div>
-                {pagination.pages > 1 ? (
-                  <div className="btn-group">
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-secondary"
-                      onClick={() => {
-                        const newPage = pagination.page - 1;
-                        setPagination(prev => ({ ...prev, page: newPage }));
-                        fetchHierarchy(searchQuery, newPage);
+                <ul className="pagination m-0">
+                  {/* Previous arrow */}
+                  <li className={`page-item ${pagination.page === 1 ? 'disabled' : ''}`}>
+                    <a 
+                      className="page-link" 
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (pagination.page > 1) {
+                          const newPage = pagination.page - 1;
+                          setPagination(prev => ({ ...prev, page: newPage }));
+                          fetchHierarchy(searchQuery, newPage);
+                        }
                       }}
-                      disabled={pagination.page === 1 || loading}
+                      tabIndex={pagination.page === 1 ? -1 : 0}
+                      aria-disabled={pagination.page === 1}
                     >
-                      Previous
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-secondary"
-                      onClick={() => {
-                        const newPage = pagination.page + 1;
-                        setPagination(prev => ({ ...prev, page: newPage }));
-                        fetchHierarchy(searchQuery, newPage);
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon icon-1"><path d="M15 6l-6 6l6 6" /></svg>
+                    </a>
+                  </li>
+                  
+                  {/* Page numbers */}
+                  {(() => {
+                    const pages = [];
+                    const totalPages = pagination.pages;
+                    const currentPage = pagination.page;
+                    
+                    // Show up to 5 page numbers centered around current page
+                    let startPage = Math.max(1, currentPage - 2);
+                    let endPage = Math.min(totalPages, startPage + 4);
+                    
+                    // Adjust start if we're near the end
+                    if (endPage - startPage < 4) {
+                      startPage = Math.max(1, endPage - 4);
+                    }
+                    
+                    for (let i = startPage; i <= endPage; i++) {
+                      pages.push(
+                        <li key={i} className={`page-item ${i === currentPage ? 'active' : ''}`}>
+                          <a 
+                            className="page-link" 
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (i !== currentPage) {
+                                setPagination(prev => ({ ...prev, page: i }));
+                                fetchHierarchy(searchQuery, i);
+                              }
+                            }}
+                          >
+                            {i}
+                          </a>
+                        </li>
+                      );
+                    }
+                    return pages;
+                  })()}
+                  
+                  {/* Next arrow */}
+                  <li className={`page-item ${pagination.page >= pagination.pages ? 'disabled' : ''}`}>
+                    <a 
+                      className="page-link" 
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (pagination.page < pagination.pages) {
+                          const newPage = pagination.page + 1;
+                          setPagination(prev => ({ ...prev, page: newPage }));
+                          fetchHierarchy(searchQuery, newPage);
+                        }
                       }}
-                      disabled={pagination.page >= pagination.pages || loading}
+                      tabIndex={pagination.page >= pagination.pages ? -1 : 0}
+                      aria-disabled={pagination.page >= pagination.pages}
                     >
-                      Next
-                    </button>
-                  </div>
-                ) : (
-                  <div className="text-muted small">
-                    (No pagination - {pagination.total} total, {pagination.pages} pages)
-                  </div>
-                )}
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon icon-1"><path d="M9 6l6 6l-6 6" /></svg>
+                    </a>
+                  </li>
+                </ul>
               </div>
             )}
           </div>
