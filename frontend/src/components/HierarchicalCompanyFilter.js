@@ -214,6 +214,18 @@ const HierarchicalCompanyFilter = ({
     if (onApply) onApply();
   }, [tempSelectedIds, onSelectionChange, onApply]);
 
+  // Keyboard handler for Enter and Escape
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      onClose();
+    } else if (e.key === 'Enter' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+      // Only trigger if not typing in input/textarea
+      e.preventDefault();
+      handleApply();
+    }
+  }, [onClose, handleApply]);
+
   // Get selected company names for display
   const selectedCompanyNames = useMemo(() => {
     const names = [];
@@ -265,9 +277,11 @@ const HierarchicalCompanyFilter = ({
             {hasChildren && (
               <button
                 type="button"
-                className="btn btn-sm p-0 border-0"
+                className={`btn btn-sm p-0 border-0 ${isExpanded ? 'bg-primary' : ''}`}
                 onClick={(e) => toggleExpand(node.id, e)}
-                style={{ width: '20px', height: '20px', lineHeight: '20px' }}
+                aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                aria-expanded={isExpanded}
+                style={{ width: '20px', height: '20px', lineHeight: '20px', transition: 'background-color 0.2s' }}
               >
                 <svg 
                   xmlns="http://www.w3.org/2000/svg" 
@@ -275,12 +289,12 @@ const HierarchicalCompanyFilter = ({
                   height="16" 
                   viewBox="0 0 24 24" 
                   fill="none" 
-                  stroke="currentColor" 
+                  stroke={isExpanded ? "white" : "currentColor"}
                   strokeWidth="2" 
                   strokeLinecap="round" 
                   strokeLinejoin="round"
                   style={{ 
-                    transition: 'transform 0.2s',
+                    transition: 'transform 0.2s, stroke 0.2s',
                     transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)'
                   }}
                 >
@@ -351,7 +365,7 @@ const HierarchicalCompanyFilter = ({
   return (
     <>
       <div className="modal-backdrop fade show" style={{ zIndex: 1050 }}></div>
-      <div className="modal modal-blur fade show" style={{ display: 'block', zIndex: 1055 }} tabIndex="-1">
+      <div className="modal modal-blur fade show" style={{ display: 'block', zIndex: 1055 }} tabIndex="-1" onKeyDown={handleKeyDown}>
         <div className="modal-dialog modal-dialog-centered modal-lg">
           <div className="modal-content">
           <div className="modal-header">
