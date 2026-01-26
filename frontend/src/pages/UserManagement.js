@@ -1254,9 +1254,10 @@ const UserManagement = () => {
                   </tbody>
                 </table>
               </div>
-              {/* Users Pagination */}
-              {usersPagination.pages > 1 && (
-                <div className="card-footer d-flex justify-content-between align-items-center">
+              
+              {/* Pagination Controls */}
+              {usersPagination.total > usersPerPage && (
+                <div className="d-flex justify-content-between align-items-center mt-3">
                   <div className="text-muted">
                     Showing {((usersPage - 1) * usersPerPage) + 1} to {Math.min(usersPage * usersPerPage, usersPagination.total)} of {usersPagination.total} users
                   </div>
@@ -1264,8 +1265,8 @@ const UserManagement = () => {
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-primary"
-                      disabled={usersPage === 1}
                       onClick={() => setUsersPage(prev => Math.max(1, prev - 1))}
+                      disabled={usersPage === 1 || loading}
                     >
                       Previous
                     </button>
@@ -1277,8 +1278,7 @@ const UserManagement = () => {
                         style={{ width: '70px' }}
                         min="1"
                         max={usersPagination.pages}
-                        value={usersPage}
-                        autoComplete="off"
+                        defaultValue={usersPage}
                         key={usersPage} // Reset input when page changes externally
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
@@ -1302,8 +1302,8 @@ const UserManagement = () => {
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-primary"
-                      disabled={usersPage >= usersPagination.pages}
                       onClick={() => setUsersPage(prev => Math.min(usersPagination.pages, prev + 1))}
+                      disabled={usersPage >= usersPagination.pages || loading}
                     >
                       Next
                     </button>
