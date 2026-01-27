@@ -3,7 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { CreditNote, Company, Invoice, Sequelize, Settings } = require('../models');
+const { CreditNote, Company, Invoice, Sequelize, Settings, sequelize } = require('../models');
 const { Op } = Sequelize;
 const auth = require('../middleware/auth');
 const { checkDocumentAccess, buildCompanyFilter } = require('../middleware/documentAccess');
@@ -117,11 +117,31 @@ router.get('/', async (req, res) => {
     }
     // Otherwise use regular search (partial match)
     else if (search) {
-      whereConditions[Op.or] = [
-        { creditNoteNumber: { [Op.iLike]: `%${search}%` } },
-        { reason: { [Op.iLike]: `%${search}%` } },
-        { notes: { [Op.iLike]: `%${search}%` } }
+      const searchTerm = `%${search}%`;
+      const searchConditions = [
+        { creditNoteNumber: { [Op.iLike]: searchTerm } },
+        { notes: { [Op.iLike]: searchTerm } },
+        // Search in metadata fields (invoiceTo, deliveryAddress, customerPO, etc.)
+        sequelize.where(
+          sequelize.cast(sequelize.col('CreditNote.metadata'), 'text'),
+          { [Op.iLike]: searchTerm }
+        )
       ];
+      
+      // Add company search via subquery
+      const escapedSearchTerm = sequelize.escape(searchTerm);
+      const companySearchSubquery = sequelize.literal(`EXISTS (
+        SELECT 1 FROM "companies" 
+        WHERE "companies"."id" = "CreditNote"."companyId"
+        AND (
+          "companies"."name" ILIKE ${escapedSearchTerm} OR
+          CAST("companies"."referenceNo" AS TEXT) ILIKE ${escapedSearchTerm} OR
+          "companies"."code" ILIKE ${escapedSearchTerm}
+        )
+      )`);
+      searchConditions.push(companySearchSubquery);
+      
+      whereConditions[Op.or] = searchConditions;
     }
     
     const { count, rows } = await CreditNote.findAndCountAll({

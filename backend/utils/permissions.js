@@ -25,7 +25,7 @@ const PERMISSIONS = {
   SETTINGS_VIEW: ['global_admin'],
   SETTINGS_EDIT: ['global_admin'],
   
-  IMPORT_DATA_VIEW: ['global_admin'],
+  IMPORT_DATA_VIEW: ['global_admin', 'manager', 'credit_senior', 'credit_controller'],
   IMPORT_DATA_MANAGE: ['global_admin'],
   
   TEMPLATES_VIEW: ['global_admin'],
@@ -69,7 +69,7 @@ const PERMISSIONS = {
   // =====================
   // UNALLOCATED DOCUMENTS
   // =====================
-  UNALLOCATED_VIEW: ['global_admin', 'administrator', 'manager'],
+  UNALLOCATED_VIEW: ['global_admin', 'administrator', 'manager', 'credit_senior', 'credit_controller'],
   UNALLOCATED_EDIT: ['global_admin', 'administrator'],
   UNALLOCATED_DELETE: ['global_admin', 'administrator', 'manager'],
   UNALLOCATED_REALLOCATE: ['global_admin', 'administrator', 'manager', 'credit_senior'],
@@ -96,7 +96,7 @@ const PERMISSIONS = {
   // =====================
   // USERS
   // =====================
-  USERS_VIEW: ['global_admin', 'administrator', 'manager'],
+  USERS_VIEW: ['global_admin', 'administrator', 'manager', 'credit_senior', 'credit_controller'],
   USERS_CREATE: ['global_admin', 'administrator', 'manager'],
   USERS_EDIT: ['global_admin', 'administrator', 'manager'],
   USERS_DELETE: ['global_admin', 'administrator'],

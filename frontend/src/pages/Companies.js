@@ -1122,7 +1122,7 @@ const Companies = () => {
                                     </label>
                                     <small className="form-hint">Toggle to activate or deactivate this company</small>
                                   </div>
-                                  {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && (
+                                  {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator' || currentUser?.role === 'manager' || currentUser?.role === 'credit_senior' || currentUser?.role === 'credit_controller') && (
                                     <div className="mb-3">
                                       <label className="form-label">Company Type</label>
                                       <select
@@ -1493,8 +1493,8 @@ const Companies = () => {
                     >
                       Add Branch
                     </button>
-                    {/* Export button - only visible to administrators */}
-                    {isAdministrator() && (
+                    {/* Export button - visible to administrators and managers */}
+                    {(isAdministrator() || currentUser?.role === 'manager') && (
                       <div className="dropdown">
                         <button
                           className="btn btn-outline-primary dropdown-toggle"

@@ -1069,7 +1069,7 @@ const UserManagement = () => {
                       </div>
                     )}
                     {/* Export dropdown */}
-                    {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && (
+                    {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator' || currentUser?.role === 'manager') && (
                       <div className="dropdown">
                         <button
                           className="btn btn-outline-secondary dropdown-toggle"
@@ -1806,7 +1806,7 @@ const UserManagement = () => {
                   )}
                   {/* Two-Factor Authentication Section */}
                   {selectedUser && 
-                   (currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') &&
+                   (currentUser?.role === 'global_admin' || currentUser?.role === 'administrator' || currentUser?.role === 'manager') &&
                    canManageUserRole(selectedUser.role) && (
                     <>
                       <hr className="my-4" />
