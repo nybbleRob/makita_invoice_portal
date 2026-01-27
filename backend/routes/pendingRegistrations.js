@@ -92,6 +92,116 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Update pending registration (edit before approval)
+router.put('/:id', async (req, res) => {
+  try {
+    // Only global admins and administrators can edit pending registrations
+    if (!['global_admin', 'administrator'].includes(req.user.role)) {
+      return res.status(403).json({ 
+        message: 'Access denied. Only Global Administrators and Administrators can edit pending registrations.' 
+      });
+    }
+    
+    const { firstName, lastName, companyName, accountNumber, email, intendedRole } = req.body;
+    
+    const registration = await PendingRegistration.findByPk(req.params.id);
+    if (!registration) {
+      return res.status(404).json({ message: 'Registration not found' });
+    }
+    
+    // Can only edit pending registrations
+    if (registration.status !== 'pending') {
+      return res.status(400).json({ 
+        message: `Cannot edit a registration that has already been ${registration.status}` 
+      });
+    }
+    
+    // If email is being changed, check for duplicates
+    if (email && email !== registration.email) {
+      // Check if another user already has this email
+      const existingUser = await User.findOne({ where: { email } });
+      if (existingUser) {
+        return res.status(400).json({ 
+          message: 'A user with this email address already exists' 
+        });
+      }
+      
+      // Check if another pending registration has this email
+      const existingRegistration = await PendingRegistration.findOne({ 
+        where: { 
+          email,
+          id: { [Op.ne]: registration.id },
+          status: 'pending'
+        } 
+      });
+      if (existingRegistration) {
+        return res.status(400).json({ 
+          message: 'Another pending registration with this email already exists' 
+        });
+      }
+    }
+    
+    // Validate intended role if provided
+    if (intendedRole) {
+      const { getManageableRoles, ROLE_HIERARCHY } = require('../utils/roleHierarchy');
+      const manageableRoles = getManageableRoles(req.user.role);
+      
+      if (!ROLE_HIERARCHY[intendedRole]) {
+        return res.status(400).json({ message: 'Invalid role specified' });
+      }
+      
+      if (!manageableRoles.includes(intendedRole)) {
+        return res.status(403).json({ 
+          message: 'You do not have permission to assign this role' 
+        });
+      }
+    }
+    
+    // Update fields
+    if (firstName !== undefined) registration.firstName = firstName;
+    if (lastName !== undefined) registration.lastName = lastName;
+    if (companyName !== undefined) registration.companyName = companyName;
+    if (accountNumber !== undefined) registration.accountNumber = accountNumber;
+    if (email !== undefined) registration.email = email;
+    
+    // Store intended role in customFields
+    if (intendedRole !== undefined) {
+      registration.customFields = {
+        ...registration.customFields,
+        intendedRole: intendedRole
+      };
+    }
+    
+    await registration.save();
+    
+    // Log activity
+    await logActivity({
+      type: ActivityType.USER_REGISTRATION_UPDATED || 'USER_REGISTRATION_UPDATED',
+      userId: req.user.userId,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: `Updated pending registration: ${registration.firstName} ${registration.lastName || ''} (${registration.email})`,
+      details: {
+        registrationId: registration.id,
+        updatedFields: { firstName, lastName, companyName, accountNumber, email, intendedRole }
+      },
+      companyId: null,
+      companyName: registration.companyName,
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    });
+    
+    res.json({
+      success: true,
+      message: 'Registration updated successfully',
+      registration: registration
+    });
+  } catch (error) {
+    console.error('Error updating registration:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Approve registration and create user
 router.post('/:id/approve', async (req, res) => {
   try {
@@ -103,7 +213,7 @@ router.post('/:id/approve', async (req, res) => {
     }
     
     const { 
-      role = 'external_user', 
+      role: requestedRole, 
       companyIds = [], 
       allCompanies = false,
       sendInvoiceEmail = false,
@@ -114,13 +224,6 @@ router.post('/:id/approve', async (req, res) => {
       sendImportSummaryReport = false
     } = req.body;
     
-    // Validate role - pending registrations are always external_user
-    if (role !== 'external_user') {
-      return res.status(400).json({ 
-        message: 'Pending registrations can only be approved as external_user' 
-      });
-    }
-    
     const registration = await PendingRegistration.findByPk(req.params.id);
     if (!registration) {
       return res.status(404).json({ message: 'Registration not found' });
@@ -129,6 +232,24 @@ router.post('/:id/approve', async (req, res) => {
     if (registration.status !== 'pending') {
       return res.status(400).json({ 
         message: `Registration has already been ${registration.status}` 
+      });
+    }
+    
+    // Determine the role: use requested role, or intended role from customFields, or default to external_user
+    const intendedRole = registration.customFields?.intendedRole;
+    const role = requestedRole || intendedRole || 'external_user';
+    
+    // Validate role against manageable roles
+    const { getManageableRoles, ROLE_HIERARCHY } = require('../utils/roleHierarchy');
+    const manageableRoles = getManageableRoles(req.user.role);
+    
+    if (!ROLE_HIERARCHY[role]) {
+      return res.status(400).json({ message: 'Invalid role specified' });
+    }
+    
+    if (!manageableRoles.includes(role)) {
+      return res.status(403).json({ 
+        message: 'You do not have permission to assign this role' 
       });
     }
     

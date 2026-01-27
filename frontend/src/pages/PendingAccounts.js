@@ -5,6 +5,7 @@ import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import PageTitle from '../components/PageTitle';
 import HierarchicalCompanyFilter from '../components/HierarchicalCompanyFilter';
+import { getRoleLabel } from '../utils/roleLabels';
 
 const PendingAccounts = () => {
   const { user } = useAuth();
@@ -34,11 +35,27 @@ const PendingAccounts = () => {
   const [userAssignedCompanyObjects, setUserAssignedCompanyObjects] = useState([]);
   const [rejectionReason, setRejectionReason] = useState('');
   
+  // Edit modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingRegistration, setEditingRegistration] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    firstName: '',
+    lastName: '',
+    companyName: '',
+    accountNumber: '',
+    email: '',
+    intendedRole: 'external_user'
+  });
+  const [saving, setSaving] = useState(false);
+  const [manageableRoles, setManageableRoles] = useState([]);
+  
   useEffect(() => {
     if (user?.role !== 'global_admin' && user?.role !== 'administrator') {
       navigate('/');
       return;
     }
+    
+    fetchManageableRoles();
     
     if (id) {
       fetchRegistration(id);
@@ -86,6 +103,93 @@ const PendingAccounts = () => {
       setUserAssignedCompanyObjects(Array.isArray(companies) ? companies : []);
     } catch (error) {
       console.error('Error fetching companies:', error);
+    }
+  };
+  
+  const fetchManageableRoles = async () => {
+    try {
+      const response = await api.get('/api/users/roles/manageable');
+      setManageableRoles(response.data.roles || []);
+    } catch (error) {
+      console.error('Error fetching manageable roles:', error);
+    }
+  };
+  
+  const handleOpenEditModal = (registration) => {
+    setEditingRegistration(registration);
+    setEditFormData({
+      firstName: registration.firstName || '',
+      lastName: registration.lastName || '',
+      companyName: registration.companyName || '',
+      accountNumber: registration.accountNumber || '',
+      email: registration.email || '',
+      intendedRole: registration.customFields?.intendedRole || 'external_user'
+    });
+    setShowEditModal(true);
+  };
+  
+  const handleCloseEditModal = () => {
+    setShowEditModal(false);
+    setEditingRegistration(null);
+    setEditFormData({
+      firstName: '',
+      lastName: '',
+      companyName: '',
+      accountNumber: '',
+      email: '',
+      intendedRole: 'external_user'
+    });
+  };
+  
+  const handleEditFormChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+  
+  const handleSaveEdit = async () => {
+    if (!editingRegistration) return;
+    
+    // Validate required fields
+    if (!editFormData.firstName.trim()) {
+      toast.error('First name is required');
+      return;
+    }
+    if (!editFormData.companyName.trim()) {
+      toast.error('Company name is required');
+      return;
+    }
+    if (!editFormData.email.trim()) {
+      toast.error('Email is required');
+      return;
+    }
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(editFormData.email)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      await api.put(`/api/pending-registrations/${editingRegistration.id}`, editFormData);
+      toast.success('Registration updated successfully');
+      handleCloseEditModal();
+      
+      // Refresh data
+      if (id) {
+        fetchRegistration(id);
+      } else {
+        fetchRegistrations();
+      }
+    } catch (error) {
+      console.error('Error updating registration:', error);
+      toast.error(error.response?.data?.message || 'Failed to update registration');
+    } finally {
+      setSaving(false);
     }
   };
   
@@ -149,8 +253,11 @@ const PendingAccounts = () => {
     
     setApproving(true);
     try {
+      // Use the intended role from customFields, or default to external_user
+      const role = selectedRegistration.customFields?.intendedRole || 'external_user';
+      
       await api.post(`/api/pending-registrations/${selectedRegistration.id}/approve`, {
-        role: 'external_user', // Always external_user for pending registrations
+        role: role,
         allCompanies: formData.allCompanies,
         companyIds: formData.allCompanies ? [] : formData.companyIds,
         sendInvoiceEmail: formData.sendInvoiceEmail,
@@ -238,6 +345,16 @@ const PendingAccounts = () => {
                 <div className="card">
                   <div className="card-header">
                     <h3 className="card-title">Registration Details</h3>
+                    {selectedRegistration.status === 'pending' && (
+                      <div className="card-actions">
+                        <button
+                          className="btn btn-sm btn-outline-primary"
+                          onClick={() => handleOpenEditModal(selectedRegistration)}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div className="card-body">
                     <div className="list-group list-group-flush">
@@ -283,6 +400,16 @@ const PendingAccounts = () => {
                           <span>{new Date(selectedRegistration.createdAt).toLocaleString()}</span>
                         </div>
                       </div>
+                      {selectedRegistration.customFields?.intendedRole && (
+                        <div className="list-group-item px-0 py-2">
+                          <div className="d-flex justify-content-between">
+                            <strong>Intended Role:</strong>
+                            <span className="badge bg-primary-lt">
+                              {getRoleLabel(selectedRegistration.customFields.intendedRole)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     
                   </div>
@@ -303,10 +430,10 @@ const PendingAccounts = () => {
                             <input
                               type="text"
                               className="form-control"
-                              value="External User"
+                              value={getRoleLabel(selectedRegistration.customFields?.intendedRole || 'external_user')}
                               disabled
                             />
-                            <small className="form-hint">All pending registrations are created as External Users</small>
+                            <small className="form-hint">Click "Edit" above to change the role before approval</small>
                           </div>
                         </div>
                       </div>
@@ -528,6 +655,106 @@ const PendingAccounts = () => {
           onApply={() => setShowCompanyAssignmentModal(false)}
         />
       )}
+      
+      {/* Edit Registration Modal */}
+      {showEditModal && editingRegistration && (
+        <div className="modal modal-blur show d-block" tabIndex="-1" role="dialog" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered" role="document">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Edit Registration</h5>
+                <button type="button" className="btn-close" onClick={handleCloseEditModal}></button>
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <label className="form-label required">First Name</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    name="firstName"
+                    value={editFormData.firstName}
+                    onChange={handleEditFormChange}
+                    placeholder="Enter first name"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Last Name</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    name="lastName"
+                    value={editFormData.lastName}
+                    onChange={handleEditFormChange}
+                    placeholder="Enter last name"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label required">Company Name</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    name="companyName"
+                    value={editFormData.companyName}
+                    onChange={handleEditFormChange}
+                    placeholder="Enter company name"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Account Number</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    name="accountNumber"
+                    value={editFormData.accountNumber}
+                    onChange={handleEditFormChange}
+                    placeholder="Enter account number"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label required">Email</label>
+                  <input
+                    type="email"
+                    className="form-control"
+                    name="email"
+                    value={editFormData.email}
+                    onChange={handleEditFormChange}
+                    placeholder="Enter email address"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">User Role</label>
+                  <select
+                    className="form-select"
+                    name="intendedRole"
+                    value={editFormData.intendedRole}
+                    onChange={handleEditFormChange}
+                  >
+                    {manageableRoles.map(role => (
+                      <option key={role} value={role}>
+                        {getRoleLabel(role)}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="form-hint">Select the role this user will be assigned upon approval</small>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={handleCloseEditModal}>
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  onClick={handleSaveEdit}
+                  disabled={saving}
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
   }
@@ -607,12 +834,23 @@ const PendingAccounts = () => {
                           <td>{getStatusBadge(reg.status)}</td>
                           <td>{new Date(reg.createdAt).toLocaleString()}</td>
                           <td>
-                            <button
-                              className="btn btn-sm btn-primary"
-                              onClick={() => navigate(`/users/pending-accounts/${reg.id}`)}
-                            >
-                              Review
-                            </button>
+                            <div className="btn-group">
+                              <button
+                                className="btn btn-sm btn-primary"
+                                onClick={() => navigate(`/users/pending-accounts/${reg.id}`)}
+                              >
+                                Review
+                              </button>
+                              {reg.status === 'pending' && (
+                                <button
+                                  className="btn btn-sm btn-outline-primary"
+                                  onClick={() => handleOpenEditModal(reg)}
+                                  title="Edit registration details"
+                                >
+                                  Edit
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -660,6 +898,106 @@ const PendingAccounts = () => {
           onClose={() => setShowCompanyAssignmentModal(false)}
           onApply={() => setShowCompanyAssignmentModal(false)}
         />
+      )}
+      
+      {/* Edit Registration Modal */}
+      {showEditModal && editingRegistration && (
+        <div className="modal modal-blur show d-block" tabIndex="-1" role="dialog" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered" role="document">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Edit Registration</h5>
+                <button type="button" className="btn-close" onClick={handleCloseEditModal}></button>
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <label className="form-label required">First Name</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    name="firstName"
+                    value={editFormData.firstName}
+                    onChange={handleEditFormChange}
+                    placeholder="Enter first name"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Last Name</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    name="lastName"
+                    value={editFormData.lastName}
+                    onChange={handleEditFormChange}
+                    placeholder="Enter last name"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label required">Company Name</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    name="companyName"
+                    value={editFormData.companyName}
+                    onChange={handleEditFormChange}
+                    placeholder="Enter company name"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Account Number</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    name="accountNumber"
+                    value={editFormData.accountNumber}
+                    onChange={handleEditFormChange}
+                    placeholder="Enter account number"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label required">Email</label>
+                  <input
+                    type="email"
+                    className="form-control"
+                    name="email"
+                    value={editFormData.email}
+                    onChange={handleEditFormChange}
+                    placeholder="Enter email address"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">User Role</label>
+                  <select
+                    className="form-select"
+                    name="intendedRole"
+                    value={editFormData.intendedRole}
+                    onChange={handleEditFormChange}
+                  >
+                    {manageableRoles.map(role => (
+                      <option key={role} value={role}>
+                        {getRoleLabel(role)}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="form-hint">Select the role this user will be assigned upon approval</small>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={handleCloseEditModal}>
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  onClick={handleSaveEdit}
+                  disabled={saving}
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
