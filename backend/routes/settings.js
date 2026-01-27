@@ -769,7 +769,8 @@ router.post('/email-templates/:templateName/test', auth, globalAdmin, async (req
       'retention-cleanup-summary',
       'registration-request',
       'registration-approved',
-      'registration-rejected'
+      'registration-rejected',
+      'registration-submitted'
     ];
     
     if (!validTemplates.includes(templateName)) {
@@ -896,6 +897,11 @@ router.post('/email-templates/:templateName/test', auth, globalAdmin, async (req
         break;
       case 'registration-rejected':
         testData.rejectionReason = 'Unable to verify account details. Please contact support for more information.';
+        break;
+      case 'registration-submitted':
+        testData.userCompanyName = 'Test Company Ltd';
+        testData.userEmail = recipientEmail;
+        testData.accountNumber = 'ACC-12345';
         break;
     }
     

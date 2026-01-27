@@ -620,11 +620,11 @@ async function queueIndividualEmail(options) {
     : documentType === 'statement' ? 'Statement' 
     : 'Invoice';
   
-  // Build direct document URL (e.g., /invoices/123 or /credit-notes/456)
+  // Build direct document URL (e.g., /invoices/123/view or /credit-notes/456/view)
   const documentPath = documentType === 'credit_note' ? 'credit-notes' 
     : documentType === 'statement' ? 'statements' 
     : 'invoices';
-  const documentUrl = `${portalUrl}/${documentPath}/${document.id}`;
+  const documentUrl = `${portalUrl}/${documentPath}/${document.id}/view`;
   
   const documentNumber = document.invoiceNumber || document.creditNoteNumber || 
     document.statementNumber || document.id;

@@ -107,6 +107,7 @@ const Settings = () => {
       { id: 'registration-request', name: 'registration-request', description: 'Registration Request (Admin)', isActive: true },
       { id: 'registration-approved', name: 'registration-approved', description: 'Registration Approved', isActive: true },
       { id: 'registration-rejected', name: 'registration-rejected', description: 'Registration Rejected', isActive: true },
+      { id: 'registration-submitted', name: 'registration-submitted', description: 'Registration Submitted (User Confirmation)', isActive: true },
       { id: 'bulk-email-test', name: 'bulk-email-test', description: 'Bulk Email Test (60 emails over 10 mins)', isActive: true }
     ];
     setEmailTemplates(staticTemplates);
