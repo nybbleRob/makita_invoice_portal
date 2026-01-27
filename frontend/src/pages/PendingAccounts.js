@@ -109,9 +109,13 @@ const PendingAccounts = () => {
   const fetchManageableRoles = async () => {
     try {
       const response = await api.get('/api/users/roles/manageable');
-      setManageableRoles(response.data.roles || []);
+      // API returns array of { value, label } objects directly
+      const roles = Array.isArray(response.data) ? response.data : [];
+      setManageableRoles(roles);
     } catch (error) {
       console.error('Error fetching manageable roles:', error);
+      // Set default external_user as fallback
+      setManageableRoles([{ value: 'external_user', label: 'External User' }]);
     }
   };
   
@@ -730,8 +734,8 @@ const PendingAccounts = () => {
                     onChange={handleEditFormChange}
                   >
                     {manageableRoles.map(role => (
-                      <option key={role} value={role}>
-                        {getRoleLabel(role)}
+                      <option key={role.value} value={role.value}>
+                        {role.label}
                       </option>
                     ))}
                   </select>
@@ -974,8 +978,8 @@ const PendingAccounts = () => {
                     onChange={handleEditFormChange}
                   >
                     {manageableRoles.map(role => (
-                      <option key={role} value={role}>
-                        {getRoleLabel(role)}
+                      <option key={role.value} value={role.value}>
+                        {role.label}
                       </option>
                     ))}
                   </select>
