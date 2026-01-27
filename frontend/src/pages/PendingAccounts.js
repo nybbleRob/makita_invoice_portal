@@ -352,7 +352,7 @@ const PendingAccounts = () => {
                     {selectedRegistration.status === 'pending' && (
                       <div className="card-actions">
                         <button
-                          className="btn btn-sm btn-outline-primary"
+                          className="btn btn-sm btn-info"
                           onClick={() => handleOpenEditModal(selectedRegistration)}
                         >
                           Edit
@@ -838,7 +838,7 @@ const PendingAccounts = () => {
                           <td>{getStatusBadge(reg.status)}</td>
                           <td>{new Date(reg.createdAt).toLocaleString()}</td>
                           <td>
-                            <div className="btn-group">
+                            <div className="d-flex gap-1">
                               <button
                                 className="btn btn-sm btn-primary"
                                 onClick={() => navigate(`/users/pending-accounts/${reg.id}`)}
@@ -847,7 +847,7 @@ const PendingAccounts = () => {
                               </button>
                               {reg.status === 'pending' && (
                                 <button
-                                  className="btn btn-sm btn-outline-primary"
+                                  className="btn btn-sm btn-info"
                                   onClick={() => handleOpenEditModal(reg)}
                                   title="Edit registration details"
                                 >

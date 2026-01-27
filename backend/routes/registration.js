@@ -121,6 +121,30 @@ router.post('/submit', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) 
       }
     }
     
+    // Send confirmation email to the user
+    try {
+      await sendTemplatedEmail(
+        'registration-submitted',
+        email,
+        {
+          userName: `${firstName} ${lastName}`,
+          userEmail: email,
+          userCompanyName: companyName,
+          accountNumber: accountNumber || null,
+          companyName: settings.companyName
+        },
+        settings,
+        { 
+          ipAddress: req.ip, 
+          userAgent: req.get('user-agent'),
+          userId: null // Public registration
+        }
+      );
+    } catch (emailError) {
+      console.error(`Failed to send registration confirmation to ${email}:`, emailError);
+      // Don't fail the registration if email fails
+    }
+    
     // Log activity
     await logActivity({
       type: ActivityType.USER_REGISTRATION_SUBMITTED,
