@@ -34,6 +34,7 @@ const PendingAccounts = () => {
   const [showCompanyAssignmentModal, setShowCompanyAssignmentModal] = useState(false);
   const [userAssignedCompanyObjects, setUserAssignedCompanyObjects] = useState([]);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [showRejectModal, setShowRejectModal] = useState(false);
   
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
@@ -283,6 +284,16 @@ const PendingAccounts = () => {
     }
   };
   
+  const handleOpenRejectModal = () => {
+    setRejectionReason('');
+    setShowRejectModal(true);
+  };
+  
+  const handleCloseRejectModal = () => {
+    setShowRejectModal(false);
+    setRejectionReason('');
+  };
+  
   const handleReject = async () => {
     if (!selectedRegistration) return;
     
@@ -298,6 +309,7 @@ const PendingAccounts = () => {
       });
       
       toast.success('Registration rejected successfully');
+      handleCloseRejectModal();
       navigate('/users/pending-accounts');
       fetchRegistrations();
     } catch (error) {
@@ -629,13 +641,7 @@ const PendingAccounts = () => {
                         </button>
                         <button
                           className="btn btn-danger"
-                          onClick={() => {
-                            const reason = prompt('Please provide a reason for rejection:');
-                            if (reason) {
-                              setRejectionReason(reason);
-                              handleReject();
-                            }
-                          }}
+                          onClick={handleOpenRejectModal}
                           disabled={rejecting}
                           style={{ flex: 1 }}
                         >
@@ -753,6 +759,48 @@ const PendingAccounts = () => {
                   disabled={saving}
                 >
                   {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Rejection Modal */}
+      {showRejectModal && (
+        <div className="modal modal-blur show d-block" tabIndex="-1" role="dialog" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered modal-sm" role="document">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Reject Registration</h5>
+                <button type="button" className="btn-close" onClick={handleCloseRejectModal}></button>
+              </div>
+              <div className="modal-body">
+                <p className="text-muted mb-3">
+                  Please provide a reason for rejecting this registration. This will be included in the email sent to the applicant.
+                </p>
+                <div className="mb-3">
+                  <label className="form-label required">Rejection Reason</label>
+                  <textarea
+                    className="form-control"
+                    rows="4"
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    placeholder="Enter the reason for rejection..."
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={handleCloseRejectModal}>
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-danger" 
+                  onClick={handleReject}
+                  disabled={rejecting || !rejectionReason.trim()}
+                >
+                  {rejecting ? 'Rejecting...' : 'Reject Registration'}
                 </button>
               </div>
             </div>
