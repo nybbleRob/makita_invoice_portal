@@ -36,6 +36,10 @@ const InvoiceView = () => {
   const isRenderingRef = useRef(false);
   const pdfFetchedRef = useRef(false);
   
+  // Error states
+  const [notFound, setNotFound] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  
   // Query states
   const [queryMessages, setQueryMessages] = useState([]);
   const [queryThread, setQueryThread] = useState(null);
@@ -90,16 +94,18 @@ const InvoiceView = () => {
     };
   }, [id]);
 
-  // Load query history when component loads (only if queries enabled)
+  // Load query history when invoice is loaded (only if queries enabled and invoice exists)
   useEffect(() => {
-    if (id && queriesEnabled) {
+    if (id && queriesEnabled && invoice && !notFound) {
       fetchQueryHistory();
     }
-  }, [id, queriesEnabled]);
+  }, [id, queriesEnabled, invoice, notFound]);
 
   const fetchInvoice = async () => {
     try {
       setLoading(true);
+      setNotFound(false);
+      setErrorMessage('');
       const response = await api.get(`/api/invoices/${id}`);
       setInvoice(response.data);
       // Invoice is automatically marked as viewed by the backend
@@ -109,9 +115,23 @@ const InvoiceView = () => {
         fetchPdfForPreview();
       }
     } catch (error) {
-      console.error('Error fetching invoice:', error);
-      toast.error('Error loading invoice: ' + (error.response?.data?.message || error.message));
-      navigate('/invoices');
+      const status = error.response?.status;
+      const message = error.response?.data?.message || error.message;
+      
+      // Handle 404/500 as "not found" - show friendly error page
+      if (status === 404 || status === 500 || status === 403) {
+        setNotFound(true);
+        setErrorMessage(
+          status === 403 
+            ? 'You do not have permission to view this invoice.' 
+            : 'The invoice you are looking for could not be found. It may have been deleted or the link may be invalid.'
+        );
+      } else {
+        // For other errors, show toast and redirect
+        console.error('Error fetching invoice:', error);
+        toast.error('Error loading invoice: ' + message);
+        navigate('/invoices');
+      }
     } finally {
       setLoading(false);
     }
@@ -330,9 +350,14 @@ const InvoiceView = () => {
         setQueryMessages([]);
       }
     } catch (error) {
-      console.error('Error fetching query history:', error);
-      // Don't show error if queries are disabled
-      if (error.response?.status !== 403 || error.response?.data?.message?.includes('disabled')) {
+      // Silently handle errors for non-existent documents or disabled queries
+      const status = error.response?.status;
+      if (status === 404 || status === 500 || status === 403) {
+        // Document doesn't exist or no permission - don't show error, just clear query data
+        setQueryThread(null);
+        setQueryMessages([]);
+      } else {
+        console.error('Error fetching query history:', error);
         toast.error('Error loading query history');
       }
     } finally {
@@ -464,14 +489,24 @@ const InvoiceView = () => {
     );
   }
 
-  if (!invoice) {
+  if (notFound || !invoice) {
     return (
       <div className="page">
         <div className="page-body">
           <div className="container-xl">
             <div className="card">
               <div className="card-body text-center py-5">
-                <p className="text-muted">Invoice not found</p>
+                <div className="mb-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-file-off text-muted" width="48" height="48" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                    <path d="M3 3l18 18" />
+                    <path d="M7 3h7l5 5v7m0 4a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-14" />
+                  </svg>
+                </div>
+                <h3 className="text-muted mb-2">Invoice Not Found</h3>
+                <p className="text-muted mb-4">
+                  {errorMessage || 'The invoice you are looking for could not be found. It may have been deleted or the link may be invalid.'}
+                </p>
                 <button className="btn btn-primary" onClick={() => navigate('/invoices')}>
                   Back to Invoices
                 </button>
