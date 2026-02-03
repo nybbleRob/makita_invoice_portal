@@ -262,74 +262,62 @@ const Login = () => {
                 )}
               </div>
             )}
-            <form onSubmit={handleSubmit} autoComplete="on">
+            <form onSubmit={handleSubmit} autoComplete="off">
               <div className="mb-3">
                 <label className="form-label">Email address</label>
-                <div className="input-icon">
-                  <span className="input-icon-addon">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                      <path d="M3 7a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-10z" />
-                      <path d="M3 7l9 6l9 -6" />
-                    </svg>
-                  </span>
-                  <input
-                    type="email"
-                    className="form-control"
-                    placeholder="your@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    autoComplete="username"
-                    required
-                  />
-                </div>
+                <input
+                  type="email"
+                  className="form-control"
+                  placeholder="your@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="off"
+                  required
+                />
               </div>
-              <div className="mb-3">
-                <label className="form-label">Password</label>
-                <div className="input-icon">
-                  <span className="input-icon-addon">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                      <path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6z" />
-                      <path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" />
-                      <path d="M8 11v-4a4 4 0 1 1 8 0v4" />
-                    </svg>
+              <div className="mb-2">
+                <label className="form-label">
+                  Password
+                  <span className="form-label-description">
+                    <Link to="/forgot-password">I forgot password</Link>
                   </span>
+                </label>
+                <div className="input-group input-group-flat">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     className="form-control"
-                    placeholder="Password"
+                    placeholder="Your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    autoComplete="current-password"
+                    autoComplete="off"
                     required
                   />
-                  <button
-                    type="button"
-                    className="input-icon-addon"
-                    onClick={() => setShowPassword(!showPassword)}
-                    tabIndex={-1}
-                    style={{ cursor: 'pointer', border: 'none', background: 'transparent' }}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                        <path d="M10.585 10.587a2 2 0 0 0 2.829 2.828" />
-                        <path d="M16.681 16.673a8.717 8.717 0 0 1 -4.681 1.327c-3.6 0 -6.6 -2 -9 -6c1.272 -2.12 2.712 -3.678 4.32 -4.674m2.86 -1.146a9.055 9.055 0 0 1 1.82 -.18c3.6 0 6.6 2 9 6c-.666 1.11 -1.379 2.067 -2.138 2.87" />
-                        <path d="M3 3l18 18" />
-                      </svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                        <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
-                        <path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />
-                      </svg>
-                    )}
-                  </button>
+                  <span className="input-group-text">
+                    <a
+                      href="#"
+                      className="link-secondary"
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setShowPassword(!showPassword);
+                      }}
+                    >
+                      {showPassword ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10.585 10.587a2 2 0 0 0 2.829 2.828" />
+                          <path d="M16.681 16.673a8.717 8.717 0 0 1 -4.681 1.327c-3.6 0 -6.6 -2 -9 -6c1.272 -2.12 2.712 -3.678 4.32 -4.674m2.86 -1.146a9.055 9.055 0 0 1 1.82 -.18c3.6 0 6.6 2 9 6c-.666 1.11 -1.379 2.067 -2.138 2.87" />
+                          <path d="M3 3l18 18" />
+                        </svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+                          <path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />
+                        </svg>
+                      )}
+                    </a>
+                  </span>
                 </div>
               </div>
-              
               <div className="form-footer">
                 <button
                   type="submit"
@@ -340,13 +328,10 @@ const Login = () => {
                 </button>
               </div>
             </form>
-            <div className="text-center text-muted mt-3">
-              <Link to="/forgot-password">Forgot password?</Link>
-            </div>
-            <div className="text-center text-muted mt-2">
-              <Link to="/register">Register for New Account</Link>
-            </div>
           </div>
+        </div>
+        <div className="text-center text-secondary mt-3">
+          Don't have account yet? <Link to="/register">Sign up</Link>
         </div>
       </div>
     </div>
