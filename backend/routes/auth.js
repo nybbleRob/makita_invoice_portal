@@ -124,14 +124,29 @@ router.post('/login', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) =
 
     // Check if user has a password set
     if (!user.password) {
+      console.log('[LOGIN DEBUG] User has no password set:', user.email);
       return res.status(401).json({ 
         message: 'No password set. Please contact an administrator to set your password.',
         requiresPasswordSetup: true
       });
     }
 
+    // DEBUG: Log password comparison details
+    console.log('[LOGIN DEBUG] ===== Password Check =====');
+    console.log('[LOGIN DEBUG] Email:', user.email);
+    console.log('[LOGIN DEBUG] User ID:', user.id);
+    console.log('[LOGIN DEBUG] Password provided length:', password.length);
+    console.log('[LOGIN DEBUG] Password provided (first 3 chars):', password.substring(0, 3));
+    console.log('[LOGIN DEBUG] Stored hash exists:', !!user.password);
+    console.log('[LOGIN DEBUG] Stored hash length:', user.password ? user.password.length : 0);
+    console.log('[LOGIN DEBUG] Stored hash starts with $2:', user.password ? user.password.startsWith('$2') : false);
+    console.log('[LOGIN DEBUG] mustChangePassword:', user.mustChangePassword);
+    
     // Check password
     const isMatch = await user.comparePassword(password);
+    console.log('[LOGIN DEBUG] Password match result:', isMatch);
+    console.log('[LOGIN DEBUG] ===========================');
+    
     if (!isMatch) {
       // Increment failed login attempts
       const lockoutResult = await incrementFailedAttempts(

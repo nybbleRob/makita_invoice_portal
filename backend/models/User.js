@@ -210,8 +210,14 @@ module.exports = (sequelize) => {
     ],
     hooks: {
       beforeCreate: async (user) => {
+        console.log('[USER CREATE DEBUG] Creating user:', user.email);
+        console.log('[USER CREATE DEBUG] Password provided:', !!user.password);
         if (user.password) {
+          console.log('[USER CREATE DEBUG] Password length before hash:', user.password.length);
+          console.log('[USER CREATE DEBUG] Password (first 5 chars):', user.password.substring(0, 5));
           user.password = await bcrypt.hash(user.password, 10);
+          console.log('[USER CREATE DEBUG] Hash created, length:', user.password.length);
+          console.log('[USER CREATE DEBUG] Hash starts with $2:', user.password.startsWith('$2'));
         }
         // If password is null or not provided, set mustChangePassword to true
         // Exception: notification_contact users never need a password
@@ -247,7 +253,11 @@ module.exports = (sequelize) => {
 
   // Instance method to compare password
   User.prototype.comparePassword = async function(candidatePassword) {
-    return await bcrypt.compare(candidatePassword, this.password);
+    console.log('[COMPARE DEBUG] Candidate password length:', candidatePassword.length);
+    console.log('[COMPARE DEBUG] Stored hash:', this.password ? this.password.substring(0, 20) + '...' : 'NULL');
+    const result = await bcrypt.compare(candidatePassword, this.password);
+    console.log('[COMPARE DEBUG] bcrypt.compare result:', result);
+    return result;
   };
 
   // Instance method to get safe user object (without password)
