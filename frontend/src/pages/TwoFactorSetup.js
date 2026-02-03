@@ -145,24 +145,22 @@ const TwoFactorSetup = () => {
   return (
     <div className="page page-center" style={loginStyle}>
       <PageTitle title="Setup Two-Factor Authentication" />
-      <div className="container py-4" style={{ maxWidth: '800px' }}>
+      <div className="container py-4" style={{ maxWidth: '650px' }}>
         <div className="card">
           <div className="card-body">
-            <div className="text-center mb-4">
+            <div className="text-center mb-3">
               {settings?.logoLight && (
                 <img 
                   src={`${API_BASE_URL}${settings.logoLight}`} 
                   alt={settings.companyName || settings.siteName || 'Logo'} 
-                  style={{ maxHeight: '60px', marginBottom: '1rem' }}
+                  style={{ maxHeight: '50px', marginBottom: '0.5rem' }}
                 />
               )}
-              <h1 className="mb-2">Makita EDI Portal</h1>
+              <h2 className="mb-1">Setup Two-Factor Authentication</h2>
+              <p className="text-secondary small mb-0">
+                Secure your account with an authenticator app
+              </p>
             </div>
-
-            <h2 className="card-title text-center mb-4">Secure Your Account</h2>
-            <p className="text-secondary text-center mb-4">
-              Two-factor authentication is required for your account. Please set it up using an authenticator app.
-            </p>
 
             {error && (
               <div key={error} className="alert alert-danger login-alert mb-4" role="alert">
@@ -178,104 +176,84 @@ const TwoFactorSetup = () => {
                 <p className="mt-3 text-muted">Generating QR code...</p>
               </div>
             ) : (
-              <>
-                <div className="text-center mb-4">
-                  <h3 className="card-title mb-3">Step 1: Scan QR Code</h3>
-                  <p className="text-secondary mb-3">
-                    Open your authenticator app (Google Authenticator, Authy, Microsoft Authenticator, etc.) and scan this QR code:
-                  </p>
-                  {qrCode && (
-                    <div className="mb-3">
-                      <img src={qrCode} alt="QR Code" style={{ maxWidth: '250px', border: '1px solid #ddd', borderRadius: '8px', padding: '10px', backgroundColor: 'white' }} />
-                    </div>
-                  )}
-                  
-                  <div className="mt-4">
-                    <h4 className="card-title mb-2">Can't scan? Enter manually:</h4>
-                    <div className="input-group mb-3">
-                      <input
-                        type="text"
-                        className="form-control text-center font-monospace"
-                        value={manualKey}
-                        readOnly
-                        style={{ fontSize: '0.9rem' }}
-                      />
-                      <button
-                        className="btn btn-outline-secondary"
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(manualKey);
-                          toast.success('Key copied to clipboard!');
-                        }}
-                      >
-                        Copy
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <h3 className="card-title mb-3">Step 2: Verify Setup</h3>
-                  <p className="text-secondary mb-3">
-                    Enter the 6-digit code from your authenticator app to verify:
-                  </p>
-                  <form onSubmit={handleVerify}>
-                    <div className="mb-3">
-                      <label className="form-label">Verification Code</label>
-                      <div className="input-icon">
-                        <span className="input-icon-addon">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                            <path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" />
-                            <path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
-                            <path d="M12 12l0 2.5" />
-                          </svg>
-                        </span>
+              <form onSubmit={handleVerify}>
+                <div className="row">
+                  {/* Left Column - Step 1: QR Code */}
+                  <div className="col-md-6 text-center border-end">
+                    <h4 className="mb-3">Step 1: Scan QR Code</h4>
+                    <p className="text-secondary small mb-3">
+                      Scan with your authenticator app
+                    </p>
+                    {qrCode && (
+                      <div className="mb-3">
+                        <img src={qrCode} alt="QR Code" style={{ maxWidth: '180px', border: '1px solid #ddd', borderRadius: '8px', padding: '8px', backgroundColor: 'white' }} />
+                      </div>
+                    )}
+                    <div className="mt-3">
+                      <small className="text-muted d-block mb-2">Can't scan? Copy this key:</small>
+                      <div className="input-group input-group-sm">
                         <input
                           type="text"
                           className="form-control text-center font-monospace"
-                          placeholder="000000"
-                          value={verificationCode}
-                          onChange={(e) => {
-                            const value = e.target.value.replace(/\D/g, '').slice(0, 6);
-                            setVerificationCode(value);
-                          }}
-                          maxLength="6"
-                          required
-                          style={{ fontSize: '1.5rem', letterSpacing: '0.5rem' }}
-                          autoFocus
+                          value={manualKey}
+                          readOnly
+                          style={{ fontSize: '0.75rem' }}
                         />
+                        <button
+                          className="btn btn-outline-secondary"
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(manualKey);
+                            toast.success('Key copied!');
+                          }}
+                        >
+                          Copy
+                        </button>
                       </div>
-                      <small className="form-hint">Enter the 6-digit code from your authenticator app</small>
-                    </div>
-                    <div className="form-footer">
-                      <button
-                        type="submit"
-                        className="btn btn-primary w-100"
-                        disabled={verifying || verificationCode.length !== 6}
-                      >
-                        {verifying ? 'Verifying...' : 'Verify & Enable 2FA'}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-
-                <div className="mt-4">
-                  <div className="alert alert-info">
-                    <h4 className="alert-title">Need help?</h4>
-                    <div className="text-secondary">
-                      <p className="mb-2">Popular authenticator apps:</p>
-                      <ul className="list-unstyled mb-0">
-                        <li>• Google Authenticator</li>
-                        <li>• Microsoft Authenticator</li>
-                        <li>• Authy</li>
-                        <li>• 1Password</li>
-                        <li>• LastPass Authenticator</li>
-                      </ul>
                     </div>
                   </div>
+
+                  {/* Right Column - Step 2: Verify */}
+                  <div className="col-md-6">
+                    <h4 className="mb-3">Step 2: Verify</h4>
+                    <p className="text-secondary small mb-3">
+                      Enter the 6-digit code from your app
+                    </p>
+                    <div className="mb-3">
+                      <label className="form-label">Verification Code</label>
+                      <input
+                        type="text"
+                        className="form-control text-center font-monospace"
+                        placeholder="000000"
+                        value={verificationCode}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                          setVerificationCode(value);
+                        }}
+                        maxLength="6"
+                        required
+                        style={{ fontSize: '1.5rem', letterSpacing: '0.5rem' }}
+                        autoFocus
+                      />
+                    </div>
+                    <p className="text-muted small">
+                      Apps: Google Authenticator, Microsoft Authenticator, Authy, 1Password
+                    </p>
+                  </div>
                 </div>
-              </>
+
+                <hr className="my-4" />
+
+                <div className="form-footer">
+                  <button
+                    type="submit"
+                    className="btn btn-primary w-100"
+                    disabled={verifying || verificationCode.length !== 6}
+                  >
+                    {verifying ? 'Verifying...' : 'Verify & Enable 2FA'}
+                  </button>
+                </div>
+              </form>
             )}
           </div>
         </div>
