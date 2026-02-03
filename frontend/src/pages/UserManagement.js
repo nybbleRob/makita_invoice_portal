@@ -603,6 +603,15 @@ const UserManagement = () => {
       await api.post(`/api/users/${userId}/unlock`);
       toast.success('Account unlocked successfully!');
       fetchUsers(); // Refresh user list
+      // Also update selectedUser if we're unlocking from the edit modal
+      if (selectedUser && selectedUser.id === userId) {
+        setSelectedUser({ 
+          ...selectedUser, 
+          accountLockedUntil: null, 
+          failedLoginAttempts: 0,
+          lockReason: null 
+        });
+      }
     } catch (error) {
       toast.error('Error unlocking account: ' + (error.response?.data?.message || error.message));
     }
@@ -1863,6 +1872,57 @@ const UserManagement = () => {
                             Resetting 2FA will clear the user's 2FA configuration. They will need to set up 2FA again on their next login.
                           </small>
                         )}
+                      </div>
+                    </>
+                  )}
+                  {/* Account Lockout Section */}
+                  {selectedUser && 
+                   selectedUser.id !== currentUser?.id &&
+                   (currentUser?.role === 'global_admin' || currentUser?.role === 'administrator' || currentUser?.role === 'manager') && (
+                    <>
+                      <hr className="my-4" />
+                      <h4 className="mb-3">Account Lockout</h4>
+                      <div className="mb-3">
+                        <label className="form-label">Status</label>
+                        <div className="mb-2">
+                          {selectedUser.accountLockedUntil ? (() => {
+                            const lockedUntil = new Date(selectedUser.accountLockedUntil);
+                            const now = new Date();
+                            const isLocked = lockedUntil > now;
+                            if (isLocked) {
+                              const remainingMinutes = Math.ceil((lockedUntil - now) / (1000 * 60));
+                              return (
+                                <>
+                                  <span className="badge bg-danger-lt mb-2">
+                                    Locked ({remainingMinutes} minutes remaining)
+                                  </span>
+                                  <div className="text-muted small mb-2">
+                                    Reason: {selectedUser.lockReason === 'brute_force' ? 'Too many failed login attempts' : selectedUser.lockReason || 'Unknown'}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="btn btn-success btn-sm"
+                                    onClick={() => handleUnlockAccount(selectedUser.id)}
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="me-1">
+                                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                      <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+                                    </svg>
+                                    Unlock Account
+                                  </button>
+                                </>
+                              );
+                            }
+                            return <span className="badge bg-success-lt">Not Locked</span>;
+                          })() : (
+                            <span className="badge bg-success-lt">Not Locked</span>
+                          )}
+                        </div>
+                        <div className="mb-2">
+                          <span className="text-muted small">
+                            Failed login attempts: {selectedUser.failedLoginAttempts || 0}
+                          </span>
+                        </div>
                       </div>
                     </>
                   )}
