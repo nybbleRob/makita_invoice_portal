@@ -62,8 +62,8 @@ async function incrementFailedAttempts(user, ipAddress = null, userAgent = null)
   // Get lockout settings
   const settings = await Settings.getSettings();
   const lockoutEnabled = settings.accountLockoutEnabled !== false; // Default to true
-  const maxAttempts = settings.maxFailedLoginAttempts || 5;
-  const lockoutDurationMinutes = settings.lockoutDurationMinutes || 30;
+  const maxAttempts = settings.maxFailedLoginAttempts || 10;
+  const lockoutDurationMinutes = settings.lockoutDurationMinutes || 15;
   
   // If lockout is disabled, don't track attempts
   if (!lockoutEnabled) {
@@ -174,7 +174,7 @@ async function unlockAccount(user, unlockedByUserId = null) {
  */
 async function getLockoutDuration() {
   const settings = await Settings.getSettings();
-  return settings.lockoutDurationMinutes || 30;
+  return settings.lockoutDurationMinutes || 15;
 }
 
 /**
@@ -185,8 +185,8 @@ async function getLockoutConfig() {
   const settings = await Settings.getSettings();
   return {
     enabled: settings.accountLockoutEnabled !== false, // Default to true
-    maxAttempts: settings.maxFailedLoginAttempts || 5,
-    durationMinutes: settings.lockoutDurationMinutes || 30
+    maxAttempts: settings.maxFailedLoginAttempts || 10,
+    durationMinutes: settings.lockoutDurationMinutes || 15
   };
 }
 
