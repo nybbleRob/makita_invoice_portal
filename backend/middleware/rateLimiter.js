@@ -87,21 +87,22 @@ const rateLimiters = {
   // Strict rate limiter for auth endpoints (login, register, password reset)
   auth: createRateLimiter({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 10, // 10 login attempts per 15 minutes (increased from 5)
+    max: 50, // 50 login attempts per 15 minutes (increased for testing)
     message: 'Too many login attempts, please try again later.',
     keyGenerator: (req) => {
       // Use email if available, otherwise IP
       return req.body?.email || req.ip || 'unknown';
     },
-    // Skip rate limiting for /me, /validate-reset-token, and /validate-email-change endpoints (read-only operations)
+    // Skip rate limiting for read-only operations and password change
     skip: (req) => {
-      // When mounted at /api/auth, the path will be /me, /validate-reset-token, or /validate-email-change
       return req.path === '/me' || 
              req.originalUrl === '/api/auth/me' ||
              req.path === '/validate-reset-token' ||
              req.originalUrl === '/api/auth/validate-reset-token' ||
              req.path === '/validate-email-change' ||
-             req.originalUrl === '/api/auth/validate-email-change';
+             req.originalUrl === '/api/auth/validate-email-change' ||
+             req.path === '/change-password' ||
+             req.originalUrl === '/api/auth/change-password';
     },
   }),
   
