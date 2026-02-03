@@ -133,19 +133,11 @@ const ChangePassword = () => {
                 {error}
               </div>
             )}
-            <form onSubmit={handleSubmit} autoComplete="on">
+            <form onSubmit={handleSubmit} autoComplete="off">
               {!isFirstTime && (
                 <div className="mb-3">
                   <label className="form-label">Current Password</label>
-                  <div className="input-icon">
-                    <span className="input-icon-addon">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                        <path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6z" />
-                        <path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" />
-                        <path d="M8 11v-4a4 4 0 1 1 8 0v4" />
-                      </svg>
-                    </span>
+                  <div className="input-group input-group-flat">
                     <input
                       type={showCurrentPassword ? 'text' : 'password'}
                       name="currentPassword"
@@ -153,80 +145,76 @@ const ChangePassword = () => {
                       placeholder="Enter your current password"
                       value={formData.currentPassword}
                       onChange={handleInputChange}
-                      autoComplete="current-password"
+                      autoComplete="off"
                       required={!isFirstTime}
                     />
-                    <button
-                      type="button"
-                      className="input-icon-addon"
-                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                      tabIndex={-1}
-                      style={{ cursor: 'pointer', border: 'none', background: 'transparent' }}
-                      aria-label={showCurrentPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showCurrentPassword ? (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                          <path d="M10.585 10.587a2 2 0 0 0 2.829 2.828" />
-                          <path d="M16.681 16.673a8.717 8.717 0 0 1 -4.681 1.327c-3.6 0 -6.6 -2 -9 -6c1.272 -2.12 2.712 -3.678 4.32 -4.674m2.86 -1.146a9.055 9.055 0 0 1 1.82 -.18c3.6 0 6.6 2 9 6c-.666 1.11 -1.379 2.067 -2.138 2.87" />
-                          <path d="M3 3l18 18" />
-                        </svg>
-                      ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                          <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
-                          <path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />
-                        </svg>
-                      )}
-                    </button>
+                    <span className="input-group-text" style={{ padding: 0 }}>
+                      <a
+                        href="#"
+                        className="link-secondary d-flex align-items-center justify-content-center"
+                        style={{ padding: '0.5rem 0.75rem', cursor: 'pointer' }}
+                        title={showCurrentPassword ? 'Hide password' : 'Show password'}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setShowCurrentPassword(!showCurrentPassword);
+                        }}
+                      >
+                        {showCurrentPassword ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M10.585 10.587a2 2 0 0 0 2.829 2.828" />
+                            <path d="M16.681 16.673a8.717 8.717 0 0 1 -4.681 1.327c-3.6 0 -6.6 -2 -9 -6c1.272 -2.12 2.712 -3.678 4.32 -4.674m2.86 -1.146a9.055 9.055 0 0 1 1.82 -.18c3.6 0 6.6 2 9 6c-.666 1.11 -1.379 2.067 -2.138 2.87" />
+                            <path d="M3 3l18 18" />
+                          </svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+                            <path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />
+                          </svg>
+                        )}
+                      </a>
+                    </span>
                   </div>
                 </div>
               )}
               <div className="mb-3">
                 <label className="form-label">New Password</label>
-                <div className="input-icon">
-                  <span className="input-icon-addon">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                      <path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6z" />
-                      <path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" />
-                      <path d="M8 11v-4a4 4 0 1 1 8 0v4" />
-                    </svg>
-                  </span>
+                <div className="input-group input-group-flat">
                   <input
                     type={showNewPassword ? 'text' : 'password'}
                     name="newPassword"
                     className={`form-control ${fieldErrors.newPassword ? 'is-invalid' : ''}`}
-                    placeholder="Enter your new password (min. 6 characters)"
+                    placeholder="Enter your new password"
                     value={formData.newPassword}
                     onChange={handleInputChange}
-                    autoComplete="new-password"
+                    autoComplete="off"
                     required
                     minLength={6}
                   />
-                  <button
-                    type="button"
-                    className="input-icon-addon"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                    tabIndex={-1}
-                    style={{ cursor: 'pointer', border: 'none', background: 'transparent' }}
-                    aria-label={showNewPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showNewPassword ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                        <path d="M10.585 10.587a2 2 0 0 0 2.829 2.828" />
-                        <path d="M16.681 16.673a8.717 8.717 0 0 1 -4.681 1.327c-3.6 0 -6.6 -2 -9 -6c1.272 -2.12 2.712 -3.678 4.32 -4.674m2.86 -1.146a9.055 9.055 0 0 1 1.82 -.18c3.6 0 6.6 2 9 6c-.666 1.11 -1.379 2.067 -2.138 2.87" />
-                        <path d="M3 3l18 18" />
-                      </svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                        <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
-                        <path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />
-                      </svg>
-                    )}
-                  </button>
+                  <span className="input-group-text" style={{ padding: 0 }}>
+                    <a
+                      href="#"
+                      className="link-secondary d-flex align-items-center justify-content-center"
+                      style={{ padding: '0.5rem 0.75rem', cursor: 'pointer' }}
+                      title={showNewPassword ? 'Hide password' : 'Show password'}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setShowNewPassword(!showNewPassword);
+                      }}
+                    >
+                      {showNewPassword ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10.585 10.587a2 2 0 0 0 2.829 2.828" />
+                          <path d="M16.681 16.673a8.717 8.717 0 0 1 -4.681 1.327c-3.6 0 -6.6 -2 -9 -6c1.272 -2.12 2.712 -3.678 4.32 -4.674m2.86 -1.146a9.055 9.055 0 0 1 1.82 -.18c3.6 0 6.6 2 9 6c-.666 1.11 -1.379 2.067 -2.138 2.87" />
+                          <path d="M3 3l18 18" />
+                        </svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+                          <path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />
+                        </svg>
+                      )}
+                    </a>
+                  </span>
                 </div>
                 <small className="form-hint">
                   Password must be at least 6 characters long.
@@ -234,15 +222,7 @@ const ChangePassword = () => {
               </div>
               <div className="mb-3">
                 <label className="form-label">Confirm New Password</label>
-                <div className="input-icon">
-                  <span className="input-icon-addon">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                      <path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6z" />
-                      <path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" />
-                      <path d="M8 11v-4a4 4 0 1 1 8 0v4" />
-                    </svg>
-                  </span>
+                <div className="input-group input-group-flat">
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
                     name="confirmPassword"
@@ -250,33 +230,35 @@ const ChangePassword = () => {
                     placeholder="Confirm your new password"
                     value={formData.confirmPassword}
                     onChange={handleInputChange}
-                    autoComplete="new-password"
+                    autoComplete="off"
                     required
                     minLength={6}
                   />
-                  <button
-                    type="button"
-                    className="input-icon-addon"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    tabIndex={-1}
-                    style={{ cursor: 'pointer', border: 'none', background: 'transparent' }}
-                    aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showConfirmPassword ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                        <path d="M10.585 10.587a2 2 0 0 0 2.829 2.828" />
-                        <path d="M16.681 16.673a8.717 8.717 0 0 1 -4.681 1.327c-3.6 0 -6.6 -2 -9 -6c1.272 -2.12 2.712 -3.678 4.32 -4.674m2.86 -1.146a9.055 9.055 0 0 1 1.82 -.18c3.6 0 6.6 2 9 6c-.666 1.11 -1.379 2.067 -2.138 2.87" />
-                        <path d="M3 3l18 18" />
-                      </svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                        <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
-                        <path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />
-                      </svg>
-                    )}
-                  </button>
+                  <span className="input-group-text" style={{ padding: 0 }}>
+                    <a
+                      href="#"
+                      className="link-secondary d-flex align-items-center justify-content-center"
+                      style={{ padding: '0.5rem 0.75rem', cursor: 'pointer' }}
+                      title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setShowConfirmPassword(!showConfirmPassword);
+                      }}
+                    >
+                      {showConfirmPassword ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10.585 10.587a2 2 0 0 0 2.829 2.828" />
+                          <path d="M16.681 16.673a8.717 8.717 0 0 1 -4.681 1.327c-3.6 0 -6.6 -2 -9 -6c1.272 -2.12 2.712 -3.678 4.32 -4.674m2.86 -1.146a9.055 9.055 0 0 1 1.82 -.18c3.6 0 6.6 2 9 6c-.666 1.11 -1.379 2.067 -2.138 2.87" />
+                          <path d="M3 3l18 18" />
+                        </svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+                          <path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />
+                        </svg>
+                      )}
+                    </a>
+                  </span>
                 </div>
               </div>
               <div className="form-footer">
