@@ -86,18 +86,19 @@ function getManageableRoles(userRole) {
 
 /**
  * Check if user can add/manage users
- * Only GA, Administrator, and Manager can manage users
+ * GA, Administrator, Manager, Credit Senior, Credit Controller can manage users
+ * (Each role can only manage users at or below their level)
  */
 function canAddUsers(userRole) {
-  return ['global_admin', 'administrator', 'manager'].includes(userRole);
+  return ['global_admin', 'administrator', 'manager', 'credit_senior', 'credit_controller'].includes(userRole);
 }
 
 /**
  * Check if user can view users list
- * Only GA, Administrator, and Manager can view users
+ * GA, Administrator, Manager, Credit Senior, Credit Controller can view users
  */
 function canViewUsers(userRole) {
-  return ['global_admin', 'administrator', 'manager'].includes(userRole);
+  return ['global_admin', 'administrator', 'manager', 'credit_senior', 'credit_controller'].includes(userRole);
 }
 
 /**
