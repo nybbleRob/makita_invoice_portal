@@ -207,38 +207,39 @@ const Register = () => {
             )}
             
             <form onSubmit={handleSubmit} autoComplete="off">
-              <div className="mb-3">
-                <label htmlFor="firstName" className="form-label">
-                  First Name <span className="text-danger">*</span>
-                </label>
-                <input
-                  id="firstName"
-                  type="text"
-                  className={`form-control ${fieldErrors.firstName ? 'is-invalid' : ''}`}
-                  placeholder="First name"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  autoComplete="off"
-                  required
-                />
-                {fieldErrors.firstName && <div className="invalid-feedback d-block">{fieldErrors.firstName}</div>}
-              </div>
-              
-              <div className="mb-3">
-                <label htmlFor="lastName" className="form-label">
-                  Last Name <span className="text-danger">*</span>
-                </label>
-                <input
-                  id="lastName"
-                  type="text"
-                  className={`form-control ${fieldErrors.lastName ? 'is-invalid' : ''}`}
-                  placeholder="Last name"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  autoComplete="off"
-                  required
-                />
-                {fieldErrors.lastName && <div className="invalid-feedback d-block">{fieldErrors.lastName}</div>}
+              <div className="row mb-3">
+                <div className="col">
+                  <label htmlFor="firstName" className="form-label">
+                    First Name <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    id="firstName"
+                    type="text"
+                    className={`form-control ${fieldErrors.firstName ? 'is-invalid' : ''}`}
+                    placeholder="First name"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    autoComplete="off"
+                    required
+                  />
+                  {fieldErrors.firstName && <div className="invalid-feedback d-block">{fieldErrors.firstName}</div>}
+                </div>
+                <div className="col">
+                  <label htmlFor="lastName" className="form-label">
+                    Last Name <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    id="lastName"
+                    type="text"
+                    className={`form-control ${fieldErrors.lastName ? 'is-invalid' : ''}`}
+                    placeholder="Last name"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    autoComplete="off"
+                    required
+                  />
+                  {fieldErrors.lastName && <div className="invalid-feedback d-block">{fieldErrors.lastName}</div>}
+                </div>
               </div>
               
               <div className="mb-3">
