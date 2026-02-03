@@ -135,7 +135,7 @@ const UserManagement = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
-  // Client-side status filter (status isn't sent to server to avoid complexity)
+  // Client-side status filter and role sorting
   useEffect(() => {
     // Safety check: ensure users is an array
     if (!Array.isArray(users)) {
@@ -151,6 +151,27 @@ const UserManagement = () => {
         (user) => (statusFilter === 'active' && user.isActive) || (statusFilter === 'inactive' && !user.isActive)
       );
     }
+
+    // Sort by role hierarchy (Global Admin first, Notification Contact last)
+    const ROLE_ORDER = {
+      global_admin: 1,
+      administrator: 2,
+      manager: 3,
+      credit_senior: 4,
+      credit_controller: 5,
+      external_user: 6,
+      notification_contact: 7
+    };
+    
+    filtered.sort((a, b) => {
+      const orderA = ROLE_ORDER[a.role] || 99;
+      const orderB = ROLE_ORDER[b.role] || 99;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      // Secondary sort by name if same role
+      return (a.name || '').localeCompare(b.name || '');
+    });
 
     setFilteredUsers(filtered);
   }, [users, statusFilter]);
