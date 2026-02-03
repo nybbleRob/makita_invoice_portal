@@ -242,21 +242,39 @@ const Register = () => {
                 </div>
               </div>
               
-              <div className="mb-3">
-                <label htmlFor="companyName" className="form-label">
-                  Company Name <span className="text-danger">*</span>
-                </label>
-                <input
-                  id="companyName"
-                  type="text"
-                  className={`form-control ${fieldErrors.companyName ? 'is-invalid' : ''}`}
-                  placeholder="Company name"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  autoComplete="off"
-                  required
-                />
-                {fieldErrors.companyName && <div className="invalid-feedback d-block">{fieldErrors.companyName}</div>}
+              <div className="row mb-3">
+                <div className="col">
+                  <label htmlFor="email" className="form-label">
+                    Email Address <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    className={`form-control ${fieldErrors.email ? 'is-invalid' : ''}`}
+                    placeholder="your@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="off"
+                    required
+                  />
+                  {fieldErrors.email && <div className="invalid-feedback d-block">{fieldErrors.email}</div>}
+                </div>
+                <div className="col">
+                  <label htmlFor="companyName" className="form-label">
+                    Company Name <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    id="companyName"
+                    type="text"
+                    className={`form-control ${fieldErrors.companyName ? 'is-invalid' : ''}`}
+                    placeholder="Company name"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    autoComplete="off"
+                    required
+                  />
+                  {fieldErrors.companyName && <div className="invalid-feedback d-block">{fieldErrors.companyName}</div>}
+                </div>
               </div>
               
               <div className="mb-3">
@@ -272,23 +290,6 @@ const Register = () => {
                   onChange={(e) => setAccountNumber(e.target.value)}
                   autoComplete="off"
                 />
-              </div>
-              
-              <div className="mb-3">
-                <label htmlFor="email" className="form-label">
-                  Email Address <span className="text-danger">*</span>
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  className={`form-control ${fieldErrors.email ? 'is-invalid' : ''}`}
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="off"
-                  required
-                />
-                {fieldErrors.email && <div className="invalid-feedback d-block">{fieldErrors.email}</div>}
               </div>
               
               <div className="form-footer">
