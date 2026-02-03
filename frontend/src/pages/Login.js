@@ -292,10 +292,11 @@ const Login = () => {
                     autoComplete="off"
                     required
                   />
-                  <span className="input-group-text">
+                  <span className="input-group-text" style={{ padding: 0 }}>
                     <a
                       href="#"
-                      className="link-secondary"
+                      className="link-secondary d-flex align-items-center justify-content-center"
+                      style={{ padding: '0.5rem 0.75rem', cursor: 'pointer' }}
                       title={showPassword ? 'Hide password' : 'Show password'}
                       onClick={(e) => {
                         e.preventDefault();
@@ -328,10 +329,10 @@ const Login = () => {
                 </button>
               </div>
             </form>
+            <div className="text-center text-secondary mt-3">
+              Don't have account yet? <Link to="/register">Sign up</Link>
+            </div>
           </div>
-        </div>
-        <div className="text-center text-secondary mt-3">
-          Don't have account yet? <Link to="/register">Sign up</Link>
         </div>
       </div>
     </div>
