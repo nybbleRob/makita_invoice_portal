@@ -84,7 +84,7 @@
                                                         </tr>
 
                                                         <tr>
-                                                            <td class="content text-center" style="padding: 48px;" align="center">
+                                                            <td class="content" style="padding: 48px;">
                                                                 <p style="margin: 0 0 24px;">
                                                                     Hi {{userName}},
                                                                 </p>
@@ -92,7 +92,29 @@
                                                                     Great news! Your registration request for <strong>{{companyName}}</strong> has been approved.
                                                                 </p>
                                                                 <p style="margin: 0 0 24px;">
-                                                                    You can now log in to the portal using your email address and password.
+                                                                    You can now log in to the portal using the details below:
+                                                                </p>
+
+                                                                <!-- Login Details -->
+                                                                <table style="border-collapse: collapse; width: 100%; background-color: #f9fafb; margin-bottom: 24px;">
+                                                                    <tr>
+                                                                        <td style="padding: 16px;">
+                                                                            <table style="border-collapse: collapse; width: 100%;">
+                                                                                <tr>
+                                                                                    <td style="padding: 4px 0; color: #667382;">Email:</td>
+                                                                                    <td style="padding: 4px 0; font-weight: 600; text-align: right;">{{userEmail}}</td>
+                                                                                </tr>
+                                                                                <tr>
+                                                                                    <td style="padding: 4px 0; color: #667382;">Temporary Password:</td>
+                                                                                    <td style="padding: 4px 0; font-weight: 600; text-align: right; font-family: monospace; letter-spacing: 1px;">{{temporaryPassword}}</td>
+                                                                                </tr>
+                                                                            </table>
+                                                                        </td>
+                                                                    </tr>
+                                                                </table>
+
+                                                                <p style="margin: 0 0 24px; color: #d63939; font-weight: 500;">
+                                                                    Please change your password after your first login for security.
                                                                 </p>
                                                             </td>
                                                         </tr>
@@ -103,7 +125,7 @@
                                                                 <table cellspacing="0" cellpadding="0" role="presentation" style="border-collapse: collapse; width: 100%;">
                                                                     <tr>
                                                                         <td align="center">
-                                                                            <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse: separate; width: auto; color: #ffffff;" bgcolor="{{primaryColor}}">
+                                                                            <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse: separate; width: 100%; color: #ffffff;" bgcolor="{{primaryColor}}">
                                                                                 <tr>
                                                                                     <td align="center" valign="top" style="line-height: 100%;">
                                                                                         <!--[if !mso]><!-->
@@ -118,19 +140,6 @@
                                                                     </tr>
                                                                 </table>
                                                                 <!-- /BUTTON -->
-                                                            </td>
-                                                        </tr>
-
-                                                        <tr>
-                                                            <td class="content pt-0" style="padding: 0 48px 48px;">
-                                                                <table style="border-collapse: collapse; width: 100%; background-color: #e7f5ff; border: 1px solid #4299e1;">
-                                                                    <tr>
-                                                                        <td style="padding: 16px; font-size: 14px; color: #1e5f8b;">
-                                                                            <strong>First time logging in?</strong><br />
-                                                                            You should have received a separate email with your temporary password. If you haven't received it, you can use the "Forgot Password" link on the login page.
-                                                                        </td>
-                                                                    </tr>
-                                                                </table>
                                                             </td>
                                                         </tr>
 

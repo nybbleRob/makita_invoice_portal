@@ -317,6 +317,7 @@ router.post('/:id/approve', async (req, res) => {
         user.email,
         {
           userName: user.name,
+          userEmail: user.email,
           companyName: settings.companyName,
           loginUrl: loginUrl,
           temporaryPassword: tempPassword

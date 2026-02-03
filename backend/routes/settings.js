@@ -894,6 +894,8 @@ router.post('/email-templates/:templateName/test', auth, globalAdmin, async (req
         break;
       case 'registration-approved':
         testData.loginUrl = getLoginUrl();
+        testData.userEmail = recipientEmail;
+        testData.temporaryPassword = 'TempPass123!';
         break;
       case 'registration-rejected':
         testData.rejectionReason = 'Unable to verify account details. Please contact support for more information.';

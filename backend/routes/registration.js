@@ -103,7 +103,7 @@ router.post('/submit', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) 
             applicantFirstName: firstName,
             applicantLastName: lastName,
             applicantEmail: email,
-            companyName: companyName,
+            applicantCompanyName: companyName,
             accountNumber: accountNumber || 'N/A',
             reviewUrl: reviewUrl,
             registrationId: registration.id
