@@ -19,9 +19,9 @@ const ImportData = () => {
   const [previewFilter, setPreviewFilter] = useState('all'); // 'all', 'valid', 'warning', 'error', 'create', 'update'
   const [lastImport, setLastImport] = useState(null);
 
-  // Check if user is administrator
-  const isAdministrator = () => {
-    return currentUser?.role === 'global_admin' || currentUser?.role === 'administrator';
+  // Check if user can access import data (matches IMPORT_DATA_VIEW permission)
+  const canAccessImportData = () => {
+    return ['global_admin', 'manager', 'credit_senior', 'credit_controller'].includes(currentUser?.role);
   };
 
   // Check if user is global admin
@@ -226,7 +226,7 @@ const ImportData = () => {
   };
 
   // Redirect if not administrator
-  if (!isAdministrator()) {
+  if (!canAccessImportData()) {
     return (
       <div className="page page-center">
         <div className="container container-tight py-4">
