@@ -18,6 +18,25 @@ const { User, Settings } = require('../models');
  * @returns {Object} - { isLocked: boolean, lockedUntil: Date|null, reason: string|null }
  */
 async function checkAccountLockout(user) {
+  // Check if lockout is enabled in settings
+  const settings = await Settings.getSettings();
+  const lockoutEnabled = settings.accountLockoutEnabled === true; // Default to DISABLED for testing
+  
+  // If lockout is disabled, always return not locked (and clear any existing lockout)
+  if (!lockoutEnabled) {
+    if (user.accountLockedUntil) {
+      user.accountLockedUntil = null;
+      user.failedLoginAttempts = 0;
+      user.lockReason = null;
+      await user.save();
+    }
+    return {
+      isLocked: false,
+      lockedUntil: null,
+      reason: null
+    };
+  }
+  
   if (!user.accountLockedUntil) {
     return {
       isLocked: false,
@@ -61,7 +80,7 @@ async function checkAccountLockout(user) {
 async function incrementFailedAttempts(user, ipAddress = null, userAgent = null) {
   // Get lockout settings
   const settings = await Settings.getSettings();
-  const lockoutEnabled = settings.accountLockoutEnabled !== false; // Default to true
+  const lockoutEnabled = settings.accountLockoutEnabled === true; // Default to DISABLED for testing
   const maxAttempts = settings.maxFailedLoginAttempts || 10;
   const lockoutDurationMinutes = settings.lockoutDurationMinutes || 15;
   
@@ -184,7 +203,7 @@ async function getLockoutDuration() {
 async function getLockoutConfig() {
   const settings = await Settings.getSettings();
   return {
-    enabled: settings.accountLockoutEnabled !== false, // Default to true
+    enabled: settings.accountLockoutEnabled === true, // Default to DISABLED for testing
     maxAttempts: settings.maxFailedLoginAttempts || 10,
     durationMinutes: settings.lockoutDurationMinutes || 15
   };
