@@ -630,19 +630,21 @@ const UserManagement = () => {
       return true;
     }
     
-    // Administrator can manage other Administrators and roles below their level
-    if (currentRole === 'administrator') {
-      const ROLE_HIERARCHY = {
-        global_admin: 7,
-        administrator: 6,
-        manager: 5,
-        credit_senior: 4,
-        credit_controller: 3,
-        external_user: 2,
-        notification_contact: 1
-      };
-      const currentLevel = ROLE_HIERARCHY[currentRole] || 0;
-      const targetLevel = ROLE_HIERARCHY[targetRole] || 0;
+    // Define role hierarchy for level comparisons
+    const ROLE_HIERARCHY = {
+      global_admin: 7,
+      administrator: 6,
+      manager: 5,
+      credit_senior: 4,
+      credit_controller: 3,
+      external_user: 2,
+      notification_contact: 1
+    };
+    const currentLevel = ROLE_HIERARCHY[currentRole] || 0;
+    const targetLevel = ROLE_HIERARCHY[targetRole] || 0;
+    
+    // Administrator and Manager can manage roles below their level
+    if (currentRole === 'administrator' || currentRole === 'manager') {
       return currentLevel >= targetLevel;
     }
     
