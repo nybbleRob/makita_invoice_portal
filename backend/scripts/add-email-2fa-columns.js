@@ -4,17 +4,21 @@
  */
 
 require('dotenv').config();
-const { sequelize } = require('../models');
+const { sequelize, User } = require('../models');
 
 async function addEmail2FAColumns() {
   try {
     console.log('Adding email 2FA columns to Users table...');
     
-    // Check if columns already exist
+    // Get the actual table name from the model
+    const tableName = User.getTableName();
+    console.log('Table name:', tableName);
+    
+    // Check if columns already exist (case-insensitive search for table name)
     const [results] = await sequelize.query(`
       SELECT column_name 
       FROM information_schema.columns 
-      WHERE table_name = 'Users' 
+      WHERE LOWER(table_name) = LOWER('${tableName}')
       AND column_name IN ('twoFactorMethod', 'emailTwoFactorCode', 'emailTwoFactorExpires')
     `);
     
@@ -25,7 +29,7 @@ async function addEmail2FAColumns() {
     if (!existingColumns.includes('twoFactorMethod')) {
       console.log('Adding twoFactorMethod column...');
       await sequelize.query(`
-        ALTER TABLE "Users" 
+        ALTER TABLE "${tableName}" 
         ADD COLUMN "twoFactorMethod" VARCHAR(255) DEFAULT NULL
       `);
       console.log('✅ twoFactorMethod column added');
@@ -37,7 +41,7 @@ async function addEmail2FAColumns() {
     if (!existingColumns.includes('emailTwoFactorCode')) {
       console.log('Adding emailTwoFactorCode column...');
       await sequelize.query(`
-        ALTER TABLE "Users" 
+        ALTER TABLE "${tableName}" 
         ADD COLUMN "emailTwoFactorCode" VARCHAR(6) DEFAULT NULL
       `);
       console.log('✅ emailTwoFactorCode column added');
@@ -49,7 +53,7 @@ async function addEmail2FAColumns() {
     if (!existingColumns.includes('emailTwoFactorExpires')) {
       console.log('Adding emailTwoFactorExpires column...');
       await sequelize.query(`
-        ALTER TABLE "Users" 
+        ALTER TABLE "${tableName}" 
         ADD COLUMN "emailTwoFactorExpires" TIMESTAMP WITH TIME ZONE DEFAULT NULL
       `);
       console.log('✅ emailTwoFactorExpires column added');
