@@ -152,12 +152,13 @@ const Login = () => {
         navigate(redirectPath);
       } else if (result.requires2FASetup) {
         setError('');
-        console.log('Redirecting to 2FA setup with sessionToken:', result.sessionToken ? 'Present' : 'MISSING');
-        navigate('/two-factor-setup', {
+        console.log('Redirecting to 2FA method select with sessionToken:', result.sessionToken ? 'Present' : 'MISSING');
+        // Redirect to method selection page for first-time 2FA setup
+        navigate('/two-factor-method-select', {
           state: {
             user: result.user,
             sessionToken: result.sessionToken,
-            password: password,
+            allowedMethods: result.allowedMethods || ['authenticator', 'email'],
             from: getRedirectPath() // Preserve redirect destination
           }
         });
@@ -169,6 +170,7 @@ const Login = () => {
             user: result.user,
             sessionToken: result.sessionToken,
             password: password,
+            twoFactorMethod: result.twoFactorMethod || 'authenticator',
             from: getRedirectPath() // Preserve redirect destination
           }
         });

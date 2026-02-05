@@ -435,6 +435,35 @@ const Profile = () => {
                             </p>
                           </div>
                         </div>
+                        
+                        {/* Show current 2FA method */}
+                        {profile.twoFactorEnabled && profile.twoFactorMethod && (
+                          <div className="mt-3">
+                            <span className="text-secondary">Method: </span>
+                            <span className="fw-medium">
+                              {profile.twoFactorMethod === 'email' ? (
+                                <>
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-sm me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                    <path d="M3 7a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-10z" />
+                                    <path d="M3 7l9 6l9 -6" />
+                                  </svg>
+                                  Email
+                                </>
+                              ) : (
+                                <>
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-sm me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                    <path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" />
+                                    <path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+                                    <path d="M12 12l0 2.5" />
+                                  </svg>
+                                  Authenticator App
+                                </>
+                              )}
+                            </span>
+                          </div>
+                        )}
                       </div>
 
                       {profile.twoFactorEnabled && (
@@ -442,11 +471,11 @@ const Profile = () => {
                           <div className="alert alert-warning">
                             <h4 className="alert-title">Reset Two-Factor Authentication</h4>
                             <p className="text-secondary">
-                              If you've lost access to your authenticator app or want to reset your 2FA, 
+                              If you want to change your 2FA method or reset your current setup, 
                               you can disable it here. You'll need to enter your password to confirm.
                             </p>
                             <p className="text-secondary mb-0">
-                              <strong>Note:</strong> If 2FA is required globally, you'll need to set it up again on your next login.
+                              <strong>Note:</strong> If 2FA is required globally, you'll be able to choose a new method on your next login.
                             </p>
                           </div>
                           

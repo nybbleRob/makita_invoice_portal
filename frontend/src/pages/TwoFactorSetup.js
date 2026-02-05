@@ -255,6 +255,26 @@ const TwoFactorSetup = () => {
                 </div>
               </form>
             )}
+
+            {/* Back link - only show if coming from method selection */}
+            {location.state?.fromMethodSelect && (
+              <div className="text-center mt-3">
+                <button
+                  type="button"
+                  className="btn btn-link text-secondary p-0"
+                  onClick={() => navigate('/2fa-method-select', {
+                    state: {
+                      sessionToken: location.state?.sessionToken,
+                      user: location.state?.user,
+                      allowedMethods: location.state?.allowedMethods || ['authenticator', 'email'],
+                      from: location.state?.from
+                    }
+                  })}
+                >
+                  Choose a different method
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

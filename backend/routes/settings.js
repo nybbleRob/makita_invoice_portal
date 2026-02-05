@@ -905,6 +905,10 @@ router.post('/email-templates/:templateName/test', auth, globalAdmin, async (req
         testData.userEmail = recipientEmail;
         testData.accountNumber = 'ACC-12345';
         break;
+      case 'two-factor-code':
+        testData.verificationCode = '123456';
+        testData.expiryMinutes = '10';
+        break;
     }
     
     // Pass request context for logging

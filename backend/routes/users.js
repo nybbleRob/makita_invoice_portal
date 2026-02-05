@@ -1329,8 +1329,8 @@ router.delete('/:id/two-factor', canManageUsers, async (req, res) => {
       return res.status(404).json({ message: 'Current user not found' });
     }
 
-    // Only global_admin and administrator can remove 2FA
-    if (currentUser.role !== 'global_admin' && currentUser.role !== 'administrator') {
+    // Only global_admin, administrator, and manager can remove 2FA
+    if (!['global_admin', 'administrator', 'manager'].includes(currentUser.role)) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -1348,6 +1348,9 @@ router.delete('/:id/two-factor', canManageUsers, async (req, res) => {
     targetUser.twoFactorSecret = null;
     targetUser.twoFactorEnabled = false;
     targetUser.twoFactorVerified = false;
+    targetUser.twoFactorMethod = null;
+    targetUser.emailTwoFactorCode = null;
+    targetUser.emailTwoFactorExpires = null;
     await targetUser.save();
 
     // Log 2FA removal

@@ -253,6 +253,7 @@ router.post('/login', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) =
 
     // Check 2FA requirements
     const requires2FA = settings.twoFactorAuth.enabled && settings.twoFactorAuth.required;
+    const allowedMethods = settings.twoFactorAuth.allowedMethods || ['authenticator', 'email'];
 
     if (requires2FA) {
       // Check if user has 2FA enabled and verified
@@ -261,11 +262,12 @@ router.post('/login', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) =
         const { generateSessionToken } = require('../utils/sessionToken');
         const sessionToken = await generateSessionToken(user.id, user.email);
         
-        // User needs to setup 2FA first
+        // User needs to setup 2FA first - redirect to method selection
         return res.status(200).json({
           requires2FASetup: true,
-          message: '2FA setup required. Please complete 2FA setup to continue.',
+          message: '2FA setup required. Please choose your preferred 2FA method.',
           sessionToken: sessionToken, // Temporary token for 2FA setup
+          allowedMethods: allowedMethods, // Available 2FA methods
           user: {
             id: user.id,
             email: user.email,
@@ -274,38 +276,96 @@ router.post('/login', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) =
         });
       }
 
-      // Check if 2FA code was provided
+      // User has 2FA enabled - check if code was provided
       if (!req.body.twoFactorCode) {
         // Generate temporary session token for 2FA verification (avoids passing password)
         const { generateSessionToken } = require('../utils/sessionToken');
         const sessionToken = await generateSessionToken(user.id, user.email);
         
+        const twoFactorMethod = user.twoFactorMethod || 'authenticator';
+        
+        // For email method, auto-send a code
+        if (twoFactorMethod === 'email') {
+          const crypto = require('crypto');
+          const sendTemplatedEmail = require('../utils/sendTemplatedEmail');
+          
+          // Generate 6-digit code
+          const code = crypto.randomInt(100000, 999999).toString();
+          const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+          
+          // Store code
+          user.emailTwoFactorCode = code;
+          user.emailTwoFactorExpires = expiresAt;
+          await user.save();
+          
+          // Send email
+          try {
+            await sendTemplatedEmail(
+              'two-factor-code',
+              user.email,
+              {
+                userName: user.name,
+                verificationCode: code,
+                expiryMinutes: '10'
+              },
+              { context: { type: '2fa-login', userId: user.id } }
+            );
+          } catch (emailError) {
+            console.error('Failed to send 2FA email:', emailError);
+            // Continue anyway - user can request resend
+          }
+        }
+        
         return res.status(200).json({
           requires2FA: true,
-          message: '2FA verification code required',
+          message: twoFactorMethod === 'email' 
+            ? 'Verification code sent to your email' 
+            : '2FA verification code required',
+          twoFactorMethod: twoFactorMethod,
           sessionToken: sessionToken, // Temporary token for 2FA verification
           user: {
             id: user.id,
-            email: user.email,
+            email: user.email.replace(/(.{2})(.*)(@.*)/, '$1***$3'), // Mask email
             name: user.name
           }
         });
       }
 
-      // Verify 2FA code
+      // Verify 2FA code based on method
       const speakeasy = require('speakeasy');
+      const twoFactorMethod = user.twoFactorMethod || 'authenticator';
+      let verified = false;
       
-      // SECURITY: Ensure 2FA secret exists
-      if (!user.twoFactorSecret) {
-        return res.status(401).json({ message: '2FA not configured' });
+      if (twoFactorMethod === 'email') {
+        // Verify email code
+        if (!user.emailTwoFactorCode || !user.emailTwoFactorExpires) {
+          return res.status(401).json({ message: 'No verification code found. Please request a new code.' });
+        }
+        
+        if (new Date() > new Date(user.emailTwoFactorExpires)) {
+          return res.status(401).json({ message: 'Verification code has expired. Please request a new code.' });
+        }
+        
+        verified = user.emailTwoFactorCode === req.body.twoFactorCode;
+        
+        // Clear code after verification attempt
+        if (verified) {
+          user.emailTwoFactorCode = null;
+          user.emailTwoFactorExpires = null;
+        }
+      } else {
+        // Verify authenticator TOTP code
+        if (!user.twoFactorSecret) {
+          return res.status(401).json({ message: '2FA not configured' });
+        }
+        
+        verified = speakeasy.totp.verify({
+          secret: user.twoFactorSecret,
+          encoding: 'base32',
+          token: req.body.twoFactorCode,
+          window: 2 // Allow 2 time steps (60 seconds) tolerance
+        });
       }
-      
-      const verified = speakeasy.totp.verify({
-        secret: user.twoFactorSecret,
-        encoding: 'base32',
-        token: req.body.twoFactorCode,
-        window: 2 // Allow 2 time steps (60 seconds) tolerance
-      });
 
       if (!verified) {
         return res.status(401).json({ message: 'Invalid 2FA code' });

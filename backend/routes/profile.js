@@ -560,6 +560,9 @@ router.post('/reset-2fa', auth, async (req, res) => {
     user.twoFactorSecret = null;
     user.twoFactorEnabled = false;
     user.twoFactorVerified = false;
+    user.twoFactorMethod = null;
+    user.emailTwoFactorCode = null;
+    user.emailTwoFactorExpires = null;
     await user.save();
     
     const userObj = user.toSafeObject ? user.toSafeObject() : user.toJSON();

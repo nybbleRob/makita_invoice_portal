@@ -10,6 +10,7 @@ import ResetPassword from './pages/ResetPassword';
 import ValidateEmailChange from './pages/ValidateEmailChange';
 import TwoFactorSetup from './pages/TwoFactorSetup';
 import TwoFactorVerify from './pages/TwoFactorVerify';
+import TwoFactorMethodSelect from './pages/TwoFactorMethodSelect';
 import ChangePassword from './pages/ChangePassword';
 import Settings from './pages/Settings';
 import UserManagement from './pages/UserManagement';
@@ -144,6 +145,11 @@ function AppRoutes() {
       <Route path="/validate-email-change" element={<ValidateEmailChange />} />
       <Route path="/two-factor-setup" element={<TwoFactorSetup />} />
       <Route path="/two-factor-verify" element={<TwoFactorVerify />} />
+      <Route path="/two-factor-method-select" element={<TwoFactorMethodSelect />} />
+      {/* Aliases for shorter 2FA routes */}
+      <Route path="/2fa-setup" element={<TwoFactorSetup />} />
+      <Route path="/2fa-verify" element={<TwoFactorVerify />} />
+      <Route path="/2fa-method-select" element={<TwoFactorMethodSelect />} />
       <Route path="/change-password" element={<ChangePassword />} />
       
       {/* Protected routes - require authentication */}

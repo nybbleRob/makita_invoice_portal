@@ -72,7 +72,8 @@ module.exports = (sequelize) => {
       defaultValue: {
         enabled: false,
         required: false,
-        issuer: 'Makita EDI Portal'
+        issuer: 'Makita EDI Portal',
+        allowedMethods: ['authenticator', 'email']
       }
     },
     emailProvider: {

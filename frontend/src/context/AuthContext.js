@@ -55,6 +55,7 @@ export const AuthProvider = ({ children }) => {
           requires2FASetup: true,
           user: response.data.user,
           sessionToken: response.data.sessionToken, // IMPORTANT: Pass session token
+          allowedMethods: response.data.allowedMethods || ['authenticator', 'email'],
           message: response.data.message
         };
       }
@@ -66,6 +67,7 @@ export const AuthProvider = ({ children }) => {
           requires2FA: true,
           user: response.data.user,
           sessionToken: response.data.sessionToken, // IMPORTANT: Pass session token
+          twoFactorMethod: response.data.twoFactorMethod || 'authenticator',
           message: response.data.message
         };
       }

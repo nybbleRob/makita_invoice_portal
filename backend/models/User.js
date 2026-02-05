@@ -117,6 +117,22 @@ module.exports = (sequelize) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+    twoFactorMethod: {
+      type: DataTypes.ENUM('authenticator', 'email'),
+      allowNull: true,
+      defaultValue: null,
+      comment: 'The 2FA method chosen by user: authenticator app or email'
+    },
+    emailTwoFactorCode: {
+      type: DataTypes.STRING(6),
+      allowNull: true,
+      comment: 'Temporary 6-digit code for email 2FA'
+    },
+    emailTwoFactorExpires: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'Expiry time for email 2FA code'
+    },
     passwordExpiryDate: {
       type: DataTypes.DATE,
       allowNull: true
@@ -265,6 +281,7 @@ module.exports = (sequelize) => {
     const user = this.toJSON();
     delete user.password;
     delete user.twoFactorSecret;
+    delete user.emailTwoFactorCode;
     delete user.resetPasswordToken;
     delete user.resetPasswordExpires;
     delete user.emailChangeToken;
