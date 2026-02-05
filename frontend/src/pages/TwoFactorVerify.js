@@ -20,7 +20,8 @@ const TwoFactorVerify = () => {
   // Get data from location state (passed from login or method select)
   const userData = location.state?.user || {};
   const twoFactorMethod = location.state?.twoFactorMethod || 'authenticator';
-  const maskedEmail = location.state?.maskedEmail || userData.email;
+  // Use maskedEmail for display, but userData.email for authentication
+  const maskedEmail = location.state?.maskedEmail || userData.maskedEmail || userData.email;
   const sessionToken = location.state?.sessionToken;
   const isSetup = location.state?.isSetup || false; // True if coming from method selection (first-time setup)
   const from = location.state?.from;

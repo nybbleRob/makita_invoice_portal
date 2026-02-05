@@ -325,7 +325,8 @@ router.post('/login', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) =
           sessionToken: sessionToken, // Temporary token for 2FA verification
           user: {
             id: user.id,
-            email: user.email.replace(/(.{2})(.*)(@.*)/, '$1***$3'), // Mask email
+            email: user.email, // Keep full email for re-authentication
+            maskedEmail: user.email.replace(/(.{2})(.*)(@.*)/, '$1***$3'), // Masked for display
             name: user.name
           }
         });

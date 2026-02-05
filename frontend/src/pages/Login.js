@@ -171,6 +171,7 @@ const Login = () => {
             sessionToken: result.sessionToken,
             password: password,
             twoFactorMethod: result.twoFactorMethod || 'authenticator',
+            maskedEmail: result.user?.maskedEmail, // For display
             from: getRedirectPath() // Preserve redirect destination
           }
         });
