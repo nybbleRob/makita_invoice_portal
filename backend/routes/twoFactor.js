@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { User, Settings } = require('../models');
 const auth = require('../middleware/auth');
-const sendTemplatedEmail = require('../utils/sendTemplatedEmail');
+const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
 const router = express.Router();
 
 // Rate limiting storage for email 2FA (in-memory, could be Redis in production)

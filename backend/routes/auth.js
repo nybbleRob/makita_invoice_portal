@@ -287,7 +287,7 @@ router.post('/login', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) =
         // For email method, auto-send a code
         if (twoFactorMethod === 'email') {
           const crypto = require('crypto');
-          const sendTemplatedEmail = require('../utils/sendTemplatedEmail');
+          const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
           
           // Generate 6-digit code
           const code = crypto.randomInt(100000, 999999).toString();
