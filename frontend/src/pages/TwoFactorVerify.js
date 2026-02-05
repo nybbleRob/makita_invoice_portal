@@ -24,6 +24,7 @@ const TwoFactorVerify = () => {
   const maskedEmail = location.state?.maskedEmail || userData.maskedEmail || userData.email;
   const sessionToken = location.state?.sessionToken;
   const isSetup = location.state?.isSetup || false; // True if coming from method selection (first-time setup)
+  const fromProfile = location.state?.fromProfile || false; // True if coming from Profile page (already logged in)
   const from = location.state?.from;
 
   // Cooldown timer for resend button
@@ -49,11 +50,24 @@ const TwoFactorVerify = () => {
     try {
       if (isSetup) {
         // First-time setup flow - use verify-setup endpoint
-        const response = await api.post('/api/two-factor/verify-setup', {
+        // If coming from Profile (JWT auth), don't pass sessionToken
+        const requestBody = {
           token: verificationCode,
-          sessionToken: sessionToken,
           method: twoFactorMethod
-        });
+        };
+        if (sessionToken) {
+          requestBody.sessionToken = sessionToken;
+        }
+        
+        const response = await api.post('/api/two-factor/verify-setup', requestBody);
+
+        // If coming from Profile, just refresh user and redirect back
+        if (fromProfile) {
+          toast.success('2FA enabled successfully!');
+          await refreshUser();
+          navigate('/profile');
+          return;
+        }
 
         if (response.data.token && response.data.user) {
           // Store token and user
@@ -126,10 +140,13 @@ const TwoFactorVerify = () => {
     
     setResending(true);
     try {
-      const response = await api.post('/api/two-factor/send-email-code', {
-        email: userData.email,
-        sessionToken: sessionToken
-      });
+      // If coming from Profile (JWT auth), don't pass sessionToken
+      const requestBody = { email: userData.email };
+      if (sessionToken) {
+        requestBody.sessionToken = sessionToken;
+      }
+      
+      const response = await api.post('/api/two-factor/send-email-code', requestBody);
       
       toast.success(response.data.message || 'Verification code sent!');
       setCooldown(60); // 60 second cooldown

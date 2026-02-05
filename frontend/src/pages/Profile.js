@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import toast from '../utils/toast';
 import { getRoleLabel } from '../utils/roleLabels';
@@ -6,6 +7,7 @@ import { getInitials, getAvatarColorClass } from '../utils/avatar';
 import { useAuth } from '../context/AuthContext';
 
 const Profile = () => {
+  const navigate = useNavigate();
   const { refreshUser } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -527,12 +529,29 @@ const Profile = () => {
                       )}
 
                       {!profile.twoFactorEnabled && (
-                        <div className="alert alert-info">
+                        <div className="alert alert-info mb-3">
                           <h4 className="alert-title">Enable Two-Factor Authentication</h4>
-                          <p className="text-secondary mb-0">
-                            Two-factor authentication helps secure your account. If 2FA is required by your administrator, 
-                            you'll be prompted to set it up on your next login.
+                          <p className="text-secondary mb-2">
+                            Two-factor authentication helps secure your account. You can set it up now or wait until your next login.
                           </p>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => navigate('/two-factor-method-select', {
+                              state: {
+                                fromProfile: true,
+                                user: { id: profile.id, email: profile.email, name: profile.name }
+                              }
+                            })}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="icon me-2" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                              <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                              <path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" />
+                              <path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+                              <path d="M12 12l0 2.5" />
+                            </svg>
+                            Set Up 2FA Now
+                          </button>
                         </div>
                       )}
                     </div>

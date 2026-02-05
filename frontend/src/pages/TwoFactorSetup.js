@@ -19,10 +19,11 @@ const TwoFactorSetup = () => {
   const [error, setError] = useState('');
   
   // User data available from location state (passed from login): location.state?.user
+  const fromProfile = location.state?.fromProfile || false;
 
   useEffect(() => {
-    // Check if we have required data
-    if (!location.state?.sessionToken && !location.state?.user) {
+    // Check if we have required data (sessionToken for login flow, or fromProfile for authenticated flow)
+    if (!location.state?.sessionToken && !location.state?.user && !fromProfile) {
       console.error('2FA Setup - Missing required data, redirecting to login');
       toast.error('Session expired. Please login again.');
       setTimeout(() => navigate('/login'), 2000);
@@ -38,17 +39,19 @@ const TwoFactorSetup = () => {
       setLoading(true);
       setError(''); // Clear previous errors
       
-      // SECURITY: Use session token instead of password
+      // SECURITY: Use session token instead of password (or JWT auth if from Profile)
       const sessionToken = location.state?.sessionToken;
       console.log('2FA Setup - Session token:', sessionToken ? 'Present' : 'MISSING');
+      console.log('2FA Setup - From Profile:', fromProfile);
       console.log('2FA Setup - Location state:', location.state);
       
-      if (!sessionToken) {
+      if (!sessionToken && !fromProfile) {
         throw new Error('Session token is missing. Please try logging in again.');
       }
       
-      // First-time setup - use session token (secure, no password exposure)
-      const response = await api.post('/api/two-factor/setup', { sessionToken });
+      // First-time setup - use session token if available, otherwise API will use JWT auth
+      const requestBody = sessionToken ? { sessionToken } : {};
+      const response = await api.post('/api/two-factor/setup', requestBody);
       console.log('2FA Setup - Response received:', response.data ? 'Success' : 'Failed');
       
       if (!response.data.qrCode) {
@@ -85,15 +88,28 @@ const TwoFactorSetup = () => {
 
     setVerifying(true);
     try {
-      // SECURITY: Use session token instead of password
+      // SECURITY: Use session token instead of password (or JWT auth if from Profile)
       const sessionToken = location.state?.sessionToken;
       
-      const response = await api.post('/api/two-factor/verify-setup', {
+      // If coming from Profile (JWT auth), don't pass sessionToken
+      const requestBody = {
         token: verificationCode,
-        sessionToken: sessionToken
-      });
+        method: 'authenticator'
+      };
+      if (sessionToken) {
+        requestBody.sessionToken = sessionToken;
+      }
+      
+      const response = await api.post('/api/two-factor/verify-setup', requestBody);
       
       toast.success('2FA enabled successfully!');
+      
+      // If coming from Profile, just refresh user and redirect back
+      if (fromProfile) {
+        await refreshUser();
+        navigate('/profile');
+        return;
+      }
       
       // Backend now returns JWT token directly after 2FA setup
       if (response.data.token && response.data.user) {

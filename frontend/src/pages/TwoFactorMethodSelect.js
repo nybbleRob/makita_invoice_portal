@@ -12,19 +12,20 @@ const TwoFactorMethodSelect = () => {
   const [loading, setLoading] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState(null);
   
-  // Get data from location state (passed from login)
+  // Get data from location state (passed from login or profile)
   const sessionToken = location.state?.sessionToken;
+  const fromProfile = location.state?.fromProfile || false; // True if navigating from Profile page
   const allowedMethods = location.state?.allowedMethods || ['authenticator', 'email'];
   const userData = location.state?.user || {};
   const from = location.state?.from;
 
-  // Redirect if missing required data
+  // Redirect if missing required data (unless coming from Profile with JWT auth)
   React.useEffect(() => {
-    if (!sessionToken) {
+    if (!sessionToken && !fromProfile) {
       toast.error('Session expired. Please login again.');
       navigate('/login');
     }
-  }, [sessionToken, navigate]);
+  }, [sessionToken, fromProfile, navigate]);
 
   const handleSelectAuthenticator = () => {
     // Navigate to authenticator setup
@@ -32,8 +33,9 @@ const TwoFactorMethodSelect = () => {
       state: {
         sessionToken,
         user: userData,
-        from,
-        fromMethodSelect: true
+        from: fromProfile ? '/profile' : from,
+        fromMethodSelect: true,
+        fromProfile
       }
     });
   };
@@ -44,9 +46,9 @@ const TwoFactorMethodSelect = () => {
     
     try {
       // Call setup-email endpoint to set method and send code
-      const response = await api.post('/api/two-factor/setup-email', {
-        sessionToken
-      });
+      // If coming from Profile (JWT auth), don't pass sessionToken - API will use JWT
+      const requestBody = sessionToken ? { sessionToken } : {};
+      const response = await api.post('/api/two-factor/setup-email', requestBody);
       
       toast.success(response.data.message || 'Verification code sent!');
       
@@ -57,8 +59,9 @@ const TwoFactorMethodSelect = () => {
           user: userData,
           twoFactorMethod: 'email',
           maskedEmail: response.data.email,
-          from,
-          isSetup: true
+          from: fromProfile ? '/profile' : from,
+          isSetup: true,
+          fromProfile
         }
       });
     } catch (error) {
@@ -177,15 +180,31 @@ const TwoFactorMethodSelect = () => {
               )}
             </div>
 
-            <div className="text-center text-secondary small">
-              <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-sm me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                <path d="M12 9v4" />
-                <path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z" />
-                <path d="M12 16h.01" />
-              </svg>
-              Two-factor authentication is required for your account
-            </div>
+            {fromProfile ? (
+              <div className="text-center mt-3">
+                <button
+                  type="button"
+                  className="btn btn-link text-secondary"
+                  onClick={() => navigate('/profile')}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="icon me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                    <path d="M15 6l-6 6l6 6" />
+                  </svg>
+                  Back to Profile
+                </button>
+              </div>
+            ) : (
+              <div className="text-center text-secondary small">
+                <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-sm me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                  <path d="M12 9v4" />
+                  <path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z" />
+                  <path d="M12 16h.01" />
+                </svg>
+                Two-factor authentication is required for your account
+              </div>
+            )}
           </div>
         </div>
       </div>
