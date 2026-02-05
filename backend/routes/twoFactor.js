@@ -452,6 +452,9 @@ router.post('/setup-email', async (req, res) => {
     // Set rate limit
     setEmailRateLimit(user.id);
 
+    // Get settings for email
+    const emailSettings = await Settings.getSettings();
+
     // Send email
     await sendTemplatedEmail(
       'two-factor-code',
@@ -461,6 +464,7 @@ router.post('/setup-email', async (req, res) => {
         verificationCode: code,
         expiryMinutes: '10'
       },
+      emailSettings,
       { context: { type: '2fa-setup', userId: user.id } }
     );
 
@@ -524,6 +528,9 @@ router.post('/send-email-code', async (req, res) => {
     // Set rate limit
     setEmailRateLimit(user.id);
 
+    // Get settings for email
+    const emailSettings = await Settings.getSettings();
+
     // Send email
     await sendTemplatedEmail(
       'two-factor-code',
@@ -533,6 +540,7 @@ router.post('/send-email-code', async (req, res) => {
         verificationCode: code,
         expiryMinutes: '10'
       },
+      emailSettings,
       { context: { type: '2fa-login', userId: user.id } }
     );
 

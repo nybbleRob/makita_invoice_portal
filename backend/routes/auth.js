@@ -300,6 +300,7 @@ router.post('/login', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) =
           
           // Send email
           try {
+            const emailSettings = await Settings.getSettings();
             await sendTemplatedEmail(
               'two-factor-code',
               user.email,
@@ -308,6 +309,7 @@ router.post('/login', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) =
                 verificationCode: code,
                 expiryMinutes: '10'
               },
+              emailSettings,
               { context: { type: '2fa-login', userId: user.id } }
             );
           } catch (emailError) {
