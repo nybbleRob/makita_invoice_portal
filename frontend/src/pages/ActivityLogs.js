@@ -432,7 +432,7 @@ const ActivityLogs = () => {
       <div className="container-fluid">
           {/* Filters Toolbar */}
           <div className="card mb-3">
-            <div className="card-body">
+            <div className="card-body toolbar-actions">
               <div className="row g-3">
                 <div className="col-md-3">
                   <label className="form-label">Search</label>
@@ -470,7 +470,7 @@ const ActivityLogs = () => {
                   <label className="form-label">Company</label>
                   <button
                     type="button"
-                    className={`btn btn-sm btn-info w-100 ${selectedCompanyIds.length > 0 ? '' : 'btn-outline-info'}`}
+                    className="btn btn-sm btn-info w-100"
                     onClick={() => setShowCompanyFilterModal(true)}
                   >
                     {selectedCompanyIds.length === 0 

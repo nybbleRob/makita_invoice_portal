@@ -792,8 +792,8 @@ const Invoices = () => {
                   <p className="text-secondary m-0">View and manage invoice documents</p>
                 </div>
                 {/* Controls */}
-                <div className="col-lg-9 col-md-8 col-12">
-                  <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
+                <div className="col-lg-9 col-md-8 col-12 pe-0">
+                  <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end toolbar-actions">
                     {/* Search */}
                     <div className="input-group input-group-sm input-group-flat w-auto">
                       <input
@@ -873,7 +873,7 @@ const Invoices = () => {
                     {/* Company filter */}
                     <button
                       type="button"
-                      className={`btn btn-sm btn-info ${selectedCompanyFilters.length > 0 ? '' : 'btn-outline-info'}`}
+                      className="btn btn-sm btn-info"
                       onClick={openCompanyFilterModal}
                     >
                       {selectedCompanyFilters.length === 0 

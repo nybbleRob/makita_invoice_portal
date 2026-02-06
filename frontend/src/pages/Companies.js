@@ -1024,8 +1024,8 @@ const Companies = () => {
                                     <div className="d-flex justify-content-between align-items-center mt-2">
                                       <small className="text-muted">Page {parentPagination.page}/{parentPagination.pages}</small>
                                       <div className="btn-group btn-group-sm">
-                                        <button type="button" className="btn btn-sm btn-outline-secondary" disabled={parentPagination.page === 1} onClick={() => fetchParentCompanies(parentPagination.page - 1)}>Prev</button>
-                                        <button type="button" className="btn btn-sm btn-outline-secondary" disabled={parentPagination.page === parentPagination.pages} onClick={() => fetchParentCompanies(parentPagination.page + 1)}>Next</button>
+                                        <button type="button" className="btn btn-sm btn-secondary" disabled={parentPagination.page === 1} onClick={() => fetchParentCompanies(parentPagination.page - 1)}>Prev</button>
+                                        <button type="button" className="btn btn-sm btn-secondary" disabled={parentPagination.page === parentPagination.pages} onClick={() => fetchParentCompanies(parentPagination.page + 1)}>Next</button>
                                       </div>
                                     </div>
                                   )}
@@ -1152,8 +1152,8 @@ const Companies = () => {
                   <p className="text-secondary m-0">Manage company hierarchy</p>
                 </div>
                 {/* Controls */}
-                <div className="col-lg-9 col-md-8 col-12">
-                  <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
+                <div className="col-lg-9 col-md-8 col-12 pe-0">
+                  <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end toolbar-actions">
                     {/* Search */}
                     <div className="input-group input-group-sm input-group-flat w-auto">
                       <input
@@ -1202,7 +1202,7 @@ const Companies = () => {
                     {/* Type Filter Dropdown */}
                     <div className="dropdown">
                       <button
-                        className="btn btn-sm btn-outline-secondary dropdown-toggle"
+                        className="btn btn-sm btn-secondary dropdown-toggle"
                         type="button"
                         onClick={() => setShowTypeFilterDropdown(!showTypeFilterDropdown)}
                       >
@@ -1243,7 +1243,7 @@ const Companies = () => {
                     {/* Filter Companies */}
                     <button
                       type="button"
-                      className={`btn btn-sm btn-info ${selectedParentFilters.length > 0 ? '' : 'btn-outline-info'}`}
+                      className="btn btn-sm btn-info"
                       onClick={openParentFilterModal}
                     >
                       {selectedParentFilters.length === 0 
@@ -1270,39 +1270,6 @@ const Companies = () => {
                     >
                       Add Company
                     </button>
-                    {/* Export button - visible to administrators and managers */}
-                    {(isAdministrator() || currentUser?.role === 'manager') && (
-                      <div className="dropdown">
-                        <button
-                          className="btn btn-sm btn-outline-primary dropdown-toggle"
-                          type="button"
-                          data-bs-toggle="dropdown"
-                          aria-expanded="false"
-                        >
-                          Export
-                        </button>
-                        <ul className="dropdown-menu">
-                          <li>
-                            <button
-                              className="dropdown-item"
-                              type="button"
-                              onClick={() => handleExportCompanies('csv')}
-                            >
-                              Export as CSV
-                            </button>
-                          </li>
-                          <li>
-                            <button
-                              className="dropdown-item"
-                              type="button"
-                              onClick={() => handleExportCompanies('xlsx')}
-                            >
-                              Export as XLSX
-                            </button>
-                          </li>
-                        </ul>
-                      </div>
-                    )}
                     {/* Bulk Actions */}
                     {isAdministrator() && selectedCompanyIds.length > 0 && (
                       <div className="dropdown">
@@ -1379,6 +1346,39 @@ const Companies = () => {
                               onClick={handleBulkDelete}
                             >
                               Delete Selected
+                            </button>
+                          </li>
+                        </ul>
+                      </div>
+                    )}
+                    {/* Export - last in header */}
+                    {(isAdministrator() || currentUser?.role === 'manager') && (
+                      <div className="dropdown">
+                        <button
+                          className="btn btn-sm btn-primary dropdown-toggle"
+                          type="button"
+                          data-bs-toggle="dropdown"
+                          aria-expanded="false"
+                        >
+                          Export
+                        </button>
+                        <ul className="dropdown-menu">
+                          <li>
+                            <button
+                              className="dropdown-item"
+                              type="button"
+                              onClick={() => handleExportCompanies('csv')}
+                            >
+                              Export as CSV
+                            </button>
+                          </li>
+                          <li>
+                            <button
+                              className="dropdown-item"
+                              type="button"
+                              onClick={() => handleExportCompanies('xlsx')}
+                            >
+                              Export as XLSX
                             </button>
                           </li>
                         </ul>
@@ -1988,7 +1988,7 @@ const Companies = () => {
                           </div>
                           <div className="d-flex gap-2">
                             <button
-                              className="btn btn-sm btn-outline-primary"
+                              className="btn btn-sm btn-primary"
                               onClick={() => setRelationshipsPage(prev => prev - 1)}
                               disabled={relationshipsPage === 1}
                             >
@@ -1998,7 +1998,7 @@ const Companies = () => {
                               Page {relationshipsPage} of {totalPages}
                             </span>
                             <button
-                              className="btn btn-sm btn-outline-primary"
+                              className="btn btn-sm btn-primary"
                               onClick={() => setRelationshipsPage(prev => prev + 1)}
                               disabled={relationshipsPage >= totalPages}
                             >

@@ -17,3 +17,17 @@ code {
     monospace;
 }
 
+/* Toolbar actions: consistent 34px height for buttons, selects, search */
+.toolbar-actions .btn,
+.toolbar-actions .form-select,
+.toolbar-actions .input-group .form-control,
+.toolbar-actions .input-group .input-group-text {
+  height: 34px;
+}
+.toolbar-actions .input-group {
+  height: 34px;
+}
+.toolbar-actions .input-group .form-control {
+  min-height: 34px;
+}
+

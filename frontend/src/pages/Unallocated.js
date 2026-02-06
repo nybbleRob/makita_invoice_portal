@@ -574,8 +574,8 @@ const Unallocated = () => {
                   <p className="text-secondary m-0">Documents that could not be matched or failed processing</p>
                 </div>
                 {/* Controls */}
-                <div className="col-lg-9 col-md-8 col-12">
-                  <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
+                <div className="col-lg-9 col-md-8 col-12 pe-0">
+                  <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end toolbar-actions">
                     {/* Search */}
                     <div className="input-group input-group-sm input-group-flat w-auto">
                       <input

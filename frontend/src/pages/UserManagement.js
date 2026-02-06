@@ -1014,8 +1014,8 @@ const UserManagement = () => {
                 <h3 className="card-title mb-0">Users</h3>
                 <p className="text-secondary m-0">Manage users and their permissions</p>
               </div>
-              <div className="col-lg-9 col-md-8 col-12">
-                <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
+              <div className="col-lg-9 col-md-8 col-12 pe-0">
+                <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end toolbar-actions">
                     {/* Search */}
                     <div className="input-group input-group-sm input-group-flat w-auto">
                       <input
@@ -1077,7 +1077,7 @@ const UserManagement = () => {
                     {/* Company Filter Button */}
                     <button
                       type="button"
-                      className={`btn btn-sm btn-info ${selectedCompanyFilters.length > 0 ? '' : 'btn-outline-info'}`}
+                      className="btn btn-sm btn-info"
                       onClick={openCompanyFilterModal}
                     >
                       {selectedCompanyFilters.length === 0 
@@ -1144,35 +1144,10 @@ const UserManagement = () => {
                         </ul>
                       </div>
                     )}
-                    {/* Export dropdown */}
-                    {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator' || currentUser?.role === 'manager') && (
-                      <div className="dropdown">
-                        <button
-                          className="btn btn-sm btn-outline-secondary dropdown-toggle"
-                          type="button"
-                          data-bs-toggle="dropdown"
-                          aria-expanded="false"
-                        >
-                          Export
-                        </button>
-                        <ul className="dropdown-menu">
-                          <li>
-                            <button className="dropdown-item" type="button" onClick={() => handleExportUsers('csv')}>
-                              Export as CSV
-                            </button>
-                          </li>
-                          <li>
-                            <button className="dropdown-item" type="button" onClick={() => handleExportUsers('xlsx')}>
-                              Export as XLSX
-                            </button>
-                          </li>
-                        </ul>
-                      </div>
-                    )}
                     {/* Pending Accounts button */}
                     {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && (
                       <button
-                        className="btn btn-sm btn-outline-primary"
+                        className="btn btn-sm btn-warning"
                         onClick={() => navigate('/users/pending-accounts')}
                       >
                         Pending Accounts
@@ -1197,6 +1172,31 @@ const UserManagement = () => {
                     >
                       Add User
                     </button>
+                    {/* Export - last in header */}
+                    {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator' || currentUser?.role === 'manager') && (
+                      <div className="dropdown">
+                        <button
+                          className="btn btn-sm btn-primary dropdown-toggle"
+                          type="button"
+                          data-bs-toggle="dropdown"
+                          aria-expanded="false"
+                        >
+                          Export
+                        </button>
+                        <ul className="dropdown-menu">
+                          <li>
+                            <button className="dropdown-item" type="button" onClick={() => handleExportUsers('csv')}>
+                              Export as CSV
+                            </button>
+                          </li>
+                          <li>
+                            <button className="dropdown-item" type="button" onClick={() => handleExportUsers('xlsx')}>
+                              Export as XLSX
+                            </button>
+                          </li>
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
