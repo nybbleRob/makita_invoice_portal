@@ -1,6 +1,6 @@
-# Script to push changes to GitHub (run from external terminal outside Cursor)
-# This avoids Cursor's Git extension creating lock files
-# 
+# Script to push changes to GitHub
+# Run from external terminal to avoid lock files, or from Cursor (this script fixes Cursor's SSH env).
+#
 # USAGE: 
 #   .\push-to-github.ps1
 #   OR
@@ -12,6 +12,11 @@ param(
     [Parameter(Position=0)]
     [string]$Message
 )
+
+# Fix Cursor/IDE setting that breaks git push (protocol error "Micr")
+if ($env:GIT_SSH_COMMAND -eq 'cmd /c exit 1') {
+    Remove-Item Env:GIT_SSH_COMMAND -ErrorAction SilentlyContinue
+}
 
 $repoPath = "D:\Invoice Portal 2025"
 Set-Location $repoPath
