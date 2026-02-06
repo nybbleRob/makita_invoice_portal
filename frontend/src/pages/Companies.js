@@ -1124,8 +1124,8 @@ const Companies = () => {
                     {creating 
                       ? (isEditing ? 'Updating...' : 'Creating...') 
                       : (isEditing 
-                          ? `Update ${isBranch ? 'Branch' : isSubsidiary ? 'Subsidiary' : 'Corporate Company'}` 
-                          : `Create ${isBranch ? 'Branch' : isSubsidiary ? 'Subsidiary' : 'Corporate Company'}`)
+                          ? `Update ${currentType === 'BRANCH' ? 'Branch' : currentType === 'SUB' ? 'Subsidiary' : 'Corporate Company'}` 
+                          : `Create ${currentType === 'BRANCH' ? 'Branch' : currentType === 'SUB' ? 'Subsidiary' : 'Corporate Company'}`)
                     }
                   </button>
                 </div>
