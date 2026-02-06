@@ -820,16 +820,6 @@ const PendingAccounts = () => {
   return (
     <div className="page">
       <PageTitle title="Pending Accounts" />
-      <div className="page-header">
-        <div className="container-xl">
-          <div className="row g-2 align-items-center">
-            <div className="col">
-              <h2 className="page-title">Pending Account Registrations</h2>
-            </div>
-          </div>
-        </div>
-      </div>
-      
       <div className="page-body">
         <div className="container-xl">
           <div className="card">
