@@ -446,9 +446,9 @@ const UserManagement = () => {
         return;
       }
       
-      // Validate external users must have company assignment
-      if (formData.role === 'external_user' && !formData.allCompanies && (!formData.companyIds || formData.companyIds.length === 0)) {
-        toast.error('External users must be assigned to at least one company or have "All Companies" enabled');
+      // Validate external users and notification contacts must have company assignment
+      if ((formData.role === 'external_user' || formData.role === 'notification_contact') && !formData.allCompanies && (!formData.companyIds || formData.companyIds.length === 0)) {
+        toast.error('Select at least one company or enable \'All Companies\'.');
         return;
       }
       
@@ -511,6 +511,12 @@ const UserManagement = () => {
       }
       if (formData.sendEmailAsSummary && !formData.sendInvoiceEmail && !formData.sendStatementEmail) {
         toast.error('Cannot send summary emails without enabling at least invoice or statement emails');
+        return;
+      }
+      
+      // Validate external users and notification contacts must have company assignment
+      if ((formData.role === 'external_user' || formData.role === 'notification_contact') && !formData.allCompanies && (!formData.companyIds || formData.companyIds.length === 0)) {
+        toast.error('Select at least one company or enable \'All Companies\'.');
         return;
       }
       

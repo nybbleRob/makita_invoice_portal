@@ -263,6 +263,13 @@ router.post('/:id/approve', async (req, res) => {
       });
     }
     
+    // Approved users must have at least one company or All Companies
+    if (!allCompanies && (!companyIds || !Array.isArray(companyIds) || companyIds.length === 0)) {
+      return res.status(400).json({
+        message: 'Select at least one company or enable \'All Companies\'.'
+      });
+    }
+    
     // Generate temporary password
     const { generateReadableTemporaryPassword } = require('../utils/passwordGenerator');
     const tempPassword = generateReadableTemporaryPassword();

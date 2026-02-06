@@ -497,6 +497,13 @@ router.post('/', canManageUsers, async (req, res) => {
       }
     }
     
+    // External users and notification contacts must have at least one company or All Companies
+    if ((role === 'external_user' || role === 'notification_contact') && !allCompanies && validatedCompanies.length === 0) {
+      return res.status(400).json({
+        message: 'Select at least one company or enable \'All Companies\'.'
+      });
+    }
+    
     // Wrap all database operations in a transaction for atomicity
     const transaction = await sequelize.transaction();
     
@@ -1025,6 +1032,21 @@ router.put('/:id', canManageUsers, async (req, res) => {
       ipAddress: req.ip || req.connection.remoteAddress,
       userAgent: req.get('user-agent')
     });
+    
+    // External users and notification contacts must have at least one company or All Companies
+    if (user.role === 'external_user' || user.role === 'notification_contact') {
+      const effectiveAllCompanies = user.allCompanies;
+      let effectiveCompanyCount = 0;
+      if (companyIds !== undefined) {
+        effectiveCompanyCount = Array.isArray(companyIds) ? companyIds.length : 0;
+      } else {
+        const currentCompanies = await user.getCompanies();
+        effectiveCompanyCount = currentCompanies.length;
+      }
+      if (!effectiveAllCompanies && effectiveCompanyCount === 0) {
+        return res.status(400).json({ message: 'Select at least one company or enable \'All Companies\'.' });
+      }
+    }
     
     // Update company assignments if provided (for ALL user roles)
     if (companyIds !== undefined) {

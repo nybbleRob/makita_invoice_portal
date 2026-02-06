@@ -256,6 +256,11 @@ const PendingAccounts = () => {
   const handleApprove = async () => {
     if (!selectedRegistration) return;
     
+    if (!formData.allCompanies && (!formData.companyIds || formData.companyIds.length === 0)) {
+      toast.error('Select at least one company or enable \'All Companies\'.');
+      return;
+    }
+    
     setApproving(true);
     try {
       // Use the intended role from customFields, or default to external_user
