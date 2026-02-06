@@ -44,10 +44,8 @@ const Companies = () => {
   const [selectedParentIds, setSelectedParentIds] = useState([]);
   const debouncedParentFilterSearch = useDebounce(parentFilterSearch, 300);
   
-  // Modal states
-  const [showCorporateModal, setShowCorporateModal] = useState(false);
-  const [showBranchModal, setShowBranchModal] = useState(false);
-  const [showSubsidiaryModal, setShowSubsidiaryModal] = useState(false);
+  // Modal state - single Add/Edit Company modal
+  const [showCompanyModal, setShowCompanyModal] = useState(false);
   const [activeTab, setActiveTab] = useState('basic');
   const [editingCompany, setEditingCompany] = useState(null);
   // Modal relationships state - keyed by company ID (for lazy loading)
@@ -71,55 +69,9 @@ const Companies = () => {
   const [companyToDelete, setCompanyToDelete] = useState(null);
   const [companyToDeactivate, setCompanyToDeactivate] = useState(null);
   
-  // Form data states
-  const [corporateFormData, setCorporateFormData] = useState({
-    name: '',
-    referenceNo: '',
-    edi: false,
-    globalSystemEmail: '',
-    primaryContactId: null,
-    primaryContact: null,
-    sendInvoiceEmail: false,
-    sendInvoiceAttachment: false,
-    sendStatementEmail: false,
-    sendStatementAttachment: false,
-    sendEmailAsSummary: false,
-    isActive: true,
-    address: {
-      line1: '',
-      line2: '',
-      city: '',
-      state: '',
-      zip: '',
-      country: ''
-    }
-  });
-  
-  const [branchFormData, setBranchFormData] = useState({
-    name: '',
-    referenceNo: '',
-    edi: false,
-    globalSystemEmail: '',
-    primaryContactId: null,
-    primaryContact: null,
-    sendInvoiceEmail: false,
-    sendInvoiceAttachment: false,
-    sendStatementEmail: false,
-    sendStatementAttachment: false,
-    sendEmailAsSummary: false,
-    parentId: null,
-    isActive: true,
-    address: {
-      line1: '',
-      line2: '',
-      city: '',
-      state: '',
-      zip: '',
-      country: ''
-    }
-  });
-  
-  const [subsidiaryFormData, setSubsidiaryFormData] = useState({
+  // Single form data for Add/Edit Company modal
+  const [companyFormData, setCompanyFormData] = useState({
+    type: 'CORP',
     name: '',
     referenceNo: '',
     edi: false,
@@ -205,12 +157,12 @@ const Companies = () => {
     }
   }, [debouncedSearch, typeFilters, statusFilter]);
 
-  // Fetch parent companies when modal opens or search changes
+  // Fetch parent companies when Add/Edit modal is open and type needs parent, or search changes
   useEffect(() => {
-    if (showBranchModal || showSubsidiaryModal) {
+    if (showCompanyModal && (companyFormData.type === 'BRANCH' || companyFormData.type === 'SUB')) {
       fetchParentCompanies(1);
     }
-  }, [showBranchModal, showSubsidiaryModal, debouncedParentSearch]);
+  }, [showCompanyModal, companyFormData.type, debouncedParentSearch]);
 
   // Ctrl+K keyboard shortcut to focus search
   useEffect(() => {
@@ -440,12 +392,12 @@ const Companies = () => {
     }
   };
 
-  // Fetch users when user search changes
+  // Fetch users when Add/Edit modal is open and user search changes
   useEffect(() => {
-    if (showCorporateModal || showBranchModal || showSubsidiaryModal) {
+    if (showCompanyModal) {
       fetchUsers(debouncedUserSearch);
     }
-  }, [showCorporateModal, showBranchModal, showSubsidiaryModal, debouncedUserSearch]);
+  }, [showCompanyModal, debouncedUserSearch]);
 
   const handleTypeFilterChange = (type) => {
     setTypeFilters(prev => ({
@@ -660,88 +612,33 @@ const Companies = () => {
     }
   };
 
-  const resetCorporateForm = () => {
-    setCorporateFormData({
-      name: '',
-      referenceNo: '',
-      edi: false,
-      globalSystemEmail: '',
-      primaryContactId: null,
-      primaryContact: null,
-      sendInvoiceEmail: false,
-      sendInvoiceAttachment: false,
-      sendStatementEmail: false,
-      sendStatementAttachment: false,
-      sendEmailAsSummary: false,
-      isActive: true,
-      address: {
-        line1: '',
-        line2: '',
-        city: '',
-        state: '',
-        zip: '',
-        country: ''
-      }
-    });
-    setUserSearchQuery('');
-    setActiveTab('basic');
-    setEditingCompany(null);
-  };
+  const defaultCompanyForm = () => ({
+    type: 'CORP',
+    name: '',
+    referenceNo: '',
+    edi: false,
+    globalSystemEmail: '',
+    primaryContactId: null,
+    primaryContact: null,
+    sendInvoiceEmail: false,
+    sendInvoiceAttachment: false,
+    sendStatementEmail: false,
+    sendStatementAttachment: false,
+    sendEmailAsSummary: false,
+    parentId: null,
+    isActive: true,
+    address: {
+      line1: '',
+      line2: '',
+      city: '',
+      state: '',
+      zip: '',
+      country: ''
+    }
+  });
 
-  const resetBranchForm = () => {
-    setBranchFormData({
-      name: '',
-      referenceNo: '',
-      edi: false,
-      globalSystemEmail: '',
-      primaryContactId: null,
-      primaryContact: null,
-      sendInvoiceEmail: false,
-      sendInvoiceAttachment: false,
-      sendStatementEmail: false,
-      sendStatementAttachment: false,
-      sendEmailAsSummary: false,
-      parentId: null,
-      isActive: true,
-      address: {
-        line1: '',
-        line2: '',
-        city: '',
-        state: '',
-        zip: '',
-        country: ''
-      }
-    });
-    setParentSearchQuery('');
-    setUserSearchQuery('');
-    setActiveTab('basic');
-    setEditingCompany(null);
-  };
-
-  const resetSubsidiaryForm = () => {
-    setSubsidiaryFormData({
-      name: '',
-      referenceNo: '',
-      edi: false,
-      globalSystemEmail: '',
-      primaryContactId: null,
-      primaryContact: null,
-      sendInvoiceEmail: false,
-      sendInvoiceAttachment: false,
-      sendStatementEmail: false,
-      sendStatementAttachment: false,
-      sendEmailAsSummary: false,
-      parentId: null,
-      isActive: true,
-      address: {
-        line1: '',
-        line2: '',
-        city: '',
-        state: '',
-        zip: '',
-        country: ''
-      }
-    });
+  const resetCompanyForm = () => {
+    setCompanyFormData(defaultCompanyForm());
     setParentSearchQuery('');
     setUserSearchQuery('');
     setActiveTab('basic');
@@ -751,11 +648,10 @@ const Companies = () => {
 
   const openEditModal = (company) => {
     setEditingCompany(company);
-    
     const formData = {
       name: company.name || '',
       referenceNo: company.referenceNo || '',
-      type: company.type || 'CORP', // Include type for editing
+      type: company.type || 'CORP',
       edi: company.edi || false,
       globalSystemEmail: company.globalSystemEmail || '',
       primaryContactId: company.primaryContactId || null,
@@ -776,178 +672,63 @@ const Companies = () => {
         country: ''
       }
     };
-
-    if (company.type === 'CORP') {
-      setCorporateFormData(formData);
-      setShowCorporateModal(true);
-    } else if (company.type === 'BRANCH') {
-      setBranchFormData(formData);
-      setShowBranchModal(true);
-      // Fetch parent companies when editing branch
-      fetchParentCompanies(1);
-    } else if (company.type === 'SUB') {
-      setSubsidiaryFormData(formData);
-      setShowSubsidiaryModal(true);
-      // Fetch parent companies when editing subsidiary
+    setCompanyFormData(formData);
+    setShowCompanyModal(true);
+    if (company.type === 'BRANCH' || company.type === 'SUB') {
       fetchParentCompanies(1);
     }
-    
     setActiveTab('basic');
   };
 
-  const handleCreateCorporate = async (e) => {
+  const handleCreateCompany = async (e) => {
     e.preventDefault();
-    if (!corporateFormData.name.trim()) {
+    if (!companyFormData.name.trim()) {
       toast.error('Company name is required');
+      return;
+    }
+    const currentType = companyFormData.type || 'CORP';
+    const needsParent = currentType === 'SUB' || currentType === 'BRANCH';
+    if (!editingCompany && needsParent && !companyFormData.parentId) {
+      toast.error('Please select a parent company');
       return;
     }
 
     try {
       setCreating(true);
       const payload = {
-        name: corporateFormData.name.trim(),
-        type: editingCompany ? (corporateFormData.type || 'CORP') : 'CORP',
-        referenceNo: corporateFormData.referenceNo ? parseInt(corporateFormData.referenceNo) : null,
-        edi: corporateFormData.edi,
-        globalSystemEmail: corporateFormData.globalSystemEmail || null,
-        primaryContactId: corporateFormData.primaryContactId || null,
-        sendInvoiceEmail: corporateFormData.sendInvoiceEmail || false,
-        sendInvoiceAttachment: corporateFormData.sendInvoiceAttachment || false,
-        sendStatementEmail: corporateFormData.sendStatementEmail || false,
-        sendStatementAttachment: corporateFormData.sendStatementAttachment || false,
-        sendEmailAsSummary: corporateFormData.sendEmailAsSummary || false,
-        isActive: editingCompany ? corporateFormData.isActive : true,
-        address: corporateFormData.address
+        name: companyFormData.name.trim(),
+        type: currentType,
+        referenceNo: companyFormData.referenceNo ? parseInt(companyFormData.referenceNo) : null,
+        edi: companyFormData.edi,
+        globalSystemEmail: companyFormData.globalSystemEmail || null,
+        primaryContactId: companyFormData.primaryContactId || null,
+        sendInvoiceEmail: companyFormData.sendInvoiceEmail || false,
+        sendInvoiceAttachment: companyFormData.sendInvoiceAttachment || false,
+        sendStatementEmail: companyFormData.sendStatementEmail || false,
+        sendStatementAttachment: companyFormData.sendStatementAttachment || false,
+        sendEmailAsSummary: companyFormData.sendEmailAsSummary || false,
+        isActive: editingCompany ? companyFormData.isActive : true,
+        address: companyFormData.address
       };
-
-      // If type was changed to SUB or BRANCH, include parentId
-      if (editingCompany && corporateFormData.type !== 'CORP' && corporateFormData.parentId) {
-        payload.parentId = corporateFormData.parentId;
+      if (needsParent) {
+        payload.parentId = companyFormData.parentId;
+      } else if (editingCompany) {
+        payload.parentId = null;
       }
 
       if (editingCompany) {
         await api.put(`/api/companies/${editingCompany.id}`, payload);
-        toast.success('Corporate company updated successfully!');
+        toast.success('Company updated successfully!');
       } else {
         await api.post('/api/companies', payload);
-        toast.success('Corporate company created successfully!');
+        toast.success('Company created successfully!');
       }
-      setShowCorporateModal(false);
-      resetCorporateForm();
+      setShowCompanyModal(false);
+      resetCompanyForm();
       setEditingCompany(null);
       fetchCompanies();
     } catch (error) {
       toast.error(`Error ${editingCompany ? 'updating' : 'creating'} company: ` + (error.response?.data?.message || error.message));
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleCreateBranch = async (e) => {
-    e.preventDefault();
-    if (!branchFormData.name.trim()) {
-      toast.error('Company name is required');
-      return;
-    }
-    if (!editingCompany && !branchFormData.parentId) {
-      toast.error('Please select a parent company');
-      return;
-    }
-
-    try {
-      setCreating(true);
-      const currentType = editingCompany ? (branchFormData.type || 'BRANCH') : 'BRANCH';
-      const payload = {
-        name: branchFormData.name.trim(),
-        type: currentType,
-        referenceNo: branchFormData.referenceNo ? parseInt(branchFormData.referenceNo) : null,
-        edi: branchFormData.edi,
-        globalSystemEmail: branchFormData.globalSystemEmail || null,
-        primaryContactId: branchFormData.primaryContactId || null,
-        sendInvoiceEmail: branchFormData.sendInvoiceEmail || false,
-        sendInvoiceAttachment: branchFormData.sendInvoiceAttachment || false,
-        sendStatementEmail: branchFormData.sendStatementEmail || false,
-        sendStatementAttachment: branchFormData.sendStatementAttachment || false,
-        sendEmailAsSummary: branchFormData.sendEmailAsSummary || false,
-        isActive: editingCompany ? branchFormData.isActive : true,
-        address: branchFormData.address
-      };
-
-      if (editingCompany) {
-        // Include parentId if type requires it, or clear it if changing to CORP
-        if (currentType !== 'CORP' && branchFormData.parentId !== editingCompany.parentId) {
-          payload.parentId = branchFormData.parentId;
-        } else if (currentType === 'CORP') {
-          payload.parentId = null;
-        }
-        await api.put(`/api/companies/${editingCompany.id}`, payload);
-        toast.success('Company updated successfully!');
-      } else {
-        payload.parentId = branchFormData.parentId;
-        await api.post('/api/companies', payload);
-        toast.success('Branch created successfully!');
-      }
-      setShowBranchModal(false);
-      resetBranchForm();
-      setEditingCompany(null);
-      fetchCompanies();
-    } catch (error) {
-      toast.error(`Error ${editingCompany ? 'updating' : 'creating'} branch: ` + (error.response?.data?.message || error.message));
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleCreateSubsidiary = async (e) => {
-    e.preventDefault();
-    if (!subsidiaryFormData.name.trim()) {
-      toast.error('Company name is required');
-      return;
-    }
-    if (!editingCompany && !subsidiaryFormData.parentId) {
-      toast.error('Please select a parent company');
-      return;
-    }
-
-    try {
-      setCreating(true);
-      const currentType = editingCompany ? (subsidiaryFormData.type || 'SUB') : 'SUB';
-      const payload = {
-        name: subsidiaryFormData.name.trim(),
-        type: currentType,
-        referenceNo: subsidiaryFormData.referenceNo ? parseInt(subsidiaryFormData.referenceNo) : null,
-        edi: subsidiaryFormData.edi,
-        globalSystemEmail: subsidiaryFormData.globalSystemEmail || null,
-        primaryContactId: subsidiaryFormData.primaryContactId || null,
-        sendInvoiceEmail: subsidiaryFormData.sendInvoiceEmail || false,
-        sendInvoiceAttachment: subsidiaryFormData.sendInvoiceAttachment || false,
-        sendStatementEmail: subsidiaryFormData.sendStatementEmail || false,
-        sendStatementAttachment: subsidiaryFormData.sendStatementAttachment || false,
-        sendEmailAsSummary: subsidiaryFormData.sendEmailAsSummary || false,
-        isActive: editingCompany ? subsidiaryFormData.isActive : true,
-        address: subsidiaryFormData.address
-      };
-
-      if (editingCompany) {
-        // Include parentId if type requires it, or clear it if changing to CORP
-        if (currentType !== 'CORP' && subsidiaryFormData.parentId !== editingCompany.parentId) {
-          payload.parentId = subsidiaryFormData.parentId;
-        } else if (currentType === 'CORP') {
-          payload.parentId = null;
-        }
-        await api.put(`/api/companies/${editingCompany.id}`, payload);
-        toast.success('Company updated successfully!');
-      } else {
-        payload.parentId = subsidiaryFormData.parentId;
-        await api.post('/api/companies', payload);
-        toast.success('Subsidiary created successfully!');
-      }
-      setShowSubsidiaryModal(false);
-      resetSubsidiaryForm();
-      setEditingCompany(null);
-      fetchCompanies();
-    } catch (error) {
-      toast.error(`Error ${editingCompany ? 'updating' : 'creating'} subsidiary: ` + (error.response?.data?.message || error.message));
     } finally {
       setCreating(false);
     }
@@ -1032,16 +813,11 @@ const Companies = () => {
     }
   };
   
-  const renderModal = (type, show, onClose, formData, setFormData, onSubmit, resetForm) => {
-    // When editing, use the type from formData (which can be changed), otherwise use the modal's type
+  const renderModal = (show, onClose, formData, setFormData, onSubmit, resetForm) => {
     const isEditing = !!editingCompany;
-    const currentType = isEditing && formData.type ? formData.type : type;
-    const isBranch = currentType === 'BRANCH';
-    const isSubsidiary = currentType === 'SUB';
-    const needsParent = isBranch || isSubsidiary;
-    const title = isEditing 
-      ? (isBranch ? 'Edit Branch' : isSubsidiary ? 'Edit Subsidiary' : 'Edit Corporate Company')
-      : (isBranch ? 'Add Branch' : isSubsidiary ? 'Add Subsidiary' : 'Add Corporate Company');
+    const currentType = formData.type || 'CORP';
+    const needsParent = currentType === 'BRANCH' || currentType === 'SUB';
+    const title = isEditing ? 'Edit Company' : 'Add Company';
 
     return (
       show && (
@@ -1097,6 +873,31 @@ const Companies = () => {
                             {/* Left Column - Company Details */}
                             <div className="col-md-6">
                               <div className="mb-3">
+                                <label className="form-label required">Company Type</label>
+                                <select
+                                  className="form-select"
+                                  value={formData.type || 'CORP'}
+                                  onChange={(e) => {
+                                    const newType = e.target.value;
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      type: newType,
+                                      parentId: newType === 'CORP' ? null : prev.parentId
+                                    }));
+                                    if (newType !== 'CORP') fetchParentCompanies(1);
+                                  }}
+                                >
+                                  <option value="CORP">Corporate</option>
+                                  <option value="SUB">Subsidiary</option>
+                                  <option value="BRANCH">Branch</option>
+                                </select>
+                                <small className="form-hint">
+                                  {currentType === 'CORP' && 'Top-level company with no parent'}
+                                  {currentType === 'SUB' && 'Subsidiary of a corporate company'}
+                                  {currentType === 'BRANCH' && 'Branch of a corporate or subsidiary company'}
+                                </small>
+                              </div>
+                              <div className="mb-3">
                                 <label className="form-label required">Company Name</label>
                                 <input
                                   type="text"
@@ -1134,55 +935,22 @@ const Companies = () => {
                                 </label>
                               </div>
                               {isEditing && (
-                                <>
-                                  <div className="mb-3">
-                                    <label className="row">
-                                      <span className="col">Active Status</span>
-                                      <span className="col-auto">
-                                        <label className="form-check form-check-single form-switch">
-                                          <input
-                                            type="checkbox"
-                                            className="form-check-input"
-                                            checked={formData.isActive}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, isActive: e.target.checked }))}
-                                          />
-                                        </label>
-                                      </span>
-                                    </label>
-                                    <small className="form-hint">Toggle to activate or deactivate this company</small>
-                                  </div>
-                                  {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator' || currentUser?.role === 'manager' || currentUser?.role === 'credit_senior' || currentUser?.role === 'credit_controller') && (
-                                    <div className="mb-3">
-                                      <label className="form-label">Company Type</label>
-                                      <select
-                                        className="form-select"
-                                        value={formData.type || currentType}
-                                        onChange={(e) => {
-                                          const newType = e.target.value;
-                                          setFormData(prev => ({ 
-                                            ...prev, 
-                                            type: newType,
-                                            // Clear parentId if changing to CORP
-                                            parentId: newType === 'CORP' ? null : prev.parentId
-                                          }));
-                                          // Fetch parent companies if changing to SUB/BRANCH
-                                          if (newType !== 'CORP') {
-                                            fetchParentCompanies(1);
-                                          }
-                                        }}
-                                      >
-                                        <option value="CORP">Corporate (CORP)</option>
-                                        <option value="SUB">Subsidiary (SUB)</option>
-                                        <option value="BRANCH">Branch (BRANCH)</option>
-                                      </select>
-                                      <small className="form-hint">
-                                        {currentType === 'CORP' && 'Top-level company with no parent'}
-                                        {currentType === 'SUB' && 'Subsidiary of a corporate company'}
-                                        {currentType === 'BRANCH' && 'Branch of a corporate or subsidiary company'}
-                                      </small>
-                                    </div>
-                                  )}
-                                </>
+                                <div className="mb-3">
+                                  <label className="row">
+                                    <span className="col">Active Status</span>
+                                    <span className="col-auto">
+                                      <label className="form-check form-check-single form-switch">
+                                        <input
+                                          type="checkbox"
+                                          className="form-check-input"
+                                          checked={formData.isActive}
+                                          onChange={(e) => setFormData(prev => ({ ...prev, isActive: e.target.checked }))}
+                                        />
+                                      </label>
+                                    </span>
+                                  </label>
+                                  <small className="form-hint">Toggle to activate or deactivate this company</small>
+                                </div>
                               )}
                             </div>
                             
@@ -1494,33 +1262,15 @@ const Companies = () => {
                     >
                       Reset
                     </button>
-                    {/* Add buttons */}
                     <button
                       className="btn btn-primary"
                       onClick={() => {
-                        setShowCorporateModal(true);
+                        setCompanyFormData(defaultCompanyForm());
+                        setShowCompanyModal(true);
                         setActiveTab('basic');
                       }}
                     >
-                      Add Corporate
-                    </button>
-                    <button
-                      className="btn btn-info"
-                      onClick={() => {
-                        setShowSubsidiaryModal(true);
-                        setActiveTab('basic');
-                      }}
-                    >
-                      Add Subsidiary
-                    </button>
-                    <button
-                      className="btn btn-success"
-                      onClick={() => {
-                        setShowBranchModal(true);
-                        setActiveTab('basic');
-                      }}
-                    >
-                      Add Branch
+                      Add Company
                     </button>
                     {/* Export button - visible to administrators and managers */}
                     {(isAdministrator() || currentUser?.role === 'manager') && (
@@ -2000,10 +1750,8 @@ const Companies = () => {
         </div>
       </div>
 
-      {/* Modals */}
-      {renderModal('CORP', showCorporateModal, () => setShowCorporateModal(false), corporateFormData, setCorporateFormData, handleCreateCorporate, resetCorporateForm)}
-      {renderModal('BRANCH', showBranchModal, () => setShowBranchModal(false), branchFormData, setBranchFormData, handleCreateBranch, resetBranchForm)}
-      {renderModal('SUB', showSubsidiaryModal, () => setShowSubsidiaryModal(false), subsidiaryFormData, setSubsidiaryFormData, handleCreateSubsidiary, resetSubsidiaryForm)}
+      {/* Add/Edit Company Modal */}
+      {renderModal(showCompanyModal, () => { setShowCompanyModal(false); resetCompanyForm(); }, companyFormData, setCompanyFormData, handleCreateCompany, resetCompanyForm)}
       
       {/* Import Modal - Moved to ImportData page */}
 
