@@ -478,6 +478,8 @@ const Unallocated = () => {
     setAllocationResults(null);
   };
 
+  const hasActiveFilters = activeSearchQuery || reasonFilter !== 'all';
+
   const handleResetFilters = () => {
     setSearchQuery('');
     setActiveSearchQuery('');
@@ -575,17 +577,11 @@ const Unallocated = () => {
                 <div className="col-lg-9 col-md-8 col-12">
                   <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
                     {/* Search */}
-                    <div className="input-group input-group-flat" style={{ maxWidth: '400px' }}>
-                      <span className="input-group-text">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon icon-1">
-                          <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
-                          <path d="M21 21l-6 -6"></path>
-                        </svg>
-                      </span>
+                    <div className="input-group input-group-sm input-group-flat w-auto">
                       <input
                         ref={searchInputRef}
                         type="text"
-                        className="form-control"
+                        className="form-control form-control-sm"
                         placeholder="Search for Documents"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -603,7 +599,7 @@ const Unallocated = () => {
                         <kbd>ctrl + K</kbd>
                       </span>
                       <button 
-                        className="btn btn-primary" 
+                        className="btn btn-sm btn-primary" 
                         type="button"
                         onClick={(e) => {
                           e.preventDefault();
@@ -617,7 +613,7 @@ const Unallocated = () => {
                     </div>
                     {/* Reason filter */}
                     <select
-                      className="form-select w-auto"
+                      className="form-select form-select-sm w-auto"
                       value={reasonFilter}
                       onChange={(e) => {
                         setReasonFilter(e.target.value);
@@ -631,30 +627,28 @@ const Unallocated = () => {
                       <option value="duplicate">Duplicate</option>
                       <option value="other">Other</option>
                     </select>
-                    {/* Reset button */}
-                    <button
-                      className="btn btn-outline-secondary"
-                      onClick={handleResetFilters}
-                      title="Reset all filters and sorting"
-                    >
-                      Reset
-                    </button>
+                    {/* Reset - only when something is filtered */}
+                    {hasActiveFilters && (
+                      <button
+                        className="btn btn-sm btn-warning"
+                        onClick={handleResetFilters}
+                        title="Reset all filters and sorting"
+                      >
+                        Reset
+                      </button>
+                    )}
                     {/* Bulk actions */}
                     {selectedFiles.size > 0 && (
                       <>
                         <button
-                          className="btn btn-success"
+                          className="btn btn-sm btn-success"
                           onClick={() => handleBulkAllocate([...selectedFiles])}
                           disabled={allocating}
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-check me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                            <path d="M5 12l5 5l10 -10"/>
-                          </svg>
                           Allocate Selected ({selectedFiles.size})
                         </button>
                         <button
-                          className="btn btn-danger"
+                          className="btn btn-sm btn-danger"
                           onClick={() => {
                             setShowDeleteModal(true);
                             setDeleteReason('');
@@ -668,21 +662,17 @@ const Unallocated = () => {
                     {/* Allocate All - only show when NO items selected */}
                     {currentUser?.role && ['global_admin', 'administrator'].includes(currentUser.role) && pagination.total > 0 && selectedFiles.size === 0 && (
                       <button
-                        className="btn btn-success"
+                        className="btn btn-sm btn-success"
                         onClick={() => handleBulkAllocate([])}
                         disabled={allocating}
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-check me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                          <path d="M5 12l5 5l10 -10"/>
-                        </svg>
                         Allocate All ({pagination.total})
                       </button>
                     )}
                     {/* Clear All - always show for admins */}
                     {currentUser?.role && ['global_admin', 'administrator'].includes(currentUser.role) && pagination.total > 0 && (
                       <button
-                        className="btn btn-danger"
+                        className="btn btn-sm btn-danger"
                         onClick={() => {
                           setShowClearAllModal(true);
                           setClearAllReason('');

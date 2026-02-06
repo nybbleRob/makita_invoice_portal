@@ -252,6 +252,8 @@ const Companies = () => {
     setShowParentFilterModal(false);
   };
 
+  const hasActiveFilters = activeSearchQuery || statusFilter !== 'all' || !(typeFilters.CORP && typeFilters.SUB && typeFilters.BRANCH) || selectedParentFilters.length > 0;
+
   const handleResetFilters = () => {
     setSearchQuery('');
     setActiveSearchQuery('');
@@ -1153,17 +1155,11 @@ const Companies = () => {
                 <div className="col-lg-9 col-md-8 col-12">
                   <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
                     {/* Search */}
-                    <div className="input-group input-group-flat w-auto">
-                      <span className="input-group-text">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon icon-1">
-                          <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
-                          <path d="M21 21l-6 -6"></path>
-                        </svg>
-                      </span>
+                    <div className="input-group input-group-sm input-group-flat w-auto">
                       <input
                         ref={searchInputRef}
                         type="text"
-                        className="form-control"
+                        className="form-control form-control-sm"
                         placeholder="Search for Companies"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -1181,7 +1177,7 @@ const Companies = () => {
                         <kbd>ctrl + K</kbd>
                       </span>
                       <button 
-                        className="btn btn-primary" 
+                        className="btn btn-sm btn-primary" 
                         type="button"
                         onClick={(e) => {
                           e.preventDefault();
@@ -1195,7 +1191,7 @@ const Companies = () => {
                     </div>
                     {/* Status Filter */}
                     <select
-                      className="form-select w-auto"
+                      className="form-select form-select-sm w-auto"
                       value={statusFilter}
                       onChange={(e) => setStatusFilter(e.target.value)}
                     >
@@ -1206,7 +1202,7 @@ const Companies = () => {
                     {/* Type Filter Dropdown */}
                     <div className="dropdown">
                       <button
-                        className="btn btn-outline-secondary dropdown-toggle"
+                        className="btn btn-sm btn-outline-secondary dropdown-toggle"
                         type="button"
                         onClick={() => setShowTypeFilterDropdown(!showTypeFilterDropdown)}
                       >
@@ -1247,23 +1243,25 @@ const Companies = () => {
                     {/* Filter Companies */}
                     <button
                       type="button"
-                      className={`btn ${selectedParentFilters.length > 0 ? 'btn-primary' : 'btn-outline-secondary'}`}
+                      className={`btn btn-sm btn-info ${selectedParentFilters.length > 0 ? '' : 'btn-outline-info'}`}
                       onClick={openParentFilterModal}
                     >
                       {selectedParentFilters.length === 0 
-                        ? 'Filter Companies' 
+                        ? 'Filter by Company' 
                         : `Companies (${selectedParentFilters.length})`}
                     </button>
-                    {/* Reset */}
-                    <button 
-                      className="btn btn-outline-secondary" 
-                      onClick={handleResetFilters}
-                      title="Reset all filters"
-                    >
-                      Reset
-                    </button>
+                    {/* Reset - only when something is filtered */}
+                    {hasActiveFilters && (
+                      <button 
+                        className="btn btn-sm btn-warning" 
+                        onClick={handleResetFilters}
+                        title="Reset all filters"
+                      >
+                        Reset
+                      </button>
+                    )}
                     <button
-                      className="btn btn-primary"
+                      className="btn btn-sm btn-primary"
                       onClick={() => {
                         setCompanyFormData(defaultCompanyForm());
                         setShowCompanyModal(true);
@@ -1276,7 +1274,7 @@ const Companies = () => {
                     {(isAdministrator() || currentUser?.role === 'manager') && (
                       <div className="dropdown">
                         <button
-                          className="btn btn-outline-primary dropdown-toggle"
+                          className="btn btn-sm btn-outline-primary dropdown-toggle"
                           type="button"
                           data-bs-toggle="dropdown"
                           aria-expanded="false"
@@ -1309,7 +1307,7 @@ const Companies = () => {
                     {isAdministrator() && selectedCompanyIds.length > 0 && (
                       <div className="dropdown">
                         <button
-                          className="btn btn-primary dropdown-toggle"
+                          className="btn btn-sm btn-primary dropdown-toggle"
                           type="button"
                           data-bs-toggle="dropdown"
                           aria-expanded="false"

@@ -306,6 +306,9 @@ const Invoices = () => {
     return new Date(date).toLocaleDateString('en-GB');
   };
 
+  // Whether any filters/sort/search are active (used to show Reset button)
+  const hasActiveFilters = activeSearchQuery || statusFilter !== 'all' || sortBy !== 'createdAt' || sortOrder !== 'DESC' || selectedCompanyFilters.length > 0;
+
   // Reset all filters and sorting
   const handleResetFilters = () => {
     setSearchQuery('');
@@ -792,21 +795,14 @@ const Invoices = () => {
                 <div className="col-lg-9 col-md-8 col-12">
                   <div className="d-flex flex-wrap btn-list gap-2 justify-content-md-end">
                     {/* Search */}
-                    <div className="input-group input-group-flat w-auto">
-                      <span className="input-group-text">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon icon-1">
-                          <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
-                          <path d="M21 21l-6 -6"></path>
-                        </svg>
-                      </span>
+                    <div className="input-group input-group-sm input-group-flat w-auto">
                       <input
                         ref={searchInputRef}
                         type="text"
-                        className="form-control"
+                        className="form-control form-control-sm"
                         placeholder="Search for Invoices"
                         value={searchQuery}
                         onChange={(e) => {
-                          // ONLY update state - do NOT trigger search
                           setSearchQuery(e.target.value);
                         }}
                         onKeyDown={(e) => {
@@ -823,7 +819,7 @@ const Invoices = () => {
                         <kbd>ctrl + K</kbd>
                       </span>
                       <button 
-                        className="btn btn-primary" 
+                        className="btn btn-sm btn-primary" 
                         type="button"
                         onClick={(e) => {
                           e.preventDefault();
@@ -837,7 +833,7 @@ const Invoices = () => {
                     </div>
                     {/* Status filter */}
                     <select
-                      className="form-select w-auto"
+                      className="form-select form-select-sm w-auto"
                       value={statusFilter}
                       onChange={(e) => {
                         setStatusFilter(e.target.value);
@@ -851,7 +847,7 @@ const Invoices = () => {
                     </select>
                     {/* Sort dropdown */}
                     <select
-                      className="form-select w-auto"
+                      className="form-select form-select-sm w-auto"
                       value={`${sortBy}-${sortOrder}`}
                       onChange={(e) => {
                         const [newSortBy, newSortOrder] = e.target.value.split('-');
@@ -877,21 +873,23 @@ const Invoices = () => {
                     {/* Company filter */}
                     <button
                       type="button"
-                      className={`btn ${selectedCompanyFilters.length > 0 ? 'btn-primary' : 'btn-outline-secondary'}`}
+                      className={`btn btn-sm btn-info ${selectedCompanyFilters.length > 0 ? '' : 'btn-outline-info'}`}
                       onClick={openCompanyFilterModal}
                     >
                       {selectedCompanyFilters.length === 0 
                         ? 'Filter by Company' 
                         : `Companies (${selectedCompanyFilters.length})`}
                     </button>
-                    {/* Reset filters */}
-                    <button 
-                      className="btn btn-outline-secondary" 
-                      onClick={handleResetFilters}
-                      title="Reset all filters and sorting"
-                    >
-                      Reset
-                    </button>
+                    {/* Reset filters - only when something is filtered */}
+                    {hasActiveFilters && (
+                      <button 
+                        className="btn btn-sm btn-warning" 
+                        onClick={handleResetFilters}
+                        title="Reset all filters and sorting"
+                      >
+                        Reset
+                      </button>
+                    )}
                     {/* Upload/Import buttons */}
                     {(currentUser?.role === 'global_admin' || 
                       currentUser?.role === 'administrator' || 
@@ -907,14 +905,14 @@ const Invoices = () => {
                           style={{ display: 'none' }}
                         />
                         <button 
-                          className="btn btn-primary"
+                          className="btn btn-sm btn-success"
                           onClick={() => fileInputRef.current?.click()}
                         >
                           Upload
                         </button>
                         {importFiles.length > 0 && (
                           <button 
-                            className="btn btn-success"
+                            className="btn btn-sm btn-success"
                             onClick={handleImportInvoices}
                           >
                             Import {importFiles.length} File{importFiles.length !== 1 ? 's' : ''}
@@ -926,14 +924,14 @@ const Invoices = () => {
                     {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && selectedInvoices.length > 0 && (
                       <>
                         <button 
-                          className="btn btn-primary" 
+                          className="btn btn-sm btn-primary" 
                           onClick={handleBulkDownload}
                           disabled={bulkDeleting}
                         >
                           Download ({selectedInvoices.length})
                         </button>
                         <button 
-                          className="btn btn-danger" 
+                          className="btn btn-sm btn-danger" 
                           onClick={() => {
                             setShowBulkDeleteModal(true);
                             setBulkDeleteReason('');
@@ -946,7 +944,7 @@ const Invoices = () => {
                     )}
                     {selectedInvoices.length > 0 && (currentUser?.role !== 'global_admin' && currentUser?.role !== 'administrator') && (
                       <button 
-                        className="btn btn-primary" 
+                        className="btn btn-sm btn-primary" 
                         onClick={handleBulkDownload}
                       >
                         Download ({selectedInvoices.length})

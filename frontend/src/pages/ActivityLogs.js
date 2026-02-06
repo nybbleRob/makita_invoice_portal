@@ -380,6 +380,8 @@ const ActivityLogs = () => {
   };
   
   // Reset filters (reset to default 7 days)
+  const hasActiveFilters = searchQuery || userFilter || selectedCompanyIds.length > 0 || roleFilter || typeFilter || dateRangePreset !== '7';
+
   const resetFilters = () => {
     setSearchQuery('');
     setUserFilter('');
@@ -434,21 +436,15 @@ const ActivityLogs = () => {
               <div className="row g-3">
                 <div className="col-md-3">
                   <label className="form-label">Search</label>
-                  <div className="input-group input-group-flat" style={{ maxWidth: '280px' }}>
-                    <span className="input-group-text">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="icon">
-                        <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"></path>
-                        <path d="M21 21l-6 -6"></path>
-                      </svg>
-                    </span>
+                  <div className="input-group input-group-sm input-group-flat w-auto">
                     <input
                       ref={searchInputRef}
                       type="text"
-                      className="form-control"
+                      className="form-control form-control-sm"
                       placeholder="Search..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      autocomplete="off"
+                      autoComplete="off"
                     />
                     <span className="input-group-text">
                       <kbd>Ctrl+K</kbd>
@@ -459,7 +455,7 @@ const ActivityLogs = () => {
                 <div className="col-md-2">
                   <label className="form-label">User</label>
                   <select
-                    className="form-select"
+                    className="form-select form-select-sm"
                     value={userFilter}
                     onChange={(e) => setUserFilter(e.target.value)}
                   >
@@ -474,11 +470,11 @@ const ActivityLogs = () => {
                   <label className="form-label">Company</label>
                   <button
                     type="button"
-                    className={`btn w-100 ${selectedCompanyIds.length > 0 ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    className={`btn btn-sm btn-info w-100 ${selectedCompanyIds.length > 0 ? '' : 'btn-outline-info'}`}
                     onClick={() => setShowCompanyFilterModal(true)}
                   >
                     {selectedCompanyIds.length === 0 
-                      ? 'All Companies' 
+                      ? 'Filter by Company' 
                       : `${selectedCompanyIds.length} Selected`}
                   </button>
                 </div>
@@ -486,7 +482,7 @@ const ActivityLogs = () => {
                 <div className="col-md-2">
                   <label className="form-label">Role</label>
                   <select
-                    className="form-select"
+                    className="form-select form-select-sm"
                     value={roleFilter}
                     onChange={(e) => setRoleFilter(e.target.value)}
                   >
@@ -501,7 +497,7 @@ const ActivityLogs = () => {
                 <div className="col-md-2">
                   <label className="form-label">Activity Type</label>
                   <select
-                    className="form-select"
+                    className="form-select form-select-sm"
                     value={typeFilter}
                     onChange={(e) => setTypeFilter(e.target.value)}
                   >
@@ -512,23 +508,25 @@ const ActivityLogs = () => {
                   </select>
                 </div>
                 
-                <div className="col-md-1">
-                  <label className="form-label">&nbsp;</label>
-                  <button
-                    className="btn btn-secondary w-100"
-                    onClick={resetFilters}
-                    title="Reset Filters"
-                  >
-                    Reset
-                  </button>
-                </div>
+                {hasActiveFilters && (
+                  <div className="col-md-1">
+                    <label className="form-label">&nbsp;</label>
+                    <button
+                      className="btn btn-sm btn-warning w-100"
+                      onClick={resetFilters}
+                      title="Reset Filters"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                )}
               </div>
               
               <div className="row g-3 mt-2">
                 <div className="col-md-2">
                   <label className="form-label">Date Range</label>
                   <select
-                    className="form-select"
+                    className="form-select form-select-sm"
                     value={dateRangePreset}
                     onChange={(e) => handleDateRangePresetChange(e.target.value)}
                   >
@@ -543,7 +541,7 @@ const ActivityLogs = () => {
                   <label className="form-label">Start Date</label>
                   <input
                     type="date"
-                    className="form-control"
+                    className="form-control form-control-sm"
                     value={startDate}
                     onChange={(e) => handleDateChange('start', e.target.value)}
                   />
@@ -553,7 +551,7 @@ const ActivityLogs = () => {
                   <label className="form-label">End Date</label>
                   <input
                     type="date"
-                    className="form-control"
+                    className="form-control form-control-sm"
                     value={endDate}
                     onChange={(e) => handleDateChange('end', e.target.value)}
                   />
