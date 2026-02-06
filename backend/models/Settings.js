@@ -210,6 +210,15 @@ module.exports = (sequelize) => {
       },
       comment: 'Activity log auto-purge schedule: off, daily, weekly, monthly, quarterly (runs at midnight)'
     },
+    inactivityTimeoutMinutes: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null,
+      validate: {
+        isIn: [[null, 15, 30, 45, 60, 120]]
+      },
+      comment: 'Session inactivity timeout in minutes; null = disabled. When set, user is logged out after this many minutes of no activity.'
+    },
     parsingProvider: {
       type: DataTypes.JSONB,
       defaultValue: {

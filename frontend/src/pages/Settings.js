@@ -863,7 +863,7 @@ const Settings = () => {
                       className={`list-group-item list-group-item-action d-flex align-items-center ${activeSection === 'company' ? 'active' : ''}`}
                       onClick={() => setActiveSection('company')}
                     >
-                      Company Information
+                      Company Settings
                     </button>
                     <button
                       className={`list-group-item list-group-item-action d-flex align-items-center ${activeSection === 'branding' ? 'active' : ''}`}
@@ -932,7 +932,7 @@ const Settings = () => {
                 <div className="card-body">
                   {activeSection === 'company' && (
                     <>
-                      <h2 className="mb-4">Company Information</h2>
+                      <h2 className="mb-4">Company Settings</h2>
                       <p className="card-subtitle mb-4">Configure your company details and system email settings.</p>
                       
                       <div className="row g-3">
@@ -1023,6 +1023,42 @@ const Settings = () => {
                             <option value="quarterly">Every 3 months</option>
                           </select>
                           <small className="form-hint">Runs at midnight. When due, all activity logs are cleared; one audit entry is kept. Off = no automatic purge.</small>
+                        </div>
+                      </div>
+                      
+                      <div className="row g-3 mt-3">
+                        <div className="col-12">
+                          <h3 className="mb-3">Session Timeout (Inactivity)</h3>
+                          <p className="text-muted mb-3">Log users out after a period of no activity (mouse, keyboard, touch). When enabled, users are logged out after the chosen idle time.</p>
+                        </div>
+                        <div className="col-md-6">
+                          <label className="form-label">Inactivity timeout</label>
+                          <div className="form-check form-switch mb-2">
+                            <input
+                              className="form-check-input"
+                              type="checkbox"
+                              id="inactivityTimeoutEnabled"
+                              checked={!!(settings.inactivityTimeoutMinutes != null && settings.inactivityTimeoutMinutes > 0)}
+                              onChange={(e) => handleInputChange('inactivityTimeoutMinutes', e.target.checked ? (settings.inactivityTimeoutMinutes && [15, 30, 45, 60, 120].includes(settings.inactivityTimeoutMinutes) ? settings.inactivityTimeoutMinutes : 30) : null)}
+                            />
+                            <label className="form-check-label" htmlFor="inactivityTimeoutEnabled">
+                              Enable inactivity logout
+                            </label>
+                          </div>
+                          {(settings.inactivityTimeoutMinutes != null && settings.inactivityTimeoutMinutes > 0) && (
+                            <select
+                              className="form-select mt-2"
+                              value={settings.inactivityTimeoutMinutes}
+                              onChange={(e) => handleInputChange('inactivityTimeoutMinutes', parseInt(e.target.value, 10))}
+                            >
+                              <option value={15}>15 minutes</option>
+                              <option value={30}>30 minutes</option>
+                              <option value={45}>45 minutes</option>
+                              <option value={60}>60 minutes</option>
+                              <option value={120}>120 minutes</option>
+                            </select>
+                          )}
+                          <small className="form-hint d-block mt-2">When on, users are logged out after this many minutes with no activity. Off = no automatic logout.</small>
                         </div>
                       </div>
                       

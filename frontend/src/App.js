@@ -41,6 +41,7 @@ import SupplierDocumentView from './pages/SupplierDocumentView';
 import SupplierInvoices from './pages/SupplierInvoices';
 import SupplierCreditNotes from './pages/SupplierCreditNotes';
 import SupplierStatements from './pages/SupplierStatements';
+import InactivityLogout from './components/InactivityLogout';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
 import { PermissionProvider, usePermissions } from './context/PermissionContext';
@@ -237,6 +238,7 @@ function App() {
             v7_relativeSplatPath: true
           }}
         >
+          <InactivityLogout />
           <AppRoutes />
         </Router>
       </AuthProvider>

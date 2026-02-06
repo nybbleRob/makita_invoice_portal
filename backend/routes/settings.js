@@ -456,6 +456,17 @@ router.put('/', globalAdmin, async (req, res) => {
       settings.activityLogPurgeSchedule = value;
     }
     
+    // Update inactivity timeout (session logout after idle; null = disabled)
+    if (req.body.inactivityTimeoutMinutes !== undefined) {
+      const raw = req.body.inactivityTimeoutMinutes;
+      const value = (raw === '' || raw === null || raw === 'null') ? null : parseInt(raw, 10);
+      const allowed = [null, 15, 30, 45, 60, 120];
+      if (!allowed.includes(value) || (typeof value === 'number' && isNaN(value))) {
+        return res.status(400).json({ message: 'Inactivity timeout must be null (off), 15, 30, 45, 60, or 120 minutes' });
+      }
+      settings.inactivityTimeoutMinutes = value;
+    }
+    
     // Update parsing provider settings
     if (req.body.parsingProvider !== undefined) {
       // Start with existing settings or empty object - use deep clone to avoid reference issues
@@ -1213,9 +1224,32 @@ router.get('/scheduled-jobs/history', auth, globalAdmin, async (req, res) => {
       }))
       .sort((a, b) => (b.failedAt || new Date(0)) - (a.failedAt || new Date(0)));
 
+    // Filter for activity-log-purge jobs
+    const activityLogPurgeCompleted = completed
+      .filter(job => job.name === 'activity-log-purge')
+      .map(job => ({
+        id: job.id,
+        name: job.name,
+        completedAt: job.finishedOn ? new Date(job.finishedOn) : null,
+        result: job.returnvalue || null,
+        skipped: (job.returnvalue && job.returnvalue.skipped) || false
+      }))
+      .sort((a, b) => (b.completedAt || new Date(0)) - (a.completedAt || new Date(0)));
+
+    const activityLogPurgeFailed = failed
+      .filter(job => job.name === 'activity-log-purge')
+      .map(job => ({
+        id: job.id,
+        name: job.name,
+        failedAt: job.finishedOn ? new Date(job.finishedOn) : null,
+        error: job.failedReason
+      }))
+      .sort((a, b) => (b.failedAt || new Date(0)) - (a.failedAt || new Date(0)));
+
     // Get repeatable job info to show next run time
     const repeatableJobs = await scheduledTasksQueue.getRepeatableJobs();
     const retentionJob = repeatableJobs.find(job => job.name === 'document-retention-cleanup');
+    const activityLogPurgeJob = repeatableJobs.find(job => job.name === 'activity-log-purge');
     
     // Check activity logs for recent retention cleanup activity
     const { getActivityLogs, ActivityType } = require('../services/activityLogger');
@@ -1280,6 +1314,17 @@ router.get('/scheduled-jobs/history', auth, globalAdmin, async (req, res) => {
         totalFailed: retentionFailed.length,
         lastCompleted: retentionCompleted[0]?.completedAt || null,
         lastFailed: retentionFailed[0]?.failedAt || null
+      },
+      activityLogPurge: {
+        scheduledJob: activityLogPurgeJob ? {
+          name: activityLogPurgeJob.name,
+          pattern: activityLogPurgeJob.pattern,
+          nextRun: activityLogPurgeJob.next ? new Date(activityLogPurgeJob.next).toISOString() : null,
+          timezone: process.env.TZ || 'Europe/London'
+        } : null,
+        recentCompleted: activityLogPurgeCompleted.slice(0, 10),
+        recentFailed: activityLogPurgeFailed.slice(0, 10),
+        lastRun: activityLogPurgeCompleted[0] || null
       }
     });
   } catch (error) {
