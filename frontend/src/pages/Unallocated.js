@@ -22,7 +22,8 @@ const Unallocated = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [editingData, setEditingData] = useState({});
   const [saving, setSaving] = useState(false);
-  const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 });
+  const initialPage = (() => { const p = parseInt(searchParams.get('page'), 10); return (!isNaN(p) && p >= 1) ? p : 1; })();
+  const [pagination, setPagination] = useState({ page: initialPage, limit: 50, total: 0, pages: 0 });
   const [selectedFiles, setSelectedFiles] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);

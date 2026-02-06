@@ -32,7 +32,8 @@ const Invoices = () => {
   const [showCompanyFilterModal, setShowCompanyFilterModal] = useState(false);
   const debouncedFilterCompanySearch = useDebounce(filterCompanySearch, 300);
   const [companies, setCompanies] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 });
+  const initialPage = (() => { const p = parseInt(searchParams.get('page'), 10); return (!isNaN(p) && p >= 1) ? p : 1; })();
+  const [pagination, setPagination] = useState({ page: initialPage, limit: 50, total: 0, pages: 0 });
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState('DESC');
   const [retentionFilter, setRetentionFilter] = useState('all');

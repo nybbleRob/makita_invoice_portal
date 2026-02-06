@@ -20,7 +20,8 @@ const Companies = () => {
   const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearchQuery, setActiveSearchQuery] = useState('');
-  const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 });
+  const initialPage = (() => { const p = parseInt(searchParams.get('page'), 10); return (!isNaN(p) && p >= 1) ? p : 1; })();
+  const [pagination, setPagination] = useState({ page: initialPage, limit: 50, total: 0, pages: 0 });
   const [typeFilters, setTypeFilters] = useState({
     CORP: true,
     SUB: true,

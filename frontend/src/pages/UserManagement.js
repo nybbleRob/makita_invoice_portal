@@ -73,8 +73,9 @@ const UserManagement = () => {
   const [loadingAssignedCompanies, setLoadingAssignedCompanies] = useState({});
   const [assignedCompaniesPagination, setAssignedCompaniesPagination] = useState({});
   
-  // Users table pagination (server-side)
-  const [usersPage, setUsersPage] = useState(1);
+  // Users table pagination (server-side) - initial page from URL so Back from view returns to correct page
+  const initialUsersPage = (() => { const p = parseInt(searchParams.get('page'), 10); return (!isNaN(p) && p >= 1) ? p : 1; })();
+  const [usersPage, setUsersPage] = useState(initialUsersPage);
   const [usersPagination, setUsersPagination] = useState({ total: 0, pages: 0 });
   const usersPerPage = 50;
   const searchInputRef = useRef(null);

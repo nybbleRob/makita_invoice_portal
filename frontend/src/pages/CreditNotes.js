@@ -22,7 +22,8 @@ const CreditNotes = () => {
   const [activeSearchQuery, setActiveSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [companies, setCompanies] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 });
+  const initialPage = (() => { const p = parseInt(searchParams.get('page'), 10); return (!isNaN(p) && p >= 1) ? p : 1; })();
+  const [pagination, setPagination] = useState({ page: initialPage, limit: 50, total: 0, pages: 0 });
   const [selectedCreditNotes, setSelectedCreditNotes] = useState([]);
   const selectAllCheckboxRef = useRef(null);
   const searchInputRef = useRef(null);
