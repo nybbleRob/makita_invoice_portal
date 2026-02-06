@@ -1094,7 +1094,6 @@ const UserManagement = () => {
                           setStatusFilter('all');
                           setRoleFilter('all');
                           setSelectedCompanyFilters([]);
-                          setSelectedCompanyIds([]);
                           setUsersPage(1);
                         }}
                         title="Reset all filters"
