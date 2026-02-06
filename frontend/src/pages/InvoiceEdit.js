@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
@@ -12,6 +12,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL || ''}/pdf.wo
 const InvoiceEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const listPage = location.state?.listPage ?? 1;
   const { user: currentUser } = useAuth();
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -312,7 +314,7 @@ const InvoiceEdit = () => {
       await api.put(`/api/invoices/${id}`, updateData);
 
       toast.success('Invoice updated successfully');
-      navigate(`/invoices/${id}/view`);
+      navigate(`/invoices/${id}/view`, { state: { listPage } });
     } catch (error) {
       console.error('Error saving invoice:', error);
       toast.error('Error saving invoice: ' + (error.response?.data?.message || error.message));
@@ -363,7 +365,7 @@ const InvoiceEdit = () => {
         <div className="page-body">
           <div className="container-xl">
             <div className="alert alert-warning">
-              Invoice not found. <button className="btn btn-sm btn-link p-0" onClick={() => navigate('/invoices')}>Return to Invoices</button>
+              Invoice not found. <button className="btn btn-sm btn-link p-0" onClick={() => navigate(`/invoices?page=${listPage}`)}>Return to Invoices</button>
             </div>
           </div>
         </div>
@@ -380,7 +382,7 @@ const InvoiceEdit = () => {
               <h2 className="page-title">Edit Invoice: {invoice.invoiceNumber}</h2>
             </div>
             <div className="col-auto">
-              <button className="btn btn-secondary" onClick={() => navigate(`/invoices/${id}/view`)}>
+              <button className="btn btn-secondary" onClick={() => navigate(`/invoices/${id}/view`, { state: { listPage } })}>
                 Back to View
               </button>
             </div>
@@ -659,7 +661,7 @@ const InvoiceEdit = () => {
                     </button>
                     <button
                       className="btn btn-secondary"
-                      onClick={() => navigate(`/invoices/${id}/view`)}
+                      onClick={() => navigate(`/invoices/${id}/view`, { state: { listPage } })}
                     >
                       Cancel
                     </button>

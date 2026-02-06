@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
@@ -25,6 +25,8 @@ if (typeof window !== 'undefined') {
 const InvoiceView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const listPage = location.state?.listPage ?? 1;
   const { user: currentUser } = useAuth();
   const { settings } = useSettings();
   const [invoice, setInvoice] = useState(null);
@@ -507,7 +509,7 @@ const InvoiceView = () => {
                 <p className="text-muted mb-4">
                   {errorMessage || 'The invoice you are looking for could not be found. It may have been deleted or the link may be invalid.'}
                 </p>
-                <button className="btn btn-primary" onClick={() => navigate('/invoices')}>
+                <button className="btn btn-primary" onClick={() => navigate(`/invoices?page=${listPage}`)}>
                   Back to Invoices
                 </button>
               </div>
@@ -534,7 +536,7 @@ const InvoiceView = () => {
             <div className="col-auto ms-auto">
               <button 
                 className="btn btn-secondary me-2"
-                onClick={() => navigate('/invoices')}
+                onClick={() => navigate(`/invoices?page=${listPage}`)}
               >
                 Back to Invoices
               </button>

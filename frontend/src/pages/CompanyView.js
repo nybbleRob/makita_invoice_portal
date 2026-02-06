@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import toast from '../utils/toast';
 const CompanyView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const listPage = location.state?.listPage ?? 1;
   const [company, setCompany] = useState(null);
   const [children, setChildren] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +37,7 @@ const CompanyView = () => {
     } catch (error) {
       console.error('Error fetching company details:', error);
       toast.error('Failed to load company details');
-      navigate('/companies');
+      navigate(`/companies?page=${listPage}`);
     } finally {
       setLoading(false);
     }
@@ -127,7 +129,7 @@ const CompanyView = () => {
                   </div>
                   <button
                     className="btn btn-sm btn-primary"
-                    onClick={() => navigate(`/companies/${child.id}/view`)}
+                    onClick={() => navigate(`/companies/${child.id}/view`, { state: { listPage: location.state?.listPage ?? 1 } })}
                   >
                     View
                   </button>
@@ -188,7 +190,7 @@ const CompanyView = () => {
             <div className="card">
               <div className="card-body text-center py-5">
                 <p className="text-muted">The company you're looking for doesn't exist.</p>
-                <button className="btn btn-primary" onClick={() => navigate('/companies')}>
+                <button className="btn btn-primary" onClick={() => navigate(`/companies?page=${listPage}`)}>
                   Back to Companies
                 </button>
               </div>
@@ -212,7 +214,7 @@ const CompanyView = () => {
               <div className="btn-list">
                 <button
                   className="btn btn-secondary"
-                  onClick={() => navigate('/companies')}
+                  onClick={() => navigate(`/companies?page=${listPage}`)}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="m12 19-7-7 7-7"></path>
@@ -422,7 +424,7 @@ const CompanyView = () => {
                                   </div>
                                   <button
                                     className="btn btn-sm btn-outline-primary"
-                                    onClick={() => navigate(`/companies/${ancestor.id}/view`)}
+                                    onClick={() => navigate(`/companies/${ancestor.id}/view`, { state: { listPage: location.state?.listPage ?? 1 } })}
                                   >
                                     View
                                   </button>

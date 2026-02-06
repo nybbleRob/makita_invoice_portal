@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
@@ -11,6 +11,7 @@ import { usePermissions } from '../context/PermissionContext';
 const Companies = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user: currentUser } = useAuth();
   const { hasPermission } = usePermissions();
   const [companies, setCompanies] = useState([]);
@@ -162,6 +163,26 @@ const Companies = () => {
     fetchCompanies();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, pagination.limit, activeSearchQuery, typeFilters, statusFilter, selectedParentIds]);
+
+  // Sync page from URL on load / when user uses browser back
+  useEffect(() => {
+    const pageFromUrl = parseInt(searchParams.get('page'), 10);
+    if (!isNaN(pageFromUrl) && pageFromUrl >= 1) {
+      setPagination(prev => (prev.page !== pageFromUrl ? { ...prev, page: pageFromUrl } : prev));
+    }
+  }, [searchParams]);
+
+  // Sync page to URL when pagination.page changes
+  useEffect(() => {
+    const urlPage = searchParams.get('page');
+    if (urlPage !== String(pagination.page)) {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.set('page', String(pagination.page));
+        return next;
+      }, { replace: true });
+    }
+  }, [pagination.page]);
 
   // Handle edit from CompanyView page
   useEffect(() => {
@@ -339,11 +360,18 @@ const Companies = () => {
         
         // Update pagination - note: total may be slightly off if filtering by type on frontend
         // but this is acceptable for now since backend doesn't support multiple type filters
-        setPagination(prev => ({
-          ...prev,
-          total: response.data.pagination?.total || 0,
-          pages: response.data.pagination?.pages || 0
-        }));
+        const totalPages = response.data.pagination?.pages || 0;
+        setPagination(prev => {
+          const next = {
+            ...prev,
+            total: response.data.pagination?.total || 0,
+            pages: totalPages
+          };
+          if (totalPages > 0 && prev.page > totalPages) {
+            next.page = totalPages;
+          }
+          return next;
+        });
       } else {
         // Fallback for non-paginated response
         const companiesData = Array.isArray(response.data) ? response.data : [];
@@ -1738,7 +1766,7 @@ const Companies = () => {
                               <div className="btn-list">
                                 <button
                                   className="btn btn-sm btn-primary"
-                                  onClick={() => navigate(`/companies/${company.id}/view`)}
+                                  onClick={() => navigate(`/companies/${company.id}/view`, { state: { listPage: pagination.page } })}
                                 >
                                   View
                                 </button>
@@ -2191,7 +2219,7 @@ const Companies = () => {
                                       className="btn btn-sm btn-primary"
                                       onClick={() => {
                                         setShowRelationshipsModal(false);
-                                        navigate(`/companies/${rel.id}/view`);
+                                        navigate(`/companies/${rel.id}/view`, { state: { listPage: pagination.page } });
                                       }}
                                     >
                                       View

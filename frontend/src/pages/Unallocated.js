@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
@@ -7,6 +7,7 @@ import { useDebounce } from '../hooks/useDebounce';
 
 const Unallocated = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user: currentUser } = useAuth();
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,6 +52,26 @@ const Unallocated = () => {
     // Clear selections when page changes or filters change
     setSelectedFiles(new Set());
   }, [pagination.page, activeSearchQuery, reasonFilter, debouncedAccountNumber, debouncedInvoiceNumber, debouncedDate]);
+
+  // Sync page from URL on load / when user uses browser back
+  useEffect(() => {
+    const pageFromUrl = parseInt(searchParams.get('page'), 10);
+    if (!isNaN(pageFromUrl) && pageFromUrl >= 1) {
+      setPagination(prev => (prev.page !== pageFromUrl ? { ...prev, page: pageFromUrl } : prev));
+    }
+  }, [searchParams]);
+
+  // Sync page to URL when pagination.page changes
+  useEffect(() => {
+    const urlPage = searchParams.get('page');
+    if (urlPage !== String(pagination.page)) {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.set('page', String(pagination.page));
+        return next;
+      }, { replace: true });
+    }
+  }, [pagination.page]);
 
   // Ctrl+K keyboard shortcut to focus search
   useEffect(() => {
@@ -103,11 +124,18 @@ const Unallocated = () => {
       
       if (response.data && response.data.data) {
         setDocuments(response.data.data || []);
-        setPagination(prev => ({
-          ...prev,
-          total: response.data.pagination?.total || 0,
-          pages: response.data.pagination?.pages || 0
-        }));
+        const totalPages = response.data.pagination?.pages || 0;
+        setPagination(prev => {
+          const next = {
+            ...prev,
+            total: response.data.pagination?.total || 0,
+            pages: totalPages
+          };
+          if (totalPages > 0 && prev.page > totalPages) {
+            next.page = totalPages;
+          }
+          return next;
+        });
       } else {
         setDocuments([]);
       }
@@ -861,7 +889,7 @@ const Unallocated = () => {
                             <div className="btn-list flex-nowrap">
                               <button 
                                 className="btn btn-sm btn-primary"
-                                onClick={() => navigate(`/unallocated/${doc.id}/view`)}
+                                onClick={() => navigate(`/unallocated/${doc.id}/view`, { state: { listPage: pagination.page } })}
                                 title="View"
                               >
                                 View

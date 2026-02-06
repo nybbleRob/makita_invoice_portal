@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
@@ -11,6 +11,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL || ''}/pdf.wo
 const UnallocatedView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const listPage = location.state?.listPage ?? 1;
   const { user: currentUser } = useAuth();
   const [unallocatedDocument, setUnallocatedDocument] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -83,7 +85,7 @@ const UnallocatedView = () => {
     } catch (error) {
       console.error('Error fetching document:', error);
       toast.error('Error loading document: ' + (error.response?.data?.message || error.message));
-      navigate('/unallocated');
+      navigate(`/unallocated?page=${listPage}`);
     } finally {
       setLoading(false);
     }
@@ -209,7 +211,7 @@ const UnallocatedView = () => {
       });
 
       toast.success('Document updated and queued for reprocessing');
-      navigate('/unallocated');
+      navigate(`/unallocated?page=${listPage}`);
     } catch (error) {
       console.error('Error saving document:', error);
       toast.error('Error saving document: ' + (error.response?.data?.message || error.message));
@@ -347,7 +349,7 @@ const UnallocatedView = () => {
         <div className="page-body">
           <div className="container-xl">
             <div className="alert alert-warning">
-              Document not found. <button className="btn btn-sm btn-link p-0" onClick={() => navigate('/unallocated')}>Return to Unallocated</button>
+              Document not found. <button className="btn btn-sm btn-link p-0" onClick={() => navigate(`/unallocated?page=${listPage}`)}>Return to Unallocated</button>
             </div>
           </div>
         </div>
@@ -364,7 +366,7 @@ const UnallocatedView = () => {
               <h2 className="page-title">Unallocated Document: {unallocatedDocument.fileName}</h2>
             </div>
             <div className="col-auto">
-              <button className="btn btn-secondary" onClick={() => navigate('/unallocated')}>
+              <button className="btn btn-secondary" onClick={() => navigate(`/unallocated?page=${listPage}`)}>
                 Back to Unallocated
               </button>
             </div>
@@ -692,7 +694,7 @@ const UnallocatedView = () => {
                         </button>
                         <button
                           className="btn btn-secondary"
-                          onClick={() => navigate('/unallocated')}
+                          onClick={() => navigate(`/unallocated?page=${listPage}`)}
                         >
                           Cancel
                         </button>

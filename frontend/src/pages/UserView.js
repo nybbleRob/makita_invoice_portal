@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import toast from '../utils/toast';
 import { getRoleLabel, getRoleBadgeClass } from '../utils/roleLabels';
@@ -7,6 +7,8 @@ import { getRoleLabel, getRoleBadgeClass } from '../utils/roleLabels';
 const UserView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const listPage = location.state?.listPage ?? 1;
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [assignedCompanies, setAssignedCompanies] = useState([]);
@@ -45,7 +47,7 @@ const UserView = () => {
     } catch (error) {
       console.error('Error fetching user details:', error);
       toast.error('Failed to load user details');
-      navigate('/users');
+      navigate(`/users?page=${listPage}`);
     } finally {
       setLoading(false);
     }
@@ -53,7 +55,7 @@ const UserView = () => {
 
 
   const handleEdit = () => {
-    navigate('/users', { state: { editUserId: id } });
+    navigate(`/users?page=${listPage}`, { state: { editUserId: id } });
   };
 
   // Password management functions
@@ -215,7 +217,7 @@ const UserView = () => {
             <div className="card">
               <div className="card-body text-center py-5">
                 <p className="text-muted">The user you're looking for doesn't exist.</p>
-                <button className="btn btn-primary" onClick={() => navigate('/users')}>
+                <button className="btn btn-primary" onClick={() => navigate(`/users?page=${listPage}`)}>
                   Back to Users
                 </button>
               </div>
@@ -239,7 +241,7 @@ const UserView = () => {
               <div className="btn-list">
                 <button
                   className="btn btn-secondary"
-                  onClick={() => navigate('/users')}
+                  onClick={() => navigate(`/users?page=${listPage}`)}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="m12 19-7-7 7-7"></path>

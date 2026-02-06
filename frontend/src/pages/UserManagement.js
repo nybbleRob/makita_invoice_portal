@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,7 @@ import HierarchicalCompanyFilter from '../components/HierarchicalCompanyFilter';
 const UserManagement = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
@@ -84,6 +85,26 @@ const UserManagement = () => {
   useEffect(() => {
     fetchManageableRoles();
   }, []);
+
+  // Sync page from URL on load / when user uses browser back
+  useEffect(() => {
+    const pageFromUrl = parseInt(searchParams.get('page'), 10);
+    if (!isNaN(pageFromUrl) && pageFromUrl >= 1) {
+      setUsersPage(prev => (prev !== pageFromUrl ? pageFromUrl : prev));
+    }
+  }, [searchParams]);
+
+  // Sync page to URL when usersPage changes
+  useEffect(() => {
+    const urlPage = searchParams.get('page');
+    if (urlPage !== String(usersPage)) {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.set('page', String(usersPage));
+        return next;
+      }, { replace: true });
+    }
+  }, [usersPage]);
   
   // Fetch users when pagination or filters change (server-side)
   useEffect(() => {
@@ -197,8 +218,13 @@ const UserManagement = () => {
         setUsersPagination({ total: response.data.length, pages: 1 });
       } else if (response.data && typeof response.data === 'object') {
         const usersData = Array.isArray(response.data.users) ? response.data.users : [];
+        const pagination = response.data.pagination || { total: usersData.length, pages: 1 };
         setUsers(usersData);
-        setUsersPagination(response.data.pagination || { total: usersData.length, pages: 1 });
+        setUsersPagination(pagination);
+        const totalPages = pagination.pages || 1;
+        if (totalPages > 0 && usersPage > totalPages) {
+          setUsersPage(totalPages);
+        }
       } else {
         setUsers([]);
         setUsersPagination({ total: 0, pages: 0 });
@@ -1267,7 +1293,7 @@ const UserManagement = () => {
                             <div className="btn-list">
                               <button
                                 className="btn btn-sm btn-primary"
-                                onClick={() => navigate(`/users/${user.id}/view`)}
+                                onClick={() => navigate(`/users/${user.id}/view`, { state: { listPage: usersPage } })}
                               >
                                 View
                               </button>

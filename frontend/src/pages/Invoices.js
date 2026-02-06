@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
@@ -11,6 +11,7 @@ import HierarchicalCompanyFilter from '../components/HierarchicalCompanyFilter';
 
 const Invoices = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user: currentUser } = useAuth();
   const { settings } = useSettings();
   const { hasPermission } = usePermissions();
@@ -71,6 +72,26 @@ const Invoices = () => {
     };
   }, [importPollingInterval]);
 
+  // Sync page from URL on load / when user uses browser back
+  useEffect(() => {
+    const pageFromUrl = parseInt(searchParams.get('page'), 10);
+    if (!isNaN(pageFromUrl) && pageFromUrl >= 1) {
+      setPagination(prev => (prev.page !== pageFromUrl ? { ...prev, page: pageFromUrl } : prev));
+    }
+  }, [searchParams]);
+
+  // Sync page to URL when pagination.page changes
+  useEffect(() => {
+    const urlPage = searchParams.get('page');
+    if (urlPage !== String(pagination.page)) {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.set('page', String(pagination.page));
+        return next;
+      }, { replace: true });
+    }
+  }, [pagination.page]);
+
   const fetchInvoices = useCallback(async () => {
     try {
       setLoading(true);
@@ -120,11 +141,18 @@ const Invoices = () => {
       // Handle response structure
       if (response.data && response.data.data) {
         setInvoices(response.data.data || []);
-        setPagination(prev => ({
-          ...prev,
-          total: response.data.pagination?.total || 0,
-          pages: response.data.pagination?.pages || 0
-        }));
+        const totalPages = response.data.pagination?.pages || 0;
+        setPagination(prev => {
+          const next = {
+            ...prev,
+            total: response.data.pagination?.total || 0,
+            pages: totalPages
+          };
+          if (totalPages > 0 && prev.page > totalPages) {
+            next.page = totalPages;
+          }
+          return next;
+        });
       } else {
         // Fallback if response structure is different
         setInvoices(Array.isArray(response.data) ? response.data : []);
@@ -1065,7 +1093,7 @@ const Invoices = () => {
                             <div className="btn-list flex-nowrap">
                               <button 
                                 className="btn btn-sm btn-primary"
-                                onClick={() => navigate(`/invoices/${invoice.id}/view`)}
+                                onClick={() => navigate(`/invoices/${invoice.id}/view`, { state: { listPage: pagination.page } })}
                                 title="View"
                               >
                                 View
@@ -1074,7 +1102,7 @@ const Invoices = () => {
                                 <button 
                                   className="btn btn-sm btn-info" 
                                   title="Edit"
-                                  onClick={() => navigate(`/invoices/${invoice.id}/edit`)}
+                                  onClick={() => navigate(`/invoices/${invoice.id}/edit`, { state: { listPage: pagination.page } })}
                                 >
                                   Edit
                                 </button>

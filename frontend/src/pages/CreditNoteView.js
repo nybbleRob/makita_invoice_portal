@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
@@ -25,6 +25,8 @@ if (typeof window !== 'undefined') {
 const CreditNoteView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const listPage = location.state?.listPage ?? 1;
   const { user: currentUser } = useAuth();
   const { settings } = useSettings();
   const [creditNote, setCreditNote] = useState(null);
@@ -472,7 +474,7 @@ const CreditNoteView = () => {
             <div className="card">
               <div className="card-body text-center py-5">
                 <p className="text-muted">Credit note not found</p>
-                <button className="btn btn-primary" onClick={() => navigate('/credit-notes')}>
+                <button className="btn btn-primary" onClick={() => navigate(`/credit-notes?page=${listPage}`)}>
                   Back to Credit Notes
                 </button>
               </div>
@@ -499,7 +501,7 @@ const CreditNoteView = () => {
             <div className="col-auto ms-auto">
               <button 
                 className="btn btn-secondary me-2"
-                onClick={() => navigate('/credit-notes')}
+                onClick={() => navigate(`/credit-notes?page=${listPage}`)}
               >
                 Back to Credit Notes
               </button>
