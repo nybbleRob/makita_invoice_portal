@@ -566,7 +566,7 @@ const Companies = () => {
     return currentUser?.role === 'global_admin' || currentUser?.role === 'administrator';
   };
 
-  // Export companies to CSV/XLS
+  // Export companies to CSV or XLSX
   const handleExportCompanies = async (format = 'csv') => {
     try {
       const token = localStorage.getItem('token');
@@ -1291,15 +1291,6 @@ const Companies = () => {
                               onClick={() => handleExportCompanies('csv')}
                             >
                               Export as CSV
-                            </button>
-                          </li>
-                          <li>
-                            <button
-                              className="dropdown-item"
-                              type="button"
-                              onClick={() => handleExportCompanies('xls')}
-                            >
-                              Export as XLS
                             </button>
                           </li>
                           <li>

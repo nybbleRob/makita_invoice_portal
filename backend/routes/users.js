@@ -221,15 +221,15 @@ router.get('/roles/manageable', canManageUsers, (req, res) => {
 });
 
 /**
- * Export users to CSV/XLS
+ * Export users to CSV or XLSX
  * GET /api/users/export?format=csv|xlsx
  * MUST be defined BEFORE /:id route to avoid "export" being treated as a UUID
  */
 router.get('/export', canManageUsers, async (req, res) => {
   try {
     const format = (req.query.format || 'csv').toLowerCase();
-    if (format !== 'csv' && format !== 'xls' && format !== 'xlsx') {
-      return res.status(400).json({ message: 'Invalid format. Use csv, xls, or xlsx' });
+    if (format !== 'csv' && format !== 'xlsx') {
+      return res.status(400).json({ message: 'Invalid format. Use csv or xlsx' });
     }
 
     // Get manageable roles
@@ -290,15 +290,15 @@ router.get('/export', canManageUsers, async (req, res) => {
       res.setHeader('Content-Disposition', `attachment; filename="users-export-${new Date().toISOString().split('T')[0]}.csv"`);
       res.send(csv);
     } else {
-      // Generate XLS/XLSX using XLSX library
+      // Generate XLSX using XLSX library
       const worksheet = XLSX.utils.json_to_sheet(exportData);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Users');
       
-      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: format === 'xls' ? 'xls' : 'xlsx' });
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
       
-      res.setHeader('Content-Type', format === 'xls' ? 'application/vnd.ms-excel' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename="users-export-${new Date().toISOString().split('T')[0]}.${format}"`);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="users-export-${new Date().toISOString().split('T')[0]}.xlsx"`);
       res.send(buffer);
     }
 

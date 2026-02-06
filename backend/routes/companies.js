@@ -464,8 +464,8 @@ router.get('/', auth, checkDocumentAccess, async (req, res) => {
 });
 
 /**
- * Export companies to CSV/XLS
- * GET /api/companies/export?format=csv|xls|xlsx
+ * Export companies to CSV or XLSX
+ * GET /api/companies/export?format=csv|xlsx
  * MUST be defined BEFORE /:id route to avoid "export" being treated as a UUID
  */
 router.get('/export', auth, async (req, res) => {
@@ -478,8 +478,8 @@ router.get('/export', auth, async (req, res) => {
     }
 
     const format = (req.query.format || 'csv').toLowerCase();
-    if (format !== 'csv' && format !== 'xls' && format !== 'xlsx') {
-      return res.status(400).json({ message: 'Invalid format. Use csv, xls, or xlsx' });
+    if (format !== 'csv' && format !== 'xlsx') {
+      return res.status(400).json({ message: 'Invalid format. Use csv or xlsx' });
     }
 
     // Get all companies with parent and primary contact
@@ -579,15 +579,15 @@ router.get('/export', auth, async (req, res) => {
       res.setHeader('Content-Disposition', `attachment; filename="companies-export-${new Date().toISOString().split('T')[0]}.csv"`);
       res.send(csv);
     } else {
-      // Generate XLS/XLSX using XLSX library
+      // Generate XLSX using XLSX library
       const worksheet = XLSX.utils.json_to_sheet(exportData);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Companies');
       
-      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: format === 'xls' ? 'xls' : 'xlsx' });
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
       
-      res.setHeader('Content-Type', format === 'xls' ? 'application/vnd.ms-excel' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename="companies-export-${new Date().toISOString().split('T')[0]}.${format}"`);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="companies-export-${new Date().toISOString().split('T')[0]}.xlsx"`);
       res.send(buffer);
     }
 

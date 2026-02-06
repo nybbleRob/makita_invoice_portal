@@ -650,7 +650,7 @@ const UserManagement = () => {
     }
   };
 
-  // Export users to CSV/XLS/XLSX
+  // Export users to CSV or XLSX
   const handleExportUsers = async (format = 'csv') => {
     try {
       const token = localStorage.getItem('token');
