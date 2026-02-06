@@ -56,7 +56,7 @@ router.use(checkDocumentAccess);
 // Get all credit notes (filtered by user's accessible companies)
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 50, search = '', creditNoteNumbers, companyId, companyIds, invoiceId, status, startDate, endDate } = req.query;
+    const { page = 1, limit = 50, search = '', creditNoteNumbers, companyId, companyIds, invoiceId, status, startDate, endDate, sortBy = 'createdAt', sortOrder = 'DESC', retentionFilter } = req.query;
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const offset = (pageNum - 1) * limitNum;
@@ -144,6 +144,21 @@ router.get('/', async (req, res) => {
       whereConditions[Op.or] = searchConditions;
     }
     
+    // Build order clause from sort params (same pattern as invoices)
+    let orderClause = [];
+    const validSortFields = ['issueDate', 'createdAt', 'creditNoteNumber', 'amount', 'status', 'retentionExpiryDate'];
+    const sortField = validSortFields.includes(sortBy) ? sortBy : 'createdAt';
+    const sortDir = (sortOrder || 'DESC').toString().toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    if (retentionFilter === 'expiring_soonest') {
+      orderClause = [
+        [sequelize.literal('CASE WHEN "retentionExpiryDate" IS NULL THEN 1 ELSE 0 END'), 'ASC'],
+        ['retentionExpiryDate', 'ASC'],
+        ['issueDate', 'DESC']
+      ];
+    } else {
+      orderClause = [[sortField, sortDir], ['createdAt', 'DESC']];
+    }
+    
     const { count, rows } = await CreditNote.findAndCountAll({
       where: whereConditions,
       include: [
@@ -162,7 +177,7 @@ router.get('/', async (req, res) => {
       ],
       limit: limitNum,
       offset: offset,
-      order: [['issueDate', 'DESC'], ['createdAt', 'DESC']]
+      order: orderClause
     });
     
     res.json({
