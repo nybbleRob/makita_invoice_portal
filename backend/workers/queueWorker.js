@@ -514,6 +514,45 @@ const scheduledTasksWorker = new Worker('scheduled-tasks', async (job) => {
       console.log(`✅ Document retention cleanup completed: ${retentionResult.deleted} deleted, ${retentionResult.errors || 0} errors`);
       return retentionResult;
     
+    case 'activity-log-purge': {
+      const { Settings } = require('../models');
+      const { clearActivityLogs } = require('../services/activityLogger');
+      const settings = await Settings.getSettings();
+      const schedule = (settings.activityLogPurgeSchedule || 'off').toLowerCase();
+      if (schedule === 'off') {
+        console.log('ℹ️  Activity log purge is disabled, skipping');
+        return { skipped: true, reason: 'Activity log purge is disabled' };
+      }
+      const now = new Date();
+      const dayOfWeek = now.getDay();   // 0 = Sunday
+      const dayOfMonth = now.getDate();
+      const month = now.getMonth();    // 0 = Jan, 3 = Apr, 6 = Jul, 9 = Oct
+      let shouldRun = false;
+      if (schedule === 'daily') shouldRun = true;
+      else if (schedule === 'weekly') shouldRun = dayOfWeek === 0;
+      else if (schedule === 'monthly') shouldRun = dayOfMonth === 1;
+      else if (schedule === 'quarterly') shouldRun = dayOfMonth === 1 && [0, 3, 6, 9].includes(month);
+      if (!shouldRun) {
+        console.log(`ℹ️  Activity log purge schedule (${schedule}) not due today, skipping`);
+        return { skipped: true, reason: 'Schedule not due today' };
+      }
+      console.log(`🗑️  Running scheduled activity log purge (${schedule})...`);
+      const purgeResult = await clearActivityLogs(
+        'system',
+        'auto-purge@system',
+        `Scheduled auto-purge (${schedule})`,
+        'global_admin',
+        null,
+        'scheduled-job'
+      );
+      if (purgeResult.success) {
+        console.log(`✅ Activity log purge completed: ${purgeResult.count} cleared, ${purgeResult.preservedCount || 0} preserved`);
+        return { cleared: purgeResult.count, preserved: purgeResult.preservedCount || 0 };
+      }
+      console.warn('⚠️  Activity log purge failed:', purgeResult.message);
+      return purgeResult;
+    }
+    
     default:
       console.warn(`⚠️  Unknown scheduled task: ${job.name}`);
       return { success: false, message: 'Unknown task' };

@@ -201,6 +201,15 @@ module.exports = (sequelize) => {
       defaultValue: 'upload_date',
       comment: 'Date trigger for retention countdown: upload_date (when document becomes ready) or invoice_date (invoice/tax point date)'
     },
+    activityLogPurgeSchedule: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: 'off',
+      validate: {
+        isIn: [['off', 'daily', 'weekly', 'monthly', 'quarterly']]
+      },
+      comment: 'Activity log auto-purge schedule: off, daily, weekly, monthly, quarterly (runs at midnight)'
+    },
     parsingProvider: {
       type: DataTypes.JSONB,
       defaultValue: {

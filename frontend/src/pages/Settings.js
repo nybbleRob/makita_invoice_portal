@@ -1006,6 +1006,28 @@ const Settings = () => {
                       
                       <div className="row g-3 mt-3">
                         <div className="col-12">
+                          <h3 className="mb-3">Activity Log Auto-Purge</h3>
+                          <p className="text-muted mb-3">Configure automatic clearing of activity logs at midnight. When due, all activity logs are cleared; one audit entry is kept.</p>
+                        </div>
+                        <div className="col-md-6">
+                          <label className="form-label">Schedule</label>
+                          <select
+                            className="form-select"
+                            value={settings.activityLogPurgeSchedule || 'off'}
+                            onChange={(e) => handleInputChange('activityLogPurgeSchedule', e.target.value || 'off')}
+                          >
+                            <option value="off">Off</option>
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                            <option value="quarterly">Every 3 months</option>
+                          </select>
+                          <small className="form-hint">Runs at midnight. When due, all activity logs are cleared; one audit entry is kept. Off = no automatic purge.</small>
+                        </div>
+                      </div>
+                      
+                      <div className="row g-3 mt-3">
+                        <div className="col-12">
                           <div className="card">
                             <div className="card-body">
                               <h3 className="card-title">Document Status Control</h3>

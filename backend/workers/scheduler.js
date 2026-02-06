@@ -231,6 +231,26 @@ async function setupScheduledJobs() {
     );
     console.log('✅ Document retention cleanup scheduled: Daily at midnight (00:00)');
     
+    // Schedule activity log purge - daily at midnight (job reads setting and only clears when schedule matches)
+    await scheduledTasksQueue.add(
+      'activity-log-purge',
+      { task: 'activity-log-purge' },
+      {
+        repeat: {
+          pattern: '0 0 * * *', // Daily at midnight (00:00)
+          tz: process.env.TZ || 'Europe/London'
+        },
+        removeOnComplete: {
+          age: 30 * 24 * 3600,
+          count: 30
+        },
+        removeOnFail: {
+          age: 30 * 24 * 3600
+        }
+      }
+    );
+    console.log('✅ Activity log purge scheduled: Daily at midnight (00:00)');
+    
     // Get import frequency from settings
     let frequencyMinutes = 60; // Default: hourly
     let importEnabled = true;

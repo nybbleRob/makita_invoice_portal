@@ -445,6 +445,17 @@ router.put('/', globalAdmin, async (req, res) => {
       settings.documentRetentionDateTrigger = req.body.documentRetentionDateTrigger;
     }
     
+    // Update activity log purge schedule
+    if (req.body.activityLogPurgeSchedule !== undefined) {
+      const raw = req.body.activityLogPurgeSchedule;
+      const value = (raw === '' || raw === null || raw === 'null') ? 'off' : String(raw).toLowerCase();
+      const allowed = ['off', 'daily', 'weekly', 'monthly', 'quarterly'];
+      if (!allowed.includes(value)) {
+        return res.status(400).json({ message: 'Activity log purge schedule must be off, daily, weekly, monthly, or quarterly' });
+      }
+      settings.activityLogPurgeSchedule = value;
+    }
+    
     // Update parsing provider settings
     if (req.body.parsingProvider !== undefined) {
       // Start with existing settings or empty object - use deep clone to avoid reference issues
