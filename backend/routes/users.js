@@ -322,6 +322,28 @@ router.get('/export', canManageUsers, async (req, res) => {
   }
 });
 
+// Get pending email changes (manager/credit controller approval flow)
+router.get('/pending-email-changes', canManageUsers, async (req, res) => {
+  try {
+    const users = await User.findAll({
+      where: { pendingEmail: { [Op.ne]: null } },
+      attributes: ['id', 'name', 'email', 'pendingEmail', 'updatedAt', 'role'],
+      order: [['updatedAt', 'DESC']]
+    });
+    const pendingEmailChanges = users.map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      pendingEmail: u.pendingEmail,
+      requestedAt: u.updatedAt
+    }));
+    res.json({ pendingEmailChanges });
+  } catch (error) {
+    console.error('Pending email changes error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Get single user
 router.get('/:id', canManageUsers, async (req, res) => {
   try {
@@ -360,6 +382,121 @@ router.get('/:id', canManageUsers, async (req, res) => {
     
     res.json(user);
   } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Approve pending email change (manager/credit controller)
+router.post('/:id/approve-email-change', canManageUsers, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const validation = validateUUID(userId, 'user ID');
+    if (!validation.valid) {
+      return res.status(400).json({ message: validation.error });
+    }
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    if (!user.pendingEmail) {
+      return res.status(400).json({ message: 'No pending email change for this user' });
+    }
+    if (!canManageRole(req.user.role, user.role)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    const newEmail = user.pendingEmail;
+    const oldEmail = user.email;
+    user.email = newEmail;
+    user.pendingEmail = null;
+    user.emailChangeToken = null;
+    user.emailChangeExpires = null;
+    await user.save();
+
+    const settings = await Settings.getSettings();
+    const { isEmailEnabled } = require('../utils/emailService');
+    if (isEmailEnabled(settings)) {
+      try {
+        const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
+        await sendTemplatedEmail(
+          'email-change-confirmed',
+          newEmail,
+          {
+            userName: user.name || newEmail,
+            newEmail,
+            oldEmail
+          },
+          settings
+        );
+      } catch (emailError) {
+        console.warn('Failed to send email change confirmation:', emailError.message);
+      }
+    }
+
+    await logActivity({
+      type: ActivityType.EMAIL_CHANGE_VALIDATED,
+      userId: user.id,
+      userEmail: newEmail,
+      userRole: user.role,
+      action: `Email change approved: ${oldEmail} → ${newEmail}`,
+      details: {
+        oldEmail,
+        newEmail,
+        approvedBy: req.user.userId,
+        approvedByEmail: req.user.email
+      },
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    });
+
+    res.json({ message: 'Email change approved', newEmail });
+  } catch (error) {
+    console.error('Approve email change error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Reject pending email change (manager/credit controller)
+router.post('/:id/reject-email-change', canManageUsers, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const validation = validateUUID(userId, 'user ID');
+    if (!validation.valid) {
+      return res.status(400).json({ message: validation.error });
+    }
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    if (!user.pendingEmail) {
+      return res.status(400).json({ message: 'No pending email change for this user' });
+    }
+    if (!canManageRole(req.user.role, user.role)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    const requestedNewEmail = user.pendingEmail;
+    user.pendingEmail = null;
+    user.emailChangeToken = null;
+    user.emailChangeExpires = null;
+    await user.save();
+
+    await logActivity({
+      type: ActivityType.EMAIL_CHANGE_REQUESTED,
+      userId: user.id,
+      userEmail: user.email,
+      userRole: user.role,
+      action: `Email change request rejected`,
+      details: {
+        rejectedBy: req.user.userId,
+        rejectedByEmail: req.user.email,
+        requestedNewEmail
+      },
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    });
+
+    res.json({ message: 'Email change request rejected' });
+  } catch (error) {
+    console.error('Reject email change error:', error);
     res.status(500).json({ message: error.message });
   }
 });

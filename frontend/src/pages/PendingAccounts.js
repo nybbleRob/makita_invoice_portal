@@ -49,22 +49,71 @@ const PendingAccounts = () => {
   });
   const [saving, setSaving] = useState(false);
   const [manageableRoles, setManageableRoles] = useState([]);
-  
+  const [activeTab, setActiveTab] = useState('registrations');
+  const [pendingEmailChanges, setPendingEmailChanges] = useState([]);
+  const [loadingEmailChanges, setLoadingEmailChanges] = useState(false);
+  const [approvingEmailChange, setApprovingEmailChange] = useState(null);
+  const [rejectingEmailChange, setRejectingEmailChange] = useState(null);
+
   useEffect(() => {
-    if (user?.role !== 'global_admin' && user?.role !== 'administrator') {
+    if (!['global_admin', 'administrator', 'manager', 'credit_controller'].includes(user?.role)) {
       navigate('/');
       return;
     }
-    
+
     fetchManageableRoles();
-    
+
     if (id) {
       fetchRegistration(id);
     } else {
-      fetchRegistrations();
-      fetchCompanies();
+      if (activeTab === 'registrations') {
+        fetchRegistrations();
+        fetchCompanies();
+      } else if (activeTab === 'email_changes') {
+        fetchPendingEmailChanges();
+      }
     }
-  }, [user, id, statusFilter, page]);
+  }, [user, id, statusFilter, page, activeTab]);
+
+  const fetchPendingEmailChanges = async () => {
+    try {
+      setLoadingEmailChanges(true);
+      const response = await api.get('/api/users/pending-email-changes');
+      setPendingEmailChanges(response.data.pendingEmailChanges || []);
+    } catch (error) {
+      console.error('Error fetching pending email changes:', error);
+      toast.error('Failed to load pending email changes');
+      setPendingEmailChanges([]);
+    } finally {
+      setLoadingEmailChanges(false);
+    }
+  };
+
+  const handleApproveEmailChange = async (userId) => {
+    setApprovingEmailChange(userId);
+    try {
+      await api.post(`/api/users/${userId}/approve-email-change`);
+      toast.success('Email change approved.');
+      fetchPendingEmailChanges();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to approve email change');
+    } finally {
+      setApprovingEmailChange(null);
+    }
+  };
+
+  const handleRejectEmailChange = async (userId) => {
+    setRejectingEmailChange(userId);
+    try {
+      await api.post(`/api/users/${userId}/reject-email-change`);
+      toast.success('Email change request rejected.');
+      fetchPendingEmailChanges();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to reject email change');
+    } finally {
+      setRejectingEmailChange(null);
+    }
+  };
   
   const fetchRegistrations = async () => {
     try {
@@ -824,11 +873,28 @@ const PendingAccounts = () => {
         <div className="container-xl">
           <div className="card">
             <div className="card-header">
-              <div className="row align-items-center">
-                <div className="col">
-                  <h3 className="card-title">Registrations</h3>
-                </div>
-                <div className="col-auto">
+              <ul className="nav nav-tabs card-header-tabs">
+                <li className="nav-item">
+                  <button
+                    type="button"
+                    className={`nav-link ${activeTab === 'registrations' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('registrations')}
+                  >
+                    Registrations
+                  </button>
+                </li>
+                <li className="nav-item">
+                  <button
+                    type="button"
+                    className={`nav-link ${activeTab === 'email_changes' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('email_changes')}
+                  >
+                    Email Address Changes
+                  </button>
+                </li>
+              </ul>
+              {activeTab === 'registrations' && (
+                <div className="card-header-actions ms-auto">
                   <select
                     className="form-select form-select-sm"
                     value={statusFilter}
@@ -843,9 +909,69 @@ const PendingAccounts = () => {
                     <option value="rejected">Rejected</option>
                   </select>
                 </div>
-              </div>
+              )}
             </div>
-            
+
+            {activeTab === 'email_changes' ? (
+              <>
+                {loadingEmailChanges ? (
+                  <div className="card-body text-center py-5">
+                    <div className="spinner-border" role="status">
+                      <span className="visually-hidden">Loading...</span>
+                    </div>
+                  </div>
+                ) : pendingEmailChanges.length === 0 ? (
+                  <div className="card-body text-center py-5">
+                    <p className="text-muted">No pending email change requests</p>
+                  </div>
+                ) : (
+                  <div className="table-responsive">
+                    <table className="table table-vcenter">
+                      <thead>
+                        <tr>
+                          <th>User name</th>
+                          <th>Current email</th>
+                          <th>Requested email</th>
+                          <th>Requested at</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendingEmailChanges.map((row) => (
+                          <tr key={row.id}>
+                            <td>{row.name || '—'}</td>
+                            <td>{row.email}</td>
+                            <td>{row.pendingEmail}</td>
+                            <td>{row.requestedAt ? new Date(row.requestedAt).toLocaleString() : '—'}</td>
+                            <td>
+                              <div className="d-flex gap-1">
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-success"
+                                  onClick={() => handleApproveEmailChange(row.id)}
+                                  disabled={approvingEmailChange === row.id}
+                                >
+                                  {approvingEmailChange === row.id ? 'Approving...' : 'Approve'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-outline-danger"
+                                  onClick={() => handleRejectEmailChange(row.id)}
+                                  disabled={rejectingEmailChange === row.id}
+                                >
+                                  {rejectingEmailChange === row.id ? 'Rejecting...' : 'Reject'}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            ) : (
+            <>
             {loading ? (
               <div className="card-body text-center py-5">
                 <div className="spinner-border" role="status">
@@ -933,6 +1059,8 @@ const PendingAccounts = () => {
                   </div>
                 )}
               </>
+            )}
+            </>
             )}
           </div>
         </div>

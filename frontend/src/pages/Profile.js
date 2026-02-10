@@ -31,6 +31,7 @@ const Profile = () => {
     resetPassword: ''
   });
   const [resetting2FA, setResetting2FA] = useState(false);
+  const [showEmailChangeModal, setShowEmailChangeModal] = useState(false);
 
   useEffect(() => {
     fetchProfile();
@@ -80,27 +81,24 @@ const Profile = () => {
       toast.error('Please enter a new email address');
       return;
     }
-    
     if (emailChangeData.newEmail.toLowerCase() === formData.email.toLowerCase()) {
       toast.error('New email must be different from current email');
       return;
     }
-    
     setSaving(true);
     try {
       const response = await api.post('/api/profile/request-email-change', {
         newEmail: emailChangeData.newEmail
       });
-      toast.success(`Validation email sent to ${response.data.pendingEmail}. Please check your email and click the validation link.`);
+      toast.success('Request sent. A manager will review it.');
       setEmailChangeData({
         newEmail: '',
         pendingEmail: response.data.pendingEmail
       });
-      // Refresh profile to get updated pendingEmail
+      setShowEmailChangeModal(false);
       await fetchProfile();
     } catch (error) {
       toast.error('Error requesting email change: ' + (error.response?.data?.message || error.message));
-      // If there's a pending email in the error response, update state
       if (error.response?.data?.pendingEmail) {
         setEmailChangeData(prev => ({ ...prev, pendingEmail: error.response.data.pendingEmail }));
       }
@@ -124,18 +122,6 @@ const Profile = () => {
       await fetchProfile();
     } catch (error) {
       toast.error('Error cancelling email change: ' + (error.response?.data?.message || error.message));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleResendEmailChange = async () => {
-    setSaving(true);
-    try {
-      await api.post('/api/profile/resend-email-change');
-      toast.success('Validation email resent successfully. Please check your email.');
-    } catch (error) {
-      toast.error('Error resending email: ' + (error.response?.data?.message || error.message));
     } finally {
       setSaving(false);
     }
@@ -259,74 +245,41 @@ const Profile = () => {
                           </div>
                           <div className="col-md-6">
                             <div className="form-label">Email</div>
-                            {emailChangeData.pendingEmail ? (
+                            <div className="d-flex align-items-center gap-2 flex-wrap">
+                              <input
+                                type="email"
+                                className="form-control"
+                                value={formData.email}
+                                disabled
+                                style={{ maxWidth: '280px' }}
+                              />
+                              {!profile.pendingEmail ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-outline-primary btn-sm"
+                                  onClick={() => setShowEmailChangeModal(true)}
+                                >
+                                  Request Email change
+                                </button>
+                              ) : null}
+                            </div>
+                            {profile.pendingEmail && (
                               <>
-                                <input
-                                  type="email"
-                                  className="form-control"
-                                  value={formData.email}
-                                  disabled
-                                />
-                                <small className="form-hint text-warning d-block mb-2">
-                                  Pending: {emailChangeData.pendingEmail} - Please check your email and click the validation link.
+                                <small className="form-hint text-warning d-block mt-2">
+                                  Pending: {profile.pendingEmail} – awaiting manager approval.
                                 </small>
-                                <div className="btn-group" role="group">
-                                  <button
-                                    type="button"
-                                    className="btn btn-sm btn-outline-primary"
-                                    onClick={handleResendEmailChange}
-                                    disabled={saving}
-                                  >
-                                    Resend Email
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="btn btn-sm btn-outline-danger"
-                                    onClick={handleCancelEmailChange}
-                                    disabled={saving}
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <input
-                                  type="email"
-                                  className="form-control"
-                                  value={formData.email}
-                                  disabled
-                                />
-                                <small className="form-hint">To change your email, use the form below</small>
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-outline-danger mt-2"
+                                  onClick={handleCancelEmailChange}
+                                  disabled={saving}
+                                >
+                                  Cancel request
+                                </button>
                               </>
                             )}
                           </div>
                         </div>
-                        {!emailChangeData.pendingEmail && (
-                          <div className="row g-3 mt-0">
-                            <div className="col-md-12">
-                              <div className="form-label">Change Email Address</div>
-                              <div className="input-group">
-                                <input
-                                  type="email"
-                                  className="form-control"
-                                  placeholder="Enter new email address"
-                                  value={emailChangeData.newEmail}
-                                  onChange={(e) => setEmailChangeData({ ...emailChangeData, newEmail: e.target.value })}
-                                />
-                                <button
-                                  type="button"
-                                  className="btn btn-primary"
-                                  onClick={handleEmailChangeRequest}
-                                  disabled={saving || !emailChangeData.newEmail}
-                                >
-                                  Request Change
-                                </button>
-                              </div>
-                              <small className="form-hint">A validation email will be sent to your new email address. The link expires in 30 minutes.</small>
-                            </div>
-                          </div>
-                        )}
                         <div className="row g-3 mt-0">
                         </div>
                         <div className="row g-3 mt-0">
@@ -562,6 +515,41 @@ const Profile = () => {
           </div>
         </div>
       </div>
+
+      {/* Request Email Change Modal */}
+      {showEmailChangeModal && (
+        <div className="modal modal-blur show d-block" tabIndex="-1" role="dialog" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered" role="document">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Request email change</h5>
+                <button type="button" className="btn-close" onClick={() => { setShowEmailChangeModal(false); setEmailChangeData(prev => ({ ...prev, newEmail: '' })); }}></button>
+              </div>
+              <form onSubmit={handleEmailChangeRequest}>
+                <div className="modal-body">
+                  <p className="text-muted mb-3">Please enter your new email address.</p>
+                  <input
+                    type="email"
+                    className="form-control"
+                    placeholder="New email address"
+                    value={emailChangeData.newEmail}
+                    onChange={(e) => setEmailChangeData(prev => ({ ...prev, newEmail: e.target.value }))}
+                    autoFocus
+                  />
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={() => { setShowEmailChangeModal(false); setEmailChangeData(prev => ({ ...prev, newEmail: '' })); }}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={saving || !emailChangeData.newEmail}>
+                    {saving ? 'Sending...' : 'Submit'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -319,105 +319,82 @@ router.post('/resend-email-change', auth, async (req, res) => {
   }
 });
 
-// Request email change
+// Request email change (manager approval flow: no link to user, notify managers/credit controllers)
 router.post('/request-email-change', auth, async (req, res) => {
   try {
     const { newEmail } = req.body;
-    const crypto = require('crypto');
-    
+    const { Op } = require('sequelize');
+
     if (!newEmail) {
       return res.status(400).json({ message: 'New email is required' });
     }
-    
-    // Validate email format
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(newEmail)) {
       return res.status(400).json({ message: 'Invalid email format' });
     }
-    
+
     const user = await User.findByPk(req.user.userId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    
-    // Check if email is the same
+
     if (user.email.toLowerCase() === newEmail.toLowerCase()) {
       return res.status(400).json({ message: 'New email must be different from current email' });
     }
-    
-    // Check if email is already in use
+
     const existingUser = await User.findOne({ where: { email: newEmail.toLowerCase() } });
     if (existingUser && existingUser.id !== user.id) {
       return res.status(400).json({ message: 'Email is already in use' });
     }
-    
-    // Check if there's already a pending email change
+
     if (user.pendingEmail) {
-      return res.status(400).json({ 
-        message: 'You already have a pending email change. Please cancel it first or wait for it to expire.',
+      return res.status(400).json({
+        message: 'You already have a pending email change. Please cancel it first.',
         pendingEmail: user.pendingEmail
       });
     }
-    
-    // Generate token
-    const changeToken = crypto.randomBytes(32).toString('hex');
-    const changeTokenHash = crypto.createHash('sha256').update(changeToken).digest('hex');
-    
-    // Set pending email, token, and expiration (30 minutes)
+
     user.pendingEmail = newEmail.toLowerCase();
-    user.emailChangeToken = changeTokenHash;
-    user.emailChangeExpires = Date.now() + 1800000; // 30 minutes
+    user.emailChangeToken = null;
+    user.emailChangeExpires = null;
     await user.save();
-    
-    // Get settings for email configuration
+
     const settings = await Settings.getSettings();
-    
-    // Send validation email to new email address
     const { isEmailEnabled } = require('../utils/emailService');
-    const { getEmailChangeValidationUrl } = require('../utils/urlConfig');
+    const { getFrontendUrl } = require('../utils/urlConfig');
+    const pendingAccountsUrl = `${getFrontendUrl()}/users/pending-accounts`;
+
     if (isEmailEnabled(settings)) {
-      try {
-        const validationUrl = getEmailChangeValidationUrl(changeToken);
-        
-        // Calculate expiry time for email (30 minutes)
-        const expiryMs = user.emailChangeExpires - Date.now();
-        const expiryMinutes = Math.floor(expiryMs / (1000 * 60));
-        const expiryTime = expiryMinutes === 1 ? '1 minute' : `${expiryMinutes} minutes`;
-        
-        const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
-        
-        // Defensive check: ensure we're sending to NEW email, not old
-        const recipientEmail = newEmail.toLowerCase();
-        if (recipientEmail === user.email.toLowerCase()) {
-          throw new Error('Cannot send email change validation to old email address. Recipient must be the new email address.');
+      const approverRoles = ['manager', 'credit_controller'];
+      const approvers = await User.findAll({
+        where: { role: { [Op.in]: approverRoles } },
+        attributes: ['id', 'email', 'name']
+      });
+      const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
+      const companyName = settings.companyName || settings.siteTitle || 'Portal';
+      for (const approver of approvers) {
+        if (approver.email) {
+          try {
+            await sendTemplatedEmail(
+              'email-change-approval-request',
+              approver.email,
+              {
+                userName: user.name || user.email,
+                currentEmail: user.email,
+                newEmail: newEmail.toLowerCase(),
+                pendingAccountsUrl,
+                companyName
+              },
+              settings
+            );
+          } catch (emailError) {
+            console.warn(`[Email Change] Failed to notify approver ${approver.email}:`, emailError.message);
+          }
         }
-        
-        // Log for debugging
-        console.log(`[Email Change] Sending validation email:`, {
-          oldEmail: user.email,
-          newEmail: recipientEmail,
-          userId: user.id
-        });
-        
-        await sendTemplatedEmail(
-          'email-change-validation',
-          recipientEmail,
-          {
-            userName: user.name || user.email,
-            oldEmail: user.email,
-            newEmail: recipientEmail,
-            validationUrl: validationUrl,
-            expiryTime: expiryTime
-          },
-          settings
-        );
-      } catch (emailError) {
-        // Don't fail the request if email fails, but log it
-        console.warn('Failed to send email change validation email:', emailError.message);
       }
     }
-    
-    // Log activity
+
     const { logActivity, ActivityType } = require('../services/activityLogger');
     await logActivity({
       type: ActivityType.EMAIL_CHANGE_REQUESTED,
@@ -432,108 +409,26 @@ router.post('/request-email-change', auth, async (req, res) => {
       ipAddress: req.ip || req.connection.remoteAddress,
       userAgent: req.get('user-agent')
     });
-    
-    res.json({ 
-      message: 'Validation email sent to new email address. Please check your email and click the validation link.',
+
+    res.json({
+      message: 'Request sent. A manager will review it.',
       pendingEmail: newEmail.toLowerCase()
     });
   } catch (error) {
     console.error('Request email change error:', error);
-    console.error('Error stack:', error.stack);
-    // Provide more detailed error message for debugging
     const errorMessage = error.message || 'An error occurred while requesting email change';
-    res.status(500).json({ 
+    res.status(500).json({
       message: errorMessage,
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
 
-// Validate email change
+// Validate email change (retired: now done by manager approval)
 router.post('/validate-email-change', async (req, res) => {
-  try {
-    const { token } = req.body;
-    const crypto = require('crypto');
-    
-    if (!token) {
-      return res.status(400).json({ message: 'Validation token is required' });
-    }
-    
-    // Hash the token
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    
-    // Find user with matching token and valid expiration
-    const user = await User.findOne({
-      where: {
-        emailChangeToken: tokenHash,
-        emailChangeExpires: {
-          [require('sequelize').Op.gt]: new Date()
-        }
-      }
-    });
-    
-    if (!user || !user.pendingEmail) {
-      return res.status(400).json({ message: 'Invalid or expired validation token' });
-    }
-    
-    const oldEmail = user.email;
-    const newEmail = user.pendingEmail;
-    
-    // Update email
-    user.email = newEmail;
-    user.pendingEmail = null;
-    user.emailChangeToken = null;
-    user.emailChangeExpires = null;
-    await user.save();
-    
-    // Get settings for email configuration
-    const settings = await Settings.getSettings();
-    
-    // Send confirmation email to new email address
-    const { isEmailEnabled } = require('../utils/emailService');
-    if (isEmailEnabled(settings)) {
-      try {
-        const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
-        await sendTemplatedEmail(
-          'email-change-confirmed',
-          newEmail,
-          {
-            userName: user.name || newEmail,
-            newEmail: newEmail,
-            oldEmail: oldEmail
-          },
-          settings
-        );
-      } catch (emailError) {
-        // Don't fail the validation if email fails
-        console.warn('Failed to send email change confirmation email:', emailError.message);
-      }
-    }
-    
-    // Log activity
-    const { logActivity, ActivityType } = require('../services/activityLogger');
-    await logActivity({
-      type: ActivityType.EMAIL_CHANGE_VALIDATED,
-      userId: user.id,
-      userEmail: newEmail,
-      userRole: user.role,
-      action: `Email changed from ${oldEmail} to ${newEmail}`,
-      details: {
-        oldEmail: oldEmail,
-        newEmail: newEmail
-      },
-      ipAddress: req.ip || req.connection.remoteAddress,
-      userAgent: req.get('user-agent')
-    });
-    
-    res.json({ 
-      message: 'Email change validated successfully. Please login with your new email address.',
-      newEmail: newEmail
-    });
-  } catch (error) {
-    console.error('Validate email change error:', error);
-    res.status(500).json({ message: error.message });
-  }
+  return res.status(400).json({
+    message: 'Email change is now done by manager approval. Please ask a manager to approve your request.'
+  });
 });
 
 // Reset own 2FA (user can reset their own 2FA)
