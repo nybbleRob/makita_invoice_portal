@@ -1007,58 +1007,62 @@ router.post('/import', requirePermission('CREDIT_NOTES_IMPORT'), importUpload.ar
       userAgent: req.get('user-agent')
     });
     
-    // Create import session store (similar to bulkTestStore)
-    const importStore = require('../utils/importStore');
-    await importStore.createImport(importId, req.files.length, req.files.map(f => f.path), userId);
-    
-    // Add each file to the invoice import queue (same queue, will determine type from template)
-    // Use absolute path to ensure file is found even if working directory changes
+    // Build list of files that pass existence checks (only these get enqueued so totalFiles matches job count)
+    const filesToProcess = [];
     for (const file of req.files) {
       const absolutePath = path.resolve(file.path);
-      
-      // Verify file exists before adding to queue
       if (!fs.existsSync(absolutePath)) {
         console.error(`⚠️  File not found after upload: ${absolutePath}`);
-        continue; // Skip this file
+        continue;
       }
-      
-      // Add a small delay to ensure file is fully written to disk
-      // This helps prevent race conditions where the queue processes before multer finishes
       await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Double-check file still exists before adding to queue
       if (!fs.existsSync(absolutePath)) {
         console.error(`⚠️  File disappeared before adding to queue: ${absolutePath}`);
-        continue; // Skip this file
+        continue;
       }
-      
+      filesToProcess.push({ file, absolutePath });
+    }
+    
+    const importStore = require('../utils/importStore');
+    const { registerBatch } = require('../services/batchNotificationService');
+    
+    const filePaths = filesToProcess.map(f => f.absolutePath);
+    await importStore.createImport(importId, filesToProcess.length, filePaths, userId);
+    try {
+      await registerBatch(importId, filesToProcess.length, {
+        userId: req.user.userId,
+        userEmail: req.user.email,
+        source: 'manual-upload'
+      });
+      console.log(`[Batch ${importId}] Registered batch with ${filesToProcess.length} jobs for notification tracking`);
+    } catch (batchError) {
+      console.warn('Failed to register batch:', batchError.message);
+    }
+    
+    for (const { file, absolutePath } of filesToProcess) {
       await invoiceImportQueue.add('invoice-import', {
-        filePath: absolutePath, // Use absolute path
+        filePath: absolutePath,
         fileName: path.basename(file.path),
         originalName: file.originalname,
         importId: importId,
         userId: userId,
-        source: 'manual-upload', // Mark as manual upload
-        documentType: 'credit_note' // Specify this is for credit notes
+        source: 'manual-upload',
+        documentType: 'credit_note'
       }, {
-        priority: 1, // High priority - process before scheduled FTP imports
-        attempts: 3, // Retry up to 3 times if job fails
-        backoff: {
-          type: 'exponential',
-          delay: 2000 // Start with 2 second delay
-        },
-        removeOnComplete: true, // Remove completed jobs
-        removeOnFail: false // Keep failed jobs for debugging
+        priority: 1,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: true,
+        removeOnFail: false
       });
-      
       console.log(`📤 Added file to credit note import queue: ${file.originalname} -> ${absolutePath}`);
     }
     
     res.json({
       success: true,
       importId: importId,
-      totalFiles: req.files.length,
-      message: `Import started. Processing ${req.files.length} file(s)...`
+      totalFiles: filesToProcess.length,
+      message: `Import started. Processing ${filesToProcess.length} file(s)...`
     });
   } catch (error) {
     console.error('Error starting credit note import:', error);

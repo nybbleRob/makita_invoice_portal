@@ -667,19 +667,6 @@ router.post('/import', requirePermission('INVOICES_IMPORT'), importUpload.array(
     const importId = uuidv4();
     const userId = req.user.userId;
     
-    // Register batch for notification tracking (uses Redis for cross-process communication)
-    try {
-      const { registerBatch } = require('../services/batchNotificationService');
-      await registerBatch(importId, req.files.length, {
-        userId: userId,
-        userEmail: req.user.email,
-        source: 'manual-upload'
-      });
-      console.log(`[Batch ${importId}] Registered batch with ${req.files.length} jobs for notification tracking`);
-    } catch (batchError) {
-      console.warn('Failed to register batch:', batchError.message);
-    }
-    
     // Log file upload
     await logActivity({
       type: ActivityType.FILE_UPLOAD,
@@ -771,53 +758,58 @@ router.post('/import', requirePermission('INVOICES_IMPORT'), importUpload.array(
     
     console.log(`✅ Found ${existingHashesMap.size} existing file(s) with matching hash(es)`);
     
-    // Create import session store (similar to bulkTestStore)
-    const importStore = require('../utils/importStore');
-    await importStore.createImport(importId, req.files.length, req.files.map(f => f.path), userId);
-    
-    // Add each file to the invoice import queue with pre-calculated duplicate info
+    // Build list of jobs to add (only files that have fileInfo and still exist) so totalFiles matches job count
+    const jobsToAdd = [];
     for (const file of req.files) {
       const absolutePath = path.resolve(file.path);
       const fileInfo = fileHashMap.get(absolutePath);
-      
       if (!fileInfo) {
         console.error(`⚠️  File info not found for: ${absolutePath}`);
-        continue; // Skip this file
+        continue;
       }
-      
-      // Verify file still exists before adding to queue
       if (!fs.existsSync(absolutePath)) {
         console.error(`⚠️  File disappeared before adding to queue: ${absolutePath}`);
-        continue; // Skip this file
+        continue;
       }
-      
-      // Check if this file is a duplicate (from batch check)
       const existingFile = existingHashesMap.get(fileInfo.hash);
       const isDuplicate = !!existingFile;
       const duplicateFileId = existingFile?.id || null;
-      
+      jobsToAdd.push({ absolutePath, fileInfo, isDuplicate, duplicateFileId });
+    }
+    
+    const importStore = require('../utils/importStore');
+    const { registerBatch } = require('../services/batchNotificationService');
+    const filePaths = jobsToAdd.map(j => j.absolutePath);
+    await importStore.createImport(importId, jobsToAdd.length, filePaths, userId);
+    try {
+      await registerBatch(importId, jobsToAdd.length, {
+        userId: userId,
+        userEmail: req.user.email,
+        source: 'manual-upload'
+      });
+      console.log(`[Batch ${importId}] Registered batch with ${jobsToAdd.length} jobs for notification tracking`);
+    } catch (batchError) {
+      console.warn('Failed to register batch:', batchError.message);
+    }
+    
+    for (const { absolutePath, fileInfo, isDuplicate, duplicateFileId } of jobsToAdd) {
       await invoiceImportQueue.add('invoice-import', {
-        filePath: absolutePath, // Use absolute path
+        filePath: absolutePath,
         fileName: fileInfo.fileName,
         originalName: fileInfo.originalName,
         importId: importId,
         userId: userId,
-        source: 'manual-upload', // Mark as manual upload
-        // Pre-calculated duplicate info to avoid re-checking in job
+        source: 'manual-upload',
         fileHash: fileInfo.hash,
         isDuplicate: isDuplicate,
         duplicateFileId: duplicateFileId
       }, {
-        priority: 1, // High priority - process before scheduled FTP imports
-        attempts: 3, // Retry up to 3 times if job fails
-        backoff: {
-          type: 'exponential',
-          delay: 2000 // Start with 2 second delay
-        },
-        removeOnComplete: true, // Remove completed jobs
-        removeOnFail: false // Keep failed jobs for debugging
+        priority: 1,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: true,
+        removeOnFail: false
       });
-      
       if (isDuplicate) {
         console.log(`📤 Added file to import queue (DUPLICATE): ${fileInfo.originalName} -> ${absolutePath} (matches ${duplicateFileId})`);
       } else {
@@ -828,8 +820,8 @@ router.post('/import', requirePermission('INVOICES_IMPORT'), importUpload.array(
     res.json({
       success: true,
       importId: importId,
-      totalFiles: req.files.length,
-      message: `Import started. Processing ${req.files.length} file(s)...`
+      totalFiles: jobsToAdd.length,
+      message: `Import started. Processing ${jobsToAdd.length} file(s)...`
     });
   } catch (error) {
     console.error('Error starting invoice import:', error);
