@@ -1586,7 +1586,12 @@ const UserManagement = () => {
                       value={formData.email || ''}
                       onChange={handleInputChange}
                       required
+                      disabled={selectedUser && currentUser?.role === 'credit_controller'}
+                      title={selectedUser && currentUser?.role === 'credit_controller' ? 'Only Credit Senior, Manager, and Administrators can change email' : undefined}
                     />
+                    {selectedUser && currentUser?.role === 'credit_controller' && (
+                      <small className="form-hint text-muted">Email is read-only for your role. Only Credit Senior, Manager, and Administrators can change it.</small>
+                    )}
                   </div>
                   <div className="mb-3">
                     <label className="form-label">Role</label>

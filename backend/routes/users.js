@@ -479,6 +479,25 @@ router.post('/:id/reject-email-change', canManageUsers, async (req, res) => {
     user.emailChangeExpires = null;
     await user.save();
 
+    const settings = await Settings.getSettings();
+    const { isEmailEnabled } = require('../utils/emailService');
+    if (isEmailEnabled(settings) && user.email) {
+      try {
+        const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
+        await sendTemplatedEmail(
+          'email-change-rejected',
+          user.email,
+          {
+            userName: user.name || user.email,
+            requestedEmail: requestedNewEmail
+          },
+          settings
+        );
+      } catch (emailError) {
+        console.warn('Failed to send email change rejected notification:', emailError.message);
+      }
+    }
+
     await logActivity({
       type: ActivityType.EMAIL_CHANGE_REQUESTED,
       userId: user.id,
@@ -1058,7 +1077,9 @@ router.put('/:id', canManageUsers, async (req, res) => {
     
     // Update fields
     if (req.body.name !== undefined) user.name = req.body.name;
-    if (req.body.email !== undefined) {
+    // Only Credit Senior, Manager, Administrator, and Global Admin can change email; Credit Controller cannot
+    const canChangeEmail = !['credit_controller'].includes(req.user.role);
+    if (canChangeEmail && req.body.email !== undefined) {
       const newEmail = req.body.email.trim().toLowerCase();
       
       // Validate email format
