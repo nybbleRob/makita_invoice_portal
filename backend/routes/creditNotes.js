@@ -90,8 +90,38 @@ router.get('/', async (req, res) => {
       whereConditions.invoiceId = invoiceId;
     }
     
+    // Document status filter (ready_new, viewed, downloaded, queried, review) - same as invoices
+    const statusConditions = [];
     if (status) {
-      whereConditions.status = status;
+      if (status === 'ready_new') {
+        statusConditions.push({
+          documentStatus: 'ready',
+          viewedAt: null
+        });
+      } else if (status === 'viewed') {
+        statusConditions.push(
+          { documentStatus: 'viewed' },
+          sequelize.literal(`("CreditNote"."viewedAt" IS NOT NULL AND "CreditNote"."downloadedAt" IS NULL)`)
+        );
+      } else if (status === 'downloaded') {
+        statusConditions.push(
+          { documentStatus: 'downloaded' },
+          sequelize.literal(`"CreditNote"."downloadedAt" IS NOT NULL`)
+        );
+      } else if (status === 'queried') {
+        statusConditions.push({ documentStatus: 'queried' });
+      } else if (status === 'review') {
+        statusConditions.push({ documentStatus: 'review' });
+      } else {
+        // Fallback to workflow status (draft, ready, sent, applied, cancelled)
+        statusConditions.push({ status: status });
+      }
+    }
+    if (statusConditions.length > 0) {
+      const statusClause = statusConditions.length === 1
+        ? statusConditions[0]
+        : { [Op.or]: statusConditions };
+      whereConditions[Op.and] = [...(whereConditions[Op.and] || []), statusClause];
     }
     
     if (startDate || endDate) {
