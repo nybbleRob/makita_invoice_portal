@@ -12,6 +12,9 @@ const IMPORT_TTL = 24 * 60 * 60; // 24 hours in seconds
 // In-memory fallback if Redis is not available
 const memoryFallback = new Map();
 
+// Per-importId lock: serializes addResult so concurrent workers don't overwrite each other (race fix)
+const addResultLocks = new Map();
+
 /**
  * Create a new import session
  */
@@ -72,28 +75,25 @@ async function getImport(importId) {
 }
 
 /**
- * Add a result to an import session
+ * Add a result to an import session (inner logic – must run under lock)
  */
-async function addResult(importId, result) {
+async function addResultInner(importId, result) {
   const importSession = await getImport(importId);
   if (!importSession) {
     console.warn(`⚠️  Import session ${importId} not found`);
     return;
   }
-  
+
   importSession.results.push(result);
   importSession.processedFiles++;
-  
-  // Update status
+
   if (importSession.processedFiles >= importSession.totalFiles) {
     const wasCompleted = importSession.status === 'completed';
     importSession.status = 'completed';
     importSession.completedAt = new Date().toISOString();
-    
-    // Save before sending email to ensure state is persisted
+
     await saveImport(importId, importSession);
-    
-    // Send completion email if this is the first time we're marking it as completed
+
     if (!wasCompleted) {
       sendCompletionEmail(importId, importSession).catch(err => {
         console.error(`⚠️  [Import ${importId}] Failed to send completion email:`, err.message);
@@ -102,15 +102,31 @@ async function addResult(importId, result) {
   } else {
     await saveImport(importId, importSession);
   }
-  
+
   if (!result.success) {
     importSession.errors.push({
       fileName: result.fileName,
       error: result.error
     });
   }
-  
+
   console.log(`📊 [Import ${importId}] Progress: ${importSession.processedFiles}/${importSession.totalFiles}`);
+}
+
+/**
+ * Add a result to an import session (serialized per importId to fix race condition)
+ */
+async function addResult(importId, result) {
+  let lock = addResultLocks.get(importId);
+  const newLock = (lock || Promise.resolve()).then(() => addResultInner(importId, result));
+  addResultLocks.set(importId, newLock);
+  try {
+    await newLock;
+  } finally {
+    if (addResultLocks.get(importId) === newLock) {
+      addResultLocks.delete(importId);
+    }
+  }
 }
 
 /**

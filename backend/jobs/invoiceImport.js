@@ -334,13 +334,18 @@ async function processInvoiceImport(job) {
     const isPDF = fileExt === '.pdf';
     
     if (!isPDF && !isExcel) {
-      return {
+      const errorResult = {
         success: false,
         fileName: originalName || fileName,
         error: 'Unsupported file type. Only PDF and Excel files are supported.',
         processingTime: Date.now() - startTime,
         timestamp: new Date().toISOString()
       };
+      if (importId) {
+        const importStore = require('../utils/importStore');
+        await importStore.addResult(importId, errorResult);
+      }
+      return errorResult;
     }
     
     // Find template - try to detect document type first for better template matching
@@ -488,13 +493,18 @@ async function processInvoiceImport(job) {
           processingMethod = 'local_basic';
           console.log(`✅ [Import ${importId}] Basic PDF extraction complete`);
         } else {
-          return {
+          const errorResult = {
             success: false,
             fileName: originalName || fileName,
             error: 'No Excel template found. Please create an Excel template first.',
             processingTime: Date.now() - startTime,
             timestamp: new Date().toISOString()
           };
+          if (importId) {
+            const importStore = require('../utils/importStore');
+            await importStore.addResult(importId, errorResult);
+          }
+          return errorResult;
         }
       }
     } catch (parseError) {
