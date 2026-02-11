@@ -28,6 +28,7 @@ if (fs.existsSync(rootEnv)) {
 
 const { Invoice, CreditNote, Company, sequelize } = require('../models');
 const { Op } = require('sequelize');
+const { QueryTypes } = require('sequelize');
 
 const args = process.argv.slice(2);
 const getArg = (flag, defaultValue) => {
@@ -73,40 +74,42 @@ async function run() {
     console.log('');
 
     // JSONB filter: metadata.source = 'manual_import'
-    // findAll uses include (join) so table is aliased as "Invoice" / "CreditNote"
-    const invoiceSourceFind = sequelize.literal(`("Invoice".metadata->>'source') = 'manual_import'`);
-    const creditNoteSourceFind = sequelize.literal(`("CreditNote".metadata->>'source') = 'manual_import'`);
-    // count() has no include so table name is "invoices" / "credit_notes"
-    const invoiceSourceCount = sequelize.literal(`("invoices".metadata->>'source') = 'manual_import'`);
-    const creditNoteSourceCount = sequelize.literal(`("credit_notes".metadata->>'source') = 'manual_import'`);
-
-    const invoiceWhereFind = { [Op.and]: [invoiceSourceFind] };
-    const creditNoteWhereFind = { [Op.and]: [creditNoteSourceFind] };
-    const invoiceWhereCount = { [Op.and]: [invoiceSourceCount] };
-    const creditNoteWhereCount = { [Op.and]: [creditNoteSourceCount] };
+    // findAll: use model alias (Sequelize aliases main table when using include)
+    const invoiceWhere = { [Op.and]: [sequelize.literal(`("Invoice".metadata->>'source') = 'manual_import'`)] };
+    const creditNoteWhere = { [Op.and]: [sequelize.literal(`("CreditNote".metadata->>'source') = 'manual_import'`)] };
     if (since) {
-      invoiceWhereFind.createdAt = invoiceWhereCount.createdAt = { [Op.gte]: since };
-      creditNoteWhereFind.createdAt = creditNoteWhereCount.createdAt = { [Op.gte]: since };
+      invoiceWhere.createdAt = { [Op.gte]: since };
+      creditNoteWhere.createdAt = { [Op.gte]: since };
     }
 
-    const [invoices, creditNotes, totalInvoices, totalCreditNotes] = await Promise.all([
+    // Count via raw SQL so we use table names (invoices / credit_notes) and avoid alias issues
+    const sinceClause = since ? `AND "createdAt" >= :since` : '';
+    const [invCountRows, cnCountRows, invoices, creditNotes] = await Promise.all([
+      sequelize.query(
+        `SELECT COUNT(*)::int AS c FROM invoices WHERE (metadata->>'source') = 'manual_import' ${sinceClause}`,
+        { replacements: since ? { since } : {}, type: QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT COUNT(*)::int AS c FROM credit_notes WHERE (metadata->>'source') = 'manual_import' ${sinceClause}`,
+        { replacements: since ? { since } : {}, type: QueryTypes.SELECT }
+      ),
       Invoice.findAll({
-        where: invoiceWhereFind,
+        where: invoiceWhere,
         include: [{ model: Company, as: 'company', attributes: ['id', 'name'] }],
         order: [['createdAt', 'DESC']],
         limit,
         attributes: ['id', 'invoiceNumber', 'companyId', 'amount', 'issueDate', 'createdAt', 'metadata']
       }),
       CreditNote.findAll({
-        where: creditNoteWhereFind,
+        where: creditNoteWhere,
         include: [{ model: Company, as: 'company', attributes: ['id', 'name'] }],
         order: [['createdAt', 'DESC']],
         limit,
         attributes: ['id', 'creditNoteNumber', 'companyId', 'amount', 'issueDate', 'createdAt', 'metadata']
-      }),
-      Invoice.count({ where: invoiceWhereCount }),
-      CreditNote.count({ where: creditNoteWhereCount })
+      })
     ]);
+    const totalInvoices = invCountRows[0]?.c ?? 0;
+    const totalCreditNotes = cnCountRows[0]?.c ?? 0;
 
     console.log('SUMMARY');
     console.log('-'.repeat(80));
