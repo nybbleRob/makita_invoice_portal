@@ -28,6 +28,7 @@ import InvoiceView from './pages/InvoiceView';
 import InvoiceEdit from './pages/InvoiceEdit';
 import CreditNotes from './pages/CreditNotes';
 import CreditNoteView from './pages/CreditNoteView';
+import CreditNoteEdit from './pages/CreditNoteEdit';
 // import Statements from './pages/Statements'; // Unused - route is commented out
 import Unallocated from './pages/Unallocated';
 import UnallocatedView from './pages/UnallocatedView';
@@ -200,9 +201,10 @@ function AppRoutes() {
         <Route path="invoices/:id/view" element={<InvoiceView />} />
         <Route path="invoices/:id/edit" element={<PermissionRoute permission="INVOICES_EDIT"><InvoiceEdit /></PermissionRoute>} />
         
-        {/* Credit Notes - All portal users can view */}
+        {/* Credit Notes - All portal users can view, edit requires permission */}
         <Route path="credit-notes" element={<CreditNotes />} />
         <Route path="credit-notes/:id/view" element={<CreditNoteView />} />
+        <Route path="credit-notes/:id/edit" element={<PermissionRoute permission="CREDIT_NOTES_EDIT"><CreditNoteEdit /></PermissionRoute>} />
         
         {/* Statements - HIDDEN until client decides on scope */}
         {/* <Route path="statements" element={<PermissionRoute permission="STATEMENTS_VIEW"><Statements /></PermissionRoute>} /> */}

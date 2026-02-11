@@ -445,11 +445,13 @@ router.put('/:id', requirePermission('CREDIT_NOTES_EDIT'), async (req, res) => {
       amount,
       taxAmount,
       status,
+      documentStatus,
       reason,
       items,
       notes,
       fileUrl,
-      metadata
+      metadata,
+      editReason
     } = req.body;
     
     // Check if credit note number is being changed and if it already exists
@@ -463,19 +465,113 @@ router.put('/:id', requirePermission('CREDIT_NOTES_EDIT'), async (req, res) => {
       }
     }
     
-    // Update fields
-    if (creditNoteNumber !== undefined) creditNote.creditNoteNumber = creditNoteNumber;
-    if (companyId !== undefined) creditNote.companyId = companyId;
-    if (invoiceId !== undefined) creditNote.invoiceId = invoiceId;
-    if (issueDate !== undefined) creditNote.issueDate = issueDate;
-    if (amount !== undefined) creditNote.amount = amount;
-    if (taxAmount !== undefined) creditNote.taxAmount = taxAmount;
-    if (status !== undefined) creditNote.status = status;
-    if (reason !== undefined) creditNote.reason = reason;
-    if (items !== undefined) creditNote.items = items;
-    if (notes !== undefined) creditNote.notes = notes;
+    const changes = {};
+    const oldValues = {};
+    
+    if (creditNoteNumber !== undefined && creditNoteNumber !== creditNote.creditNoteNumber) {
+      oldValues.creditNoteNumber = creditNote.creditNoteNumber;
+      creditNote.creditNoteNumber = creditNoteNumber;
+      changes.creditNoteNumber = { from: oldValues.creditNoteNumber, to: creditNoteNumber };
+    }
+    if (companyId !== undefined && companyId !== creditNote.companyId) {
+      oldValues.companyId = creditNote.companyId;
+      creditNote.companyId = companyId;
+      changes.companyId = { from: oldValues.companyId, to: companyId };
+    }
+    if (invoiceId !== undefined && invoiceId !== (creditNote.invoiceId || null)) {
+      oldValues.invoiceId = creditNote.invoiceId;
+      creditNote.invoiceId = invoiceId || null;
+      changes.invoiceId = { from: oldValues.invoiceId, to: invoiceId };
+    }
+    if (issueDate !== undefined) {
+      const newDate = new Date(issueDate);
+      const oldDate = creditNote.issueDate ? new Date(creditNote.issueDate) : null;
+      if (!oldDate || newDate.getTime() !== oldDate.getTime()) {
+        oldValues.issueDate = creditNote.issueDate;
+        creditNote.issueDate = issueDate;
+        changes.issueDate = { from: oldValues.issueDate, to: issueDate };
+      }
+    }
+    if (amount !== undefined && parseFloat(amount) !== parseFloat(creditNote.amount || 0)) {
+      oldValues.amount = creditNote.amount;
+      creditNote.amount = amount;
+      changes.amount = { from: oldValues.amount, to: amount };
+    }
+    if (taxAmount !== undefined && parseFloat(taxAmount) !== parseFloat(creditNote.taxAmount || 0)) {
+      oldValues.taxAmount = creditNote.taxAmount;
+      creditNote.taxAmount = taxAmount;
+      changes.taxAmount = { from: oldValues.taxAmount, to: taxAmount };
+    }
+    if (status !== undefined && status !== creditNote.status) {
+      oldValues.status = creditNote.status;
+      creditNote.status = status;
+      changes.status = { from: oldValues.status, to: status };
+    }
+    if (documentStatus !== undefined && documentStatus !== creditNote.documentStatus) {
+      const settings = await Settings.getSettings();
+      const canChangeStatus = !settings.onlyExternalUsersChangeDocumentStatus ||
+                             req.user.role === 'external_user';
+      if (!canChangeStatus) {
+        return res.status(403).json({
+          message: 'Access denied. Only external users can change document status when this restriction is enabled.'
+        });
+      }
+      oldValues.documentStatus = creditNote.documentStatus;
+      creditNote.documentStatus = documentStatus;
+      changes.documentStatus = { from: oldValues.documentStatus, to: documentStatus };
+    }
+    if (reason !== undefined && reason !== (creditNote.reason || '')) {
+      oldValues.reason = creditNote.reason;
+      creditNote.reason = reason;
+      changes.reason = { from: oldValues.reason, to: reason };
+    }
+    if (items !== undefined) {
+      creditNote.items = items;
+      changes.items = { updated: true };
+    }
+    if (notes !== undefined && notes !== (creditNote.notes || '')) {
+      oldValues.notes = creditNote.notes;
+      creditNote.notes = notes;
+      changes.notes = { from: oldValues.notes, to: notes };
+    }
     if (fileUrl !== undefined) creditNote.fileUrl = fileUrl;
     if (metadata !== undefined) creditNote.metadata = metadata;
+    
+    if (Object.keys(changes).length > 0) {
+      if (!editReason || editReason.trim().length === 0) {
+        return res.status(400).json({
+          message: 'Edit reason is required when making changes to a credit note.'
+        });
+      }
+      creditNote.editedBy = req.user.userId;
+      creditNote.editReason = editReason.trim();
+      const editHistory = creditNote.editHistory || [];
+      editHistory.push({
+        timestamp: new Date().toISOString(),
+        editedBy: req.user.userId,
+        editedByName: req.user.name || req.user.email || 'Unknown',
+        reason: editReason.trim(),
+        changes
+      });
+      creditNote.editHistory = editHistory;
+      await logActivity({
+        type: ActivityType.CREDIT_NOTE_EDITED,
+        userId: req.user.userId,
+        userEmail: req.user.email,
+        userRole: req.user.role,
+        action: 'Edited credit note',
+        details: {
+          creditNoteId: creditNote.id,
+          creditNoteNumber: creditNote.creditNoteNumber,
+          changes,
+          reason: editReason.trim()
+        },
+        companyId: creditNote.companyId,
+        companyName: creditNote.company?.name || null,
+        ipAddress: req.ip || req.connection.remoteAddress,
+        userAgent: req.get('user-agent')
+      });
+    }
     
     await creditNote.save();
     
