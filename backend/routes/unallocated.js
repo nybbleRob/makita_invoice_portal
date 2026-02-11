@@ -145,14 +145,19 @@ router.get('/', async (req, res) => {
     // Filter by failure reason if provided
     if (failureReason && failureReason !== 'all') {
       if (failureReason === 'unallocated') {
-        // For unallocated, check both status and failureReason
-        where[Op.or] = [
-          { status: 'unallocated' },
-          { failureReason: 'unallocated' }
-        ];
+        // For unallocated, check both status and failureReason (exclude duplicate)
+        where.status = { [Op.in]: ['unallocated', 'failed', 'duplicate'] };
+        where[Op.and] = where[Op.and] || [];
+        where[Op.and].push({
+          [Op.or]: [
+            { failureReason: 'unallocated' },
+            { failureReason: null }
+          ]
+        });
       } else if (failureReason === 'duplicate') {
-        // For duplicate, check status
-        where.status = 'duplicate';
+        // Duplicates are stored with status 'unallocated' and failureReason 'duplicate'
+        where.failureReason = 'duplicate';
+        where.status = { [Op.in]: ['unallocated', 'failed', 'duplicate'] };
       } else {
         where.failureReason = failureReason;
         where.status = { [Op.in]: ['unallocated', 'failed', 'duplicate'] };
