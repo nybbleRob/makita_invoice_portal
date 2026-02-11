@@ -72,33 +72,40 @@ async function run() {
     console.log(`Limit: ${limit} per document type`);
     console.log('');
 
-    // JSONB filter: metadata.source = 'manual_import' (table-qualified for PostgreSQL)
-    const invoiceSourceWhere = sequelize.literal(`("invoices".metadata->>'source') = 'manual_import'`);
-    const creditNoteSourceWhere = sequelize.literal(`("credit_notes".metadata->>'source') = 'manual_import'`);
-    const invoiceWhere = { [Op.and]: [invoiceSourceWhere] };
-    const creditNoteWhere = { [Op.and]: [creditNoteSourceWhere] };
+    // JSONB filter: metadata.source = 'manual_import'
+    // findAll uses include (join) so table is aliased as "Invoice" / "CreditNote"
+    const invoiceSourceFind = sequelize.literal(`("Invoice".metadata->>'source') = 'manual_import'`);
+    const creditNoteSourceFind = sequelize.literal(`("CreditNote".metadata->>'source') = 'manual_import'`);
+    // count() has no include so table name is "invoices" / "credit_notes"
+    const invoiceSourceCount = sequelize.literal(`("invoices".metadata->>'source') = 'manual_import'`);
+    const creditNoteSourceCount = sequelize.literal(`("credit_notes".metadata->>'source') = 'manual_import'`);
+
+    const invoiceWhereFind = { [Op.and]: [invoiceSourceFind] };
+    const creditNoteWhereFind = { [Op.and]: [creditNoteSourceFind] };
+    const invoiceWhereCount = { [Op.and]: [invoiceSourceCount] };
+    const creditNoteWhereCount = { [Op.and]: [creditNoteSourceCount] };
     if (since) {
-      invoiceWhere.createdAt = { [Op.gte]: since };
-      creditNoteWhere.createdAt = { [Op.gte]: since };
+      invoiceWhereFind.createdAt = invoiceWhereCount.createdAt = { [Op.gte]: since };
+      creditNoteWhereFind.createdAt = creditNoteWhereCount.createdAt = { [Op.gte]: since };
     }
 
     const [invoices, creditNotes, totalInvoices, totalCreditNotes] = await Promise.all([
       Invoice.findAll({
-        where: invoiceWhere,
+        where: invoiceWhereFind,
         include: [{ model: Company, as: 'company', attributes: ['id', 'name'] }],
         order: [['createdAt', 'DESC']],
         limit,
         attributes: ['id', 'invoiceNumber', 'companyId', 'amount', 'issueDate', 'createdAt', 'metadata']
       }),
       CreditNote.findAll({
-        where: creditNoteWhere,
+        where: creditNoteWhereFind,
         include: [{ model: Company, as: 'company', attributes: ['id', 'name'] }],
         order: [['createdAt', 'DESC']],
         limit,
         attributes: ['id', 'creditNoteNumber', 'companyId', 'amount', 'issueDate', 'createdAt', 'metadata']
       }),
-      Invoice.count({ where: invoiceWhere }),
-      CreditNote.count({ where: creditNoteWhere })
+      Invoice.count({ where: invoiceWhereCount }),
+      CreditNote.count({ where: creditNoteWhereCount })
     ]);
 
     console.log('SUMMARY');
