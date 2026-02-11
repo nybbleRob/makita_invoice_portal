@@ -108,7 +108,7 @@
   border-left: none !important;
 }
 
-/* Nav icons: same colour when active as when inactive (stay black) */
-.navbar-expand .nav-item.active .nav-link .nav-link-icon {
-  color: var(--tblr-navbar-color);
+/* Nav icons: same colour when active as when inactive (all nav items) */
+.navbar-expand .navbar-nav .nav-link .nav-link-icon {
+  color: var(--tblr-navbar-color) !important;
 }
