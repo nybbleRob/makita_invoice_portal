@@ -6,10 +6,11 @@
  * import button (not FTP/system uploads).
  *
  * Usage:
- *   node backend/scripts/list-manual-uploads.js
+ *   node backend/scripts/list-manual-uploads.js          (default: last 2 days)
  *   node backend/scripts/list-manual-uploads.js --since 2025-01-01
- *   node backend/scripts/list-manual-uploads.js --since 2025-01-01 --limit 50
  *   node backend/scripts/list-manual-uploads.js --days 7
+ *   node backend/scripts/list-manual-uploads.js --limit 50
+ *   Omit --since/--days to limit to last 2 days.
  */
 
 const path = require('path');
@@ -52,7 +53,13 @@ function parseSince() {
   return null;
 }
 
-const since = parseSince();
+// Default last 2 days (today + yesterday) if no --since or --days
+const since = parseSince() ?? (() => {
+  const d = new Date();
+  d.setDate(d.getDate() - 2);
+  d.setHours(0, 0, 0, 0);
+  return d;
+})();
 
 async function run() {
   try {
@@ -65,14 +72,11 @@ async function run() {
     console.log(`Limit: ${limit} per document type`);
     console.log('');
 
-    // JSONB filter: metadata->>'source' = 'manual_import'
-    const manualSourceWhere = sequelize.where(
-      sequelize.literal("metadata->>'source' = 'manual_import'"),
-      true
-    );
-
-    const invoiceWhere = { [Op.and]: [manualSourceWhere] };
-    const creditNoteWhere = { [Op.and]: [manualSourceWhere] };
+    // JSONB filter: metadata.source = 'manual_import' (table-qualified for PostgreSQL)
+    const invoiceSourceWhere = sequelize.literal(`("invoices".metadata->>'source') = 'manual_import'`);
+    const creditNoteSourceWhere = sequelize.literal(`("credit_notes".metadata->>'source') = 'manual_import'`);
+    const invoiceWhere = { [Op.and]: [invoiceSourceWhere] };
+    const creditNoteWhere = { [Op.and]: [creditNoteSourceWhere] };
     if (since) {
       invoiceWhere.createdAt = { [Op.gte]: since };
       creditNoteWhere.createdAt = { [Op.gte]: since };
