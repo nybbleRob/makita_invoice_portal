@@ -48,13 +48,10 @@ const Layout = () => {
       <li className={`nav-item ${location.pathname === '/invoices' ? 'active' : ''}`}>
         <Link to="/invoices" className="nav-link">
           <span className="nav-link-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="icon icon-tabler icons-tabler-filled icon-tabler-file-invoice">
               <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-              <path d="M14 3v4a1 1 0 0 0 1 1h4" />
-              <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
-              <path d="M9 9l1 0" />
-              <path d="M9 13l6 0" />
-              <path d="M9 17l6 0" />
+              <path d="M12 2l.117 .007a1 1 0 0 1 .876 .876l.007 .117v4l.005 .15a2 2 0 0 0 1.838 1.844l.157 .006h4l.117 .007a1 1 0 0 1 .876 .876l.007 .117v9a3 3 0 0 1 -2.824 2.995l-.176 .005h-10a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-14a3 3 0 0 1 2.824 -2.995l.176 -.005zm4 15h-2a1 1 0 0 0 0 2h2a1 1 0 0 0 0 -2m0 -4h-8a1 1 0 0 0 0 2h8a1 1 0 0 0 0 -2m-7 -7h-1a1 1 0 1 0 0 2h1a1 1 0 1 0 0 -2" />
+              <path d="M19 7h-4l-.001 -4.001z" />
             </svg>
           </span>
           <span className="nav-link-title">Invoices</span>
@@ -63,13 +60,10 @@ const Layout = () => {
       <li className={`nav-item ${location.pathname === '/credit-notes' ? 'active' : ''}`}>
         <Link to="/credit-notes" className="nav-link">
           <span className="nav-link-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="icon icon-tabler icons-tabler-filled icon-tabler-file-description">
               <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-              <path d="M14 3v4a1 1 0 0 0 1 1h4" />
-              <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
-              <path d="M9 9l1 0" />
-              <path d="M9 13l6 0" />
-              <path d="M9 17l6 0" />
+              <path d="M12 2l.117 .007a1 1 0 0 1 .876 .876l.007 .117v4l.005 .15a2 2 0 0 0 1.838 1.844l.157 .006h4l.117 .007a1 1 0 0 1 .876 .876l.007 .117v9a3 3 0 0 1 -2.824 2.995l-.176 .005h-10a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-14a3 3 0 0 1 2.824 -2.995l.176 -.005zm3 14h-6a1 1 0 0 0 0 2h6a1 1 0 0 0 0 -2m0 -4h-6a1 1 0 0 0 0 2h6a1 1 0 0 0 0 -2" />
+              <path d="M19 7h-4l-.001 -4.001z" />
             </svg>
           </span>
           <span className="nav-link-title">Credit Notes</span>
@@ -98,11 +92,9 @@ const Layout = () => {
         <li className={`nav-item ${location.pathname === '/unallocated' ? 'active' : ''}`}>
           <Link to="/unallocated" className="nav-link">
             <span className="nav-link-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="icon icon-tabler icons-tabler-filled icon-tabler-zoom-question">
                 <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
-                <path d="M12 8v4" />
-                <path d="M12 16h.01" />
+                <path d="M14 3.072a8 8 0 0 1 2.32 11.834l5.387 5.387a1 1 0 0 1 -1.414 1.414l-5.388 -5.387a8 8 0 0 1 -12.905 -6.32l.005 -.285a8 8 0 0 1 11.995 -6.643m-4 8.928a1 1 0 0 0 -.993 .883l-.007 .127a1 1 0 0 0 1.993 .117l.007 -.127a1 1 0 0 0 -1 -1m-1.9 -5.123a1 1 0 0 0 1.433 1.389l.088 -.09a.5 .5 0 1 1 .379 .824a1 1 0 0 0 -.002 2a2.5 2.5 0 1 0 -1.9 -4.123" />
               </svg>
             </span>
             <span className="nav-link-title">Unallocated</span>
@@ -151,13 +143,9 @@ const Layout = () => {
         <li className={`nav-item ${location.pathname === '/companies' ? 'active' : ''}`}>
           <Link to="/companies" className="nav-link">
             <span className="nav-link-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="icon icon-tabler icons-tabler-filled icon-tabler-briefcase">
                 <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                <path d="M3 21l18 0" />
-                <path d="M5 21v-16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v16" />
-                <path d="M9 7l6 0" />
-                <path d="M9 11l6 0" />
-                <path d="M9 15l6 0" />
+                <path d="M22 13.478v4.522a3 3 0 0 1 -3 3h-14a3 3 0 0 1 -3 -3v-4.522l.553 .277a20.999 20.999 0 0 0 18.897 -.002l.55 -.275zm-8 -11.478a3 3 0 0 1 3 3v1h2a3 3 0 0 1 3 3v2.242l-1.447 .724a19.002 19.002 0 0 1 -16.726 .186l-.647 -.32l-1.18 -.59v-2.242a3 3 0 0 1 3 -3h2v-1a3 3 0 0 1 3 -3h4zm-2 8a1 1 0 0 0 -1 1a1 1 0 1 0 2 .01c0 -.562 -.448 -1.01 -1 -1.01zm2 -6h-4a1 1 0 0 0 -1 1v1h6v-1a1 1 0 0 0 -1 -1z" />
               </svg>
             </span>
             <span className="nav-link-title">Companies</span>
@@ -169,10 +157,10 @@ const Layout = () => {
         <li className={`nav-item ${location.pathname === '/users' ? 'active' : ''}`}>
           <Link to="/users" className="nav-link">
             <span className="nav-link-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="icon icon-tabler icons-tabler-filled icon-tabler-user">
                 <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                <path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0" />
-                <path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" />
+                <path d="M12 2a5 5 0 1 1 -5 5l.005 -.217a5 5 0 0 1 4.995 -4.783z" />
+                <path d="M14 14a5 5 0 0 1 5 5v1a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-1a5 5 0 0 1 5 -5h4z" />
               </svg>
             </span>
             <span className="nav-link-title">Users</span>
@@ -184,13 +172,10 @@ const Layout = () => {
         <li className={`nav-item ${location.pathname === '/activity-logs' ? 'active' : ''}`}>
           <Link to="/activity-logs" className="nav-link">
             <span className="nav-link-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="icon icon-tabler icons-tabler-filled icon-tabler-library">
                 <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                <path d="M14 3v4a1 1 0 0 0 1 1h4" />
-                <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
-                <path d="M9 9l1 0" />
-                <path d="M9 13l6 0" />
-                <path d="M9 17l6 0" />
+                <path d="M18.333 2a3.667 3.667 0 0 1 3.667 3.667v8.666a3.667 3.667 0 0 1 -3.667 3.667h-8.666a3.667 3.667 0 0 1 -3.667 -3.667v-8.666a3.667 3.667 0 0 1 3.667 -3.667zm-4.333 10h-3a1 1 0 0 0 0 2h3a1 1 0 0 0 0 -2m3 -3h-6a1 1 0 0 0 0 2h6a1 1 0 0 0 0 -2m-1 -3h-5a1 1 0 0 0 0 2h5a1 1 0 0 0 0 -2" />
+                <path d="M3.517 6.391a1 1 0 0 1 .99 1.738c-.313 .178 -.506 .51 -.507 .868v10c0 .548 .452 1 1 1h10c.284 0 .405 -.088 .626 -.486a1 1 0 0 1 1.748 .972c-.546 .98 -1.28 1.514 -2.374 1.514h-10c-1.652 0 -3 -1.348 -3 -3v-10.002a3 3 0 0 1 1.517 -2.605" />
               </svg>
             </span>
             <span className="nav-link-title">Activity Logs</span>
