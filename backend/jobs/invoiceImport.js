@@ -1538,7 +1538,30 @@ async function processInvoiceImport(job) {
     }
     
     const processingTime = Date.now() - startTime;
-    
+
+    // Resolve existing document number for duplicates (so import summary can show "already in system as Invoice/CN X")
+    let duplicateDocumentNumber = null;
+    let duplicateDocumentType = null;
+    if (isDuplicate && existingFile) {
+      const docId = existingFile.metadata?.documentId;
+      const fileType = (existingFile.fileType || existingFile.metadata?.documentType || '').toLowerCase();
+      if (docId) {
+        if (fileType.includes('invoice')) {
+          const inv = await Invoice.findByPk(docId, { attributes: ['invoiceNumber'] });
+          if (inv) {
+            duplicateDocumentNumber = inv.invoiceNumber;
+            duplicateDocumentType = 'invoice';
+          }
+        } else if (fileType.includes('credit')) {
+          const cn = await CreditNote.findByPk(docId, { attributes: ['creditNoteNumber'] });
+          if (cn) {
+            duplicateDocumentNumber = cn.creditNoteNumber || cn.creditNumber;
+            duplicateDocumentType = 'credit_note';
+          }
+        }
+      }
+    }
+
     // Add result to import store
     const importStore = require('../utils/importStore');
     const result = {
@@ -1549,9 +1572,12 @@ async function processInvoiceImport(job) {
       documentId: document?.id,
       documentType: documentType,
       status: fileStatus,
-      isDuplicate: isDuplicate,
+      isDuplicate: isDuplicate || isDuplicateInvoiceNumber,
       duplicateFileId: duplicateFileId,
+      duplicateDocumentNumber: duplicateDocumentNumber || (isDuplicateInvoiceNumber ? duplicateInvoiceNumber : null),
+      duplicateDocumentType: duplicateDocumentType || (isDuplicateInvoiceNumber ? (isCreditNote ? 'credit_note' : 'invoice') : null),
       invoiceNumber: getParsedValue(parsedData, 'invoiceNumber') || parsedData.invoiceNumber,
+      creditNoteNumber: getParsedValue(parsedData, 'creditNumber') || parsedData.creditNumber,
       accountNumber: getParsedValue(parsedData, 'accountNumber') || parsedData.accountNumber,
       amount: getParsedValue(parsedData, 'amount') || parsedData.amount,
       processingTime,

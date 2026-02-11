@@ -3,8 +3,9 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { CreditNote, Company, Invoice, Sequelize, Settings, sequelize } = require('../models');
+const { CreditNote, Company, Invoice, File, Sequelize, Settings, sequelize } = require('../models');
 const { Op } = Sequelize;
+const crypto = require('crypto');
 const auth = require('../middleware/auth');
 const { checkDocumentAccess, buildCompanyFilter } = require('../middleware/documentAccess');
 const { requirePermission } = require('../middleware/permissions');
@@ -1103,47 +1104,95 @@ router.post('/import', requirePermission('CREDIT_NOTES_IMPORT'), importUpload.ar
       userAgent: req.get('user-agent')
     });
     
-    // Build list of files that pass existence checks (only these get enqueued so totalFiles matches job count)
-    const filesToProcess = [];
+    // Batch duplicate detection by file hash (same as invoice import – detects re-uploads of already-imported files)
+    console.log(`🔍 Calculating hashes for ${req.files.length} file(s) for duplicate detection...`);
+    const fileHashMap = new Map();
+    const fileHashes = [];
+
     for (const file of req.files) {
       const absolutePath = path.resolve(file.path);
       if (!fs.existsSync(absolutePath)) {
         console.error(`⚠️  File not found after upload: ${absolutePath}`);
         continue;
       }
-      await new Promise(resolve => setTimeout(resolve, 100));
-      if (!fs.existsSync(absolutePath)) {
-        console.error(`⚠️  File disappeared before adding to queue: ${absolutePath}`);
+      try {
+        const fileBuffer = fs.readFileSync(absolutePath);
+        const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+        fileHashMap.set(absolutePath, {
+          hash: fileHash,
+          fileName: path.basename(file.path),
+          originalName: file.originalname
+        });
+        fileHashes.push(fileHash);
+      } catch (hashError) {
+        console.error(`⚠️  Error calculating hash for ${absolutePath}:`, hashError.message);
         continue;
       }
-      filesToProcess.push({ file, absolutePath });
     }
-    
+
+    console.log(`🔍 Checking ${fileHashes.length} hash(es) against database...`);
+    const settings = await Settings.findOne();
+    const retentionDays = settings?.fileRetentionDays || null;
+    const retentionDate = retentionDays ? new Date(Date.now() - (retentionDays * 24 * 60 * 60 * 1000)) : null;
+    const duplicateWhere = { fileHash: { [Op.in]: fileHashes } };
+    if (retentionDate) {
+      duplicateWhere[Op.or] = [
+        { deletedAt: null },
+        { deletedAt: { [Op.gte]: retentionDate } }
+      ];
+    }
+    const existingFiles = await File.findAll({
+      where: duplicateWhere,
+      attributes: ['id', 'fileHash', 'fileName', 'status', 'deletedAt', 'filePath'],
+      order: [['createdAt', 'DESC']]
+    });
+    const existingHashesMap = new Map();
+    for (const existingFile of existingFiles) {
+      if (!existingHashesMap.has(existingFile.fileHash)) {
+        existingHashesMap.set(existingFile.fileHash, existingFile);
+      }
+    }
+    console.log(`✅ Found ${existingHashesMap.size} existing file(s) with matching hash(es)`);
+
+    const jobsToAdd = [];
+    for (const file of req.files) {
+      const absolutePath = path.resolve(file.path);
+      const fileInfo = fileHashMap.get(absolutePath);
+      if (!fileInfo) continue;
+      if (!fs.existsSync(absolutePath)) continue;
+      const existingFile = existingHashesMap.get(fileInfo.hash);
+      const isDuplicate = !!existingFile;
+      const duplicateFileId = existingFile?.id || null;
+      jobsToAdd.push({ absolutePath, fileInfo, isDuplicate, duplicateFileId });
+    }
+
     const importStore = require('../utils/importStore');
     const { registerBatch } = require('../services/batchNotificationService');
-    
-    const filePaths = filesToProcess.map(f => f.absolutePath);
-    await importStore.createImport(importId, filesToProcess.length, filePaths, userId);
+    const filePaths = jobsToAdd.map(j => j.absolutePath);
+    await importStore.createImport(importId, jobsToAdd.length, filePaths, userId);
     try {
-      await registerBatch(importId, filesToProcess.length, {
+      await registerBatch(importId, jobsToAdd.length, {
         userId: req.user.userId,
         userEmail: req.user.email,
         source: 'manual-upload'
       });
-      console.log(`[Batch ${importId}] Registered batch with ${filesToProcess.length} jobs for notification tracking`);
+      console.log(`[Batch ${importId}] Registered batch with ${jobsToAdd.length} jobs for notification tracking`);
     } catch (batchError) {
       console.warn('Failed to register batch:', batchError.message);
     }
-    
-    for (const { file, absolutePath } of filesToProcess) {
+
+    for (const { absolutePath, fileInfo, isDuplicate, duplicateFileId } of jobsToAdd) {
       await invoiceImportQueue.add('invoice-import', {
         filePath: absolutePath,
-        fileName: path.basename(file.path),
-        originalName: file.originalname,
+        fileName: fileInfo.fileName,
+        originalName: fileInfo.originalName,
         importId: importId,
         userId: userId,
         source: 'manual-upload',
-        documentType: 'credit_note'
+        documentType: 'credit_note',
+        fileHash: fileInfo.hash,
+        isDuplicate: isDuplicate,
+        duplicateFileId: duplicateFileId
       }, {
         priority: 1,
         attempts: 3,
@@ -1151,14 +1200,18 @@ router.post('/import', requirePermission('CREDIT_NOTES_IMPORT'), importUpload.ar
         removeOnComplete: true,
         removeOnFail: false
       });
-      console.log(`📤 Added file to credit note import queue: ${file.originalname} -> ${absolutePath}`);
+      if (isDuplicate) {
+        console.log(`📤 Added file to credit note import queue (DUPLICATE): ${fileInfo.originalName} (matches ${duplicateFileId})`);
+      } else {
+        console.log(`📤 Added file to credit note import queue: ${fileInfo.originalName} -> ${absolutePath}`);
+      }
     }
-    
+
     res.json({
       success: true,
       importId: importId,
-      totalFiles: filesToProcess.length,
-      message: `Import started. Processing ${filesToProcess.length} file(s)...`
+      totalFiles: jobsToAdd.length,
+      message: `Import started. Processing ${jobsToAdd.length} file(s)...`
     });
   } catch (error) {
     console.error('Error starting credit note import:', error);
@@ -1239,7 +1292,8 @@ router.get('/import/:importId/results', async (req, res) => {
     const successful = importSession.results.filter(r => r.success).length;
     const failed = importSession.results.filter(r => !r.success).length;
     const matched = importSession.results.filter(r => r.companyId).length;
-    const unallocated = importSession.results.filter(r => r.success && !r.companyId).length;
+    const duplicates = importSession.results.filter(r => r.isDuplicate).length;
+    const unallocated = importSession.results.filter(r => r.success && !r.companyId && !r.isDuplicate).length;
     const totalProcessingTime = importSession.results.reduce((sum, r) => sum + (r.processingTime || 0), 0);
     const avgProcessingTime = importSession.results.length > 0 ? totalProcessingTime / importSession.results.length : 0;
     
@@ -1257,6 +1311,7 @@ router.get('/import/:importId/results', async (req, res) => {
           failed,
           matched,
           unallocated,
+          duplicates,
           avgProcessingTime: Math.round(avgProcessingTime)
         },
         results: importSession.results

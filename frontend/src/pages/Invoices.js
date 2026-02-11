@@ -1464,6 +1464,31 @@ const Invoices = () => {
                       <div className="card-body">
                         <div className="row align-items-center">
                           <div className="col-auto">
+                            <span className="bg-info text-white avatar">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                <path d="M8 8a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-4a2 2 0 0 1 -2 -2z" />
+                                <path d="M16 8v.01" />
+                                <path d="M16 12v.01" />
+                                <path d="M16 16v.01" />
+                                <path d="M12 16v.01" />
+                                <path d="M8 16v.01" />
+                              </svg>
+                            </span>
+                          </div>
+                          <div className="col">
+                            <div className="font-weight-medium text-info">{importResults.summary.duplicates || 0}</div>
+                            <div className="text-muted">Duplicates</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-md-3">
+                    <div className="card card-sm">
+                      <div className="card-body">
+                        <div className="row align-items-center">
+                          <div className="col-auto">
                             <span className="bg-danger text-white avatar">
                               <svg xmlns="http://www.w3.org/2000/svg" className="icon" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
                                 <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
@@ -1483,7 +1508,7 @@ const Invoices = () => {
                 </div>
 
                 {/* Overall Status Alert */}
-                {importResults.summary.failed === 0 && importResults.summary.unallocated === 0 ? (
+                {importResults.summary.failed === 0 && (importResults.summary.unallocated || 0) === 0 && (importResults.summary.duplicates || 0) === 0 ? (
                   <div className="alert alert-success d-flex align-items-center mb-4">
                     <svg xmlns="http://www.w3.org/2000/svg" className="icon me-2" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
                       <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
@@ -1504,7 +1529,7 @@ const Invoices = () => {
                       <strong>Some documents failed to import.</strong> {importResults.summary.failed} document(s) encountered errors. Check the details below.
                     </div>
                   </div>
-                ) : (
+                ) : (importResults.summary.unallocated > 0 || importResults.summary.duplicates > 0) ? (
                   <div className="alert alert-warning d-flex align-items-center mb-4">
                     <svg xmlns="http://www.w3.org/2000/svg" className="icon me-2" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
                       <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
@@ -1513,10 +1538,16 @@ const Invoices = () => {
                       <path d="M12 16h.01" />
                     </svg>
                     <div>
-                      <strong>Import completed with warnings.</strong> {importResults.summary.unallocated} document(s) were imported but could not be matched to a company. Review them in the Unallocated screen.
+                      {(importResults.summary.duplicates || 0) > 0 && (
+                        <><strong>Duplicate documents.</strong> {importResults.summary.duplicates} file(s) were duplicates of documents already in the system (same file or same invoice/credit number).</>
+                      )}
+                      {(importResults.summary.duplicates || 0) > 0 && (importResults.summary.unallocated || 0) > 0 && ' '}
+                      {(importResults.summary.unallocated || 0) > 0 && (
+                        <><strong>Unallocated.</strong> {importResults.summary.unallocated} document(s) were imported but could not be matched to a company. Review them in the Unallocated screen.</>
+                      )}
                     </div>
                   </div>
-                )}
+                ) : null}
 
                 {/* Detailed Results Table */}
                 <div className="card">
@@ -1571,7 +1602,11 @@ const Invoices = () => {
                                 {result.companyId ? (
                                   <span className="badge bg-success-lt">Matched</span>
                                 ) : result.success ? (
-                                  <span className="badge bg-warning-lt">Unallocated</span>
+                                  result.isDuplicate ? (
+                                    <span className="badge bg-info-lt">Duplicate</span>
+                                  ) : (
+                                    <span className="badge bg-warning-lt">Unallocated</span>
+                                  )
                                 ) : (
                                   <span className="text-muted">-</span>
                                 )}

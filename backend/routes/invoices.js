@@ -902,7 +902,8 @@ router.get('/import/:importId/results', async (req, res) => {
     const successful = importSession.results.filter(r => r.success).length;
     const failed = importSession.results.filter(r => !r.success).length;
     const matched = importSession.results.filter(r => r.companyId).length;
-    const unallocated = importSession.results.filter(r => r.success && !r.companyId).length;
+    const duplicates = importSession.results.filter(r => r.isDuplicate).length;
+    const unallocated = importSession.results.filter(r => r.success && !r.companyId && !r.isDuplicate).length;
     const totalProcessingTime = importSession.results.reduce((sum, r) => sum + (r.processingTime || 0), 0);
     const avgProcessingTime = importSession.results.length > 0 ? totalProcessingTime / importSession.results.length : 0;
     
@@ -920,6 +921,7 @@ router.get('/import/:importId/results', async (req, res) => {
           failed,
           matched,
           unallocated,
+          duplicates,
           avgProcessingTime: Math.round(avgProcessingTime)
         },
         results: importSession.results
