@@ -279,12 +279,7 @@ const Login = () => {
                 />
               </div>
               <div className="mb-2">
-                <label className="form-label">
-                  Password
-                  <span className="form-label-description">
-                    <Link to="/forgot-password">I forgot password</Link>
-                  </span>
-                </label>
+                <label className="form-label">Password</label>
                 <div className="input-group input-group-flat">
                   <input
                     type={showPassword ? 'text' : 'password'}
@@ -333,6 +328,9 @@ const Login = () => {
               </div>
             </form>
             <div className="text-center text-secondary mt-3">
+              <Link to="/forgot-password">I forgot password</Link>
+            </div>
+            <div className="text-center text-secondary mt-2">
               <Link to="/register">Register for an Account</Link>
             </div>
           </div>
