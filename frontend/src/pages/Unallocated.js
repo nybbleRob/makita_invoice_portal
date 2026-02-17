@@ -15,9 +15,9 @@ const Unallocated = () => {
   const [activeSearchQuery, setActiveSearchQuery] = useState('');
   const [reasonFilter, setReasonFilter] = useState('all');
   const searchInputRef = useRef(null);
-  const [accountNumberFilter] = useState('');
-  const [invoiceNumberFilter] = useState('');
-  const [dateFilter] = useState('');
+  const [accountNumberFilter, setAccountNumberFilter] = useState('');
+  const [invoiceNumberFilter, setInvoiceNumberFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [editingData, setEditingData] = useState({});
@@ -54,25 +54,39 @@ const Unallocated = () => {
     setSelectedFiles(new Set());
   }, [pagination.page, activeSearchQuery, reasonFilter, debouncedAccountNumber, debouncedInvoiceNumber, debouncedDate]);
 
-  // Sync page from URL on load / when user uses browser back
+  // Hydrate state from URL on load / when user uses browser back
   useEffect(() => {
     const pageFromUrl = parseInt(searchParams.get('page'), 10);
-    if (!isNaN(pageFromUrl) && pageFromUrl >= 1) {
-      setPagination(prev => (prev.page !== pageFromUrl ? { ...prev, page: pageFromUrl } : prev));
-    }
+    const page = (!isNaN(pageFromUrl) && pageFromUrl >= 1) ? pageFromUrl : 1;
+    const search = searchParams.get('search') || '';
+    const reason = searchParams.get('failureReason') || 'all';
+    const accountNumber = searchParams.get('accountNumber') || '';
+    const invoiceNumber = searchParams.get('invoiceNumber') || '';
+    const date = searchParams.get('date') || '';
+
+    setPagination(prev => (prev.page !== page ? { ...prev, page } : prev));
+    setSearchQuery(prev => (prev !== search ? search : prev));
+    setActiveSearchQuery(prev => (prev !== search ? search : prev));
+    setReasonFilter(prev => (prev !== reason ? reason : prev));
+    setAccountNumberFilter(prev => (prev !== accountNumber ? accountNumber : prev));
+    setInvoiceNumberFilter(prev => (prev !== invoiceNumber ? invoiceNumber : prev));
+    setDateFilter(prev => (prev !== date ? date : prev));
   }, [searchParams]);
 
-  // Sync page to URL when pagination.page changes
+  // Sync state to URL when filters/pagination change (so Back from view restores filters)
   useEffect(() => {
-    const urlPage = searchParams.get('page');
-    if (urlPage !== String(pagination.page)) {
-      setSearchParams(prev => {
-        const next = new URLSearchParams(prev);
-        next.set('page', String(pagination.page));
-        return next;
-      }, { replace: true });
+    const next = new URLSearchParams();
+    next.set('page', String(pagination.page));
+    if (activeSearchQuery && activeSearchQuery.trim()) next.set('search', activeSearchQuery.trim());
+    if (reasonFilter !== 'all') next.set('failureReason', reasonFilter);
+    if (accountNumberFilter && accountNumberFilter.trim()) next.set('accountNumber', accountNumberFilter.trim());
+    if (invoiceNumberFilter && invoiceNumberFilter.trim()) next.set('invoiceNumber', invoiceNumberFilter.trim());
+    if (dateFilter && dateFilter.trim()) next.set('date', dateFilter.trim());
+    const nextStr = next.toString();
+    if (nextStr !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
     }
-  }, [pagination.page]);
+  }, [pagination.page, activeSearchQuery, reasonFilter, accountNumberFilter, invoiceNumberFilter, dateFilter]);
 
   // Ctrl+K keyboard shortcut to focus search
   useEffect(() => {
@@ -880,7 +894,7 @@ const Unallocated = () => {
                             <div className="btn-list flex-nowrap">
                               <button 
                                 className="btn btn-sm btn-primary"
-                                onClick={() => navigate(`/unallocated/${doc.id}/view`, { state: { listPage: pagination.page } })}
+                                onClick={() => navigate(`/unallocated/${doc.id}/view`, { state: { returnQuery: searchParams.toString() } })}
                                 title="View"
                               >
                                 View

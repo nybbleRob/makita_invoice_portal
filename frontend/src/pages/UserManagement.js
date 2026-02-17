@@ -87,25 +87,44 @@ const UserManagement = () => {
     fetchManageableRoles();
   }, []);
 
-  // Sync page from URL on load / when user uses browser back
+  // Hydrate state from URL on load / when user uses browser back
   useEffect(() => {
     const pageFromUrl = parseInt(searchParams.get('page'), 10);
-    if (!isNaN(pageFromUrl) && pageFromUrl >= 1) {
-      setUsersPage(prev => (prev !== pageFromUrl ? pageFromUrl : prev));
-    }
+    const page = (!isNaN(pageFromUrl) && pageFromUrl >= 1) ? pageFromUrl : 1;
+    const search = searchParams.get('search') || '';
+    const status = searchParams.get('status') || 'all';
+    const role = searchParams.get('role') || 'all';
+    const companyIdsParam = searchParams.get('companyIds') || '';
+    const companyIds = companyIdsParam ? companyIdsParam.split(',').filter(Boolean) : [];
+
+    setUsersPage(prev => (prev !== page ? page : prev));
+    setSearchQuery(prev => (prev !== search ? search : prev));
+    setActiveSearchQuery(prev => (prev !== search ? search : prev));
+    setStatusFilter(prev => (prev !== status ? status : prev));
+    setRoleFilter(prev => (prev !== role ? role : prev));
+    setSelectedCompanyFilters(prev => {
+      const ids = companyIds;
+      if (ids.length === 0) return prev.length === 0 ? prev : [];
+      if (prev.length !== ids.length || ids.some((id, i) => id !== (prev[i]?.id ?? prev[i]))) {
+        return ids.map(id => ({ id }));
+      }
+      return prev;
+    });
   }, [searchParams]);
 
-  // Sync page to URL when usersPage changes
+  // Sync state to URL when filters/pagination change (so Back from view restores filters)
   useEffect(() => {
-    const urlPage = searchParams.get('page');
-    if (urlPage !== String(usersPage)) {
-      setSearchParams(prev => {
-        const next = new URLSearchParams(prev);
-        next.set('page', String(usersPage));
-        return next;
-      }, { replace: true });
+    const next = new URLSearchParams();
+    next.set('page', String(usersPage));
+    if (activeSearchQuery && activeSearchQuery.trim()) next.set('search', activeSearchQuery.trim());
+    if (statusFilter !== 'all') next.set('status', statusFilter);
+    if (roleFilter !== 'all') next.set('role', roleFilter);
+    if (selectedCompanyFilters.length > 0) next.set('companyIds', selectedCompanyFilters.map(c => c.id).join(','));
+    const nextStr = next.toString();
+    if (nextStr !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
     }
-  }, [usersPage]);
+  }, [usersPage, activeSearchQuery, statusFilter, roleFilter, selectedCompanyFilters]);
   
   // Fetch users when pagination or filters change (server-side)
   useEffect(() => {
@@ -1300,7 +1319,7 @@ const UserManagement = () => {
                             <div className="btn-list">
                               <button
                                 className="btn btn-sm btn-primary"
-                                onClick={() => navigate(`/users/${user.id}/view`, { state: { listPage: usersPage } })}
+                                onClick={() => navigate(`/users/${user.id}/view`, { state: { returnQuery: searchParams.toString() } })}
                               >
                                 View
                               </button>

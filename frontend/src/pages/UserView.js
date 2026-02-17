@@ -9,6 +9,7 @@ const UserView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const listPage = location.state?.listPage ?? 1;
+  const returnQuery = location.state?.returnQuery || `page=${listPage}`;
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [assignedCompanies, setAssignedCompanies] = useState([]);
@@ -47,7 +48,7 @@ const UserView = () => {
     } catch (error) {
       console.error('Error fetching user details:', error);
       toast.error('Failed to load user details');
-      navigate(`/users?page=${listPage}`);
+      navigate(`/users?${returnQuery}`);
     } finally {
       setLoading(false);
     }
@@ -55,7 +56,7 @@ const UserView = () => {
 
 
   const handleEdit = () => {
-    navigate(`/users?page=${listPage}`, { state: { editUserId: id } });
+    navigate(`/users?${returnQuery}`, { state: { editUserId: id } });
   };
 
   // Password management functions
@@ -217,7 +218,7 @@ const UserView = () => {
             <div className="card">
               <div className="card-body text-center py-5">
                 <p className="text-muted">The user you're looking for doesn't exist.</p>
-                <button className="btn btn-primary" onClick={() => navigate(`/users?page=${listPage}`)}>
+                <button className="btn btn-primary" onClick={() => navigate(`/users?${returnQuery}`)}>
                   Back to Users
                 </button>
               </div>
@@ -241,7 +242,7 @@ const UserView = () => {
               <div className="btn-list">
                 <button
                   className="btn btn-secondary"
-                  onClick={() => navigate(`/users?page=${listPage}`)}
+                  onClick={() => navigate(`/users?${returnQuery}`)}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="m12 19-7-7 7-7"></path>

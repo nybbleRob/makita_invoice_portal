@@ -73,25 +73,56 @@ const Invoices = () => {
     };
   }, [importPollingInterval]);
 
-  // Sync page from URL on load / when user uses browser back
+  // Hydrate state from URL on load / when user uses browser back
   useEffect(() => {
     const pageFromUrl = parseInt(searchParams.get('page'), 10);
-    if (!isNaN(pageFromUrl) && pageFromUrl >= 1) {
-      setPagination(prev => (prev.page !== pageFromUrl ? { ...prev, page: pageFromUrl } : prev));
-    }
+    const page = (!isNaN(pageFromUrl) && pageFromUrl >= 1) ? pageFromUrl : 1;
+    const companyIdsParam = searchParams.get('companyIds');
+    const companyIds = companyIdsParam ? companyIdsParam.split(',').filter(Boolean) : [];
+    const search = searchParams.get('search') || '';
+    const status = searchParams.get('status') || 'all';
+    const sortByParam = searchParams.get('sortBy') || 'createdAt';
+    const sortOrderParam = searchParams.get('sortOrder') || 'DESC';
+    const retention = searchParams.get('retentionFilter') || 'all';
+
+    setPagination(prev => (prev.page !== page ? { ...prev, page } : prev));
+    setSelectedCompanyIds(prev => (prev.length !== companyIds.length || companyIds.some((id, i) => id !== prev[i]) ? companyIds : prev));
+    setSearchQuery(prev => (prev !== search ? search : prev));
+    setActiveSearchQuery(prev => (prev !== search ? search : prev));
+    setStatusFilter(prev => (prev !== status ? status : prev));
+    setSortBy(prev => (prev !== sortByParam ? sortByParam : prev));
+    setSortOrder(prev => (prev !== sortOrderParam ? sortOrderParam : prev));
+    setRetentionFilter(prev => (prev !== retention ? retention : prev));
   }, [searchParams]);
 
-  // Sync page to URL when pagination.page changes
+  // Populate selectedCompanyFilters when we have selectedCompanyIds from URL and companies loaded
   useEffect(() => {
-    const urlPage = searchParams.get('page');
-    if (urlPage !== String(pagination.page)) {
-      setSearchParams(prev => {
-        const next = new URLSearchParams(prev);
-        next.set('page', String(pagination.page));
-        return next;
-      }, { replace: true });
+    if (selectedCompanyIds.length > 0 && companies.length > 0) {
+      setSelectedCompanyFilters(prev => {
+        const fromCompanies = companies.filter(c => selectedCompanyIds.includes(c.id)).map(c => ({ id: c.id, name: c.name, referenceNo: c.referenceNo }));
+        if (prev.length !== fromCompanies.length || fromCompanies.some((c, i) => c.id !== (prev[i]?.id))) return fromCompanies;
+        return prev;
+      });
     }
-  }, [pagination.page]);
+  }, [selectedCompanyIds, companies]);
+
+  // Sync state to URL when filters/pagination change (so Back from view restores filters)
+  useEffect(() => {
+    const next = new URLSearchParams();
+    next.set('page', String(pagination.page));
+    if (selectedCompanyIds.length > 0 && selectedCompanyIds.join(',').length <= 1500) {
+      next.set('companyIds', selectedCompanyIds.join(','));
+    }
+    if (activeSearchQuery && activeSearchQuery.trim()) next.set('search', activeSearchQuery.trim());
+    if (statusFilter !== 'all') next.set('status', statusFilter);
+    if (sortBy !== 'createdAt') next.set('sortBy', sortBy);
+    if (sortOrder !== 'DESC') next.set('sortOrder', sortOrder);
+    if (retentionFilter !== 'all') next.set('retentionFilter', retentionFilter);
+    const nextStr = next.toString();
+    if (nextStr !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [pagination.page, activeSearchQuery, statusFilter, selectedCompanyIds, sortBy, sortOrder, retentionFilter]);
 
   const fetchInvoices = useCallback(async () => {
     try {
@@ -1092,7 +1123,7 @@ const Invoices = () => {
                             <div className="btn-list flex-nowrap">
                               <button 
                                 className="btn btn-sm btn-primary"
-                                onClick={() => navigate(`/invoices/${invoice.id}/view`, { state: { listPage: pagination.page } })}
+                                onClick={() => navigate(`/invoices/${invoice.id}/view`, { state: { returnQuery: searchParams.toString() } })}
                                 title="View"
                               >
                                 View
@@ -1101,7 +1132,7 @@ const Invoices = () => {
                                 <button 
                                   className="btn btn-sm btn-info" 
                                   title="Edit"
-                                  onClick={() => navigate(`/invoices/${invoice.id}/edit`, { state: { listPage: pagination.page } })}
+                                  onClick={() => navigate(`/invoices/${invoice.id}/edit`, { state: { returnQuery: searchParams.toString() } })}
                                 >
                                   Edit
                                 </button>

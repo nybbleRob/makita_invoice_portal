@@ -27,6 +27,7 @@ const InvoiceView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const listPage = location.state?.listPage ?? 1;
+  const returnQuery = location.state?.returnQuery || `page=${listPage}`;
   const { user: currentUser } = useAuth();
   const { settings } = useSettings();
   const [invoice, setInvoice] = useState(null);
@@ -132,7 +133,7 @@ const InvoiceView = () => {
         // For other errors, show toast and redirect
         console.error('Error fetching invoice:', error);
         toast.error('Error loading invoice: ' + message);
-        navigate('/invoices');
+        navigate(`/invoices?${returnQuery}`);
       }
     } finally {
       setLoading(false);
@@ -509,7 +510,7 @@ const InvoiceView = () => {
                 <p className="text-muted mb-4">
                   {errorMessage || 'The invoice you are looking for could not be found. It may have been deleted or the link may be invalid.'}
                 </p>
-                <button className="btn btn-primary" onClick={() => navigate(`/invoices?page=${listPage}`)}>
+                <button className="btn btn-primary" onClick={() => navigate(`/invoices?${returnQuery}`)}>
                   Back to Invoices
                 </button>
               </div>
@@ -536,7 +537,7 @@ const InvoiceView = () => {
             <div className="col-auto ms-auto">
               <button 
                 className="btn btn-secondary me-2"
-                onClick={() => navigate(`/invoices?page=${listPage}`)}
+                onClick={() => navigate(`/invoices?${returnQuery}`)}
               >
                 Back to Invoices
               </button>

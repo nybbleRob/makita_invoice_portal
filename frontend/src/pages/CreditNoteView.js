@@ -27,6 +27,7 @@ const CreditNoteView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const listPage = location.state?.listPage ?? 1;
+  const returnQuery = location.state?.returnQuery || `page=${listPage}`;
   const { user: currentUser } = useAuth();
   const { settings } = useSettings();
   const [creditNote, setCreditNote] = useState(null);
@@ -113,7 +114,7 @@ const CreditNoteView = () => {
     } catch (error) {
       console.error('Error fetching credit note:', error);
       toast.error('Error loading credit note: ' + (error.response?.data?.message || error.message));
-      navigate('/credit-notes');
+      navigate(`/credit-notes?${returnQuery}`);
     } finally {
       setLoading(false);
     }
@@ -474,7 +475,7 @@ const CreditNoteView = () => {
             <div className="card">
               <div className="card-body text-center py-5">
                 <p className="text-muted">Credit note not found</p>
-                <button className="btn btn-primary" onClick={() => navigate(`/credit-notes?page=${listPage}`)}>
+                <button className="btn btn-primary" onClick={() => navigate(`/credit-notes?${returnQuery}`)}>
                   Back to Credit Notes
                 </button>
               </div>
@@ -501,7 +502,7 @@ const CreditNoteView = () => {
             <div className="col-auto ms-auto">
               <button 
                 className="btn btn-secondary me-2"
-                onClick={() => navigate(`/credit-notes?page=${listPage}`)}
+                onClick={() => navigate(`/credit-notes?${returnQuery}`)}
               >
                 Back to Credit Notes
               </button>

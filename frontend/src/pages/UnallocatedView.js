@@ -13,6 +13,7 @@ const UnallocatedView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const listPage = location.state?.listPage ?? 1;
+  const returnQuery = location.state?.returnQuery || `page=${listPage}`;
   const { user: currentUser } = useAuth();
   const [unallocatedDocument, setUnallocatedDocument] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -85,7 +86,7 @@ const UnallocatedView = () => {
     } catch (error) {
       console.error('Error fetching document:', error);
       toast.error('Error loading document: ' + (error.response?.data?.message || error.message));
-      navigate(`/unallocated?page=${listPage}`);
+      navigate(`/unallocated?${returnQuery}`);
     } finally {
       setLoading(false);
     }
@@ -211,7 +212,7 @@ const UnallocatedView = () => {
       });
 
       toast.success('Document updated and queued for reprocessing');
-      navigate(`/unallocated?page=${listPage}`);
+      navigate(`/unallocated?${returnQuery}`);
     } catch (error) {
       console.error('Error saving document:', error);
       toast.error('Error saving document: ' + (error.response?.data?.message || error.message));
@@ -349,7 +350,7 @@ const UnallocatedView = () => {
         <div className="page-body">
           <div className="container-xl">
             <div className="alert alert-warning">
-              Document not found. <button className="btn btn-sm btn-link p-0" onClick={() => navigate(`/unallocated?page=${listPage}`)}>Return to Unallocated</button>
+              Document not found. <button className="btn btn-sm btn-link p-0" onClick={() => navigate(`/unallocated?${returnQuery}`)}>Return to Unallocated</button>
             </div>
           </div>
         </div>
@@ -366,7 +367,7 @@ const UnallocatedView = () => {
               <h2 className="page-title">Unallocated Document: {unallocatedDocument.fileName}</h2>
             </div>
             <div className="col-auto">
-              <button className="btn btn-secondary" onClick={() => navigate(`/unallocated?page=${listPage}`)}>
+              <button className="btn btn-secondary" onClick={() => navigate(`/unallocated?${returnQuery}`)}>
                 Back to Unallocated
               </button>
             </div>
@@ -694,7 +695,7 @@ const UnallocatedView = () => {
                         </button>
                         <button
                           className="btn btn-secondary"
-                          onClick={() => navigate(`/unallocated?page=${listPage}`)}
+                          onClick={() => navigate(`/unallocated?${returnQuery}`)}
                         >
                           Cancel
                         </button>

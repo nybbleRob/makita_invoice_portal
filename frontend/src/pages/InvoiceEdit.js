@@ -14,6 +14,7 @@ const InvoiceEdit = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const listPage = location.state?.listPage ?? 1;
+  const returnQuery = location.state?.returnQuery || `page=${listPage}`;
   const { user: currentUser } = useAuth();
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -114,7 +115,7 @@ const InvoiceEdit = () => {
     } catch (error) {
       console.error('Error fetching invoice:', error);
       toast.error('Error loading invoice: ' + (error.response?.data?.message || error.message));
-      navigate('/invoices');
+      navigate(`/invoices?${returnQuery}`);
     } finally {
       setLoading(false);
     }
@@ -314,7 +315,7 @@ const InvoiceEdit = () => {
       await api.put(`/api/invoices/${id}`, updateData);
 
       toast.success('Invoice updated successfully');
-      navigate(`/invoices/${id}/view`, { state: { listPage } });
+      navigate(`/invoices/${id}/view`, { state: { returnQuery, listPage } });
     } catch (error) {
       console.error('Error saving invoice:', error);
       toast.error('Error saving invoice: ' + (error.response?.data?.message || error.message));
@@ -365,7 +366,7 @@ const InvoiceEdit = () => {
         <div className="page-body">
           <div className="container-xl">
             <div className="alert alert-warning">
-              Invoice not found. <button className="btn btn-sm btn-link p-0" onClick={() => navigate(`/invoices?page=${listPage}`)}>Return to Invoices</button>
+              Invoice not found. <button className="btn btn-sm btn-link p-0" onClick={() => navigate(`/invoices?${returnQuery}`)}>Return to Invoices</button>
             </div>
           </div>
         </div>
@@ -382,7 +383,7 @@ const InvoiceEdit = () => {
               <h2 className="page-title">Edit Invoice: {invoice.invoiceNumber}</h2>
             </div>
             <div className="col-auto">
-              <button className="btn btn-secondary" onClick={() => navigate(`/invoices/${id}/view`, { state: { listPage } })}>
+              <button className="btn btn-secondary" onClick={() => navigate(`/invoices/${id}/view`, { state: { returnQuery, listPage } })}>
                 Back to View
               </button>
             </div>
@@ -661,7 +662,7 @@ const InvoiceEdit = () => {
                     </button>
                     <button
                       className="btn btn-secondary"
-                      onClick={() => navigate(`/invoices/${id}/view`, { state: { listPage } })}
+                      onClick={() => navigate(`/invoices/${id}/view`, { state: { returnQuery, listPage } })}
                     >
                       Cancel
                     </button>

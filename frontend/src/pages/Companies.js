@@ -117,25 +117,52 @@ const Companies = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, pagination.limit, activeSearchQuery, typeFilters, statusFilter, selectedParentIds]);
 
-  // Sync page from URL on load / when user uses browser back
+  // Hydrate state from URL on load / when user uses browser back
   useEffect(() => {
     const pageFromUrl = parseInt(searchParams.get('page'), 10);
-    if (!isNaN(pageFromUrl) && pageFromUrl >= 1) {
-      setPagination(prev => (prev.page !== pageFromUrl ? { ...prev, page: pageFromUrl } : prev));
+    const page = (!isNaN(pageFromUrl) && pageFromUrl >= 1) ? pageFromUrl : 1;
+    const search = searchParams.get('search') || '';
+    const status = searchParams.get('status') || 'all';
+    const typesParam = searchParams.get('types') || '';
+    const parentIdsParam = searchParams.get('parentIds') || '';
+    const parentIds = parentIdsParam ? parentIdsParam.split(',').filter(Boolean) : [];
+    const typeFiltersFromUrl = { CORP: true, SUB: true, BRANCH: true };
+    if (typesParam) {
+      const types = typesParam.split(',').filter(Boolean);
+      typeFiltersFromUrl.CORP = types.includes('CORP');
+      typeFiltersFromUrl.SUB = types.includes('SUB');
+      typeFiltersFromUrl.BRANCH = types.includes('BRANCH');
     }
+
+    setPagination(prev => (prev.page !== page ? { ...prev, page } : prev));
+    setSearchQuery(prev => (prev !== search ? search : prev));
+    setActiveSearchQuery(prev => (prev !== search ? search : prev));
+    setStatusFilter(prev => (prev !== status ? status : prev));
+    setTypeFilters(prev => (JSON.stringify(prev) !== JSON.stringify(typeFiltersFromUrl) ? typeFiltersFromUrl : prev));
+    setSelectedParentIds(prev => (prev.length !== parentIds.length || parentIds.some((id, i) => id !== prev[i]) ? parentIds : prev));
+    setSelectedParentFilters(prev => {
+      if (parentIds.length === 0) return prev.length === 0 ? prev : [];
+      if (prev.length !== parentIds.length || parentIds.some((id, i) => id !== (prev[i]?.id ?? prev[i]))) {
+        return parentIds.map(id => ({ id }));
+      }
+      return prev;
+    });
   }, [searchParams]);
 
-  // Sync page to URL when pagination.page changes
+  // Sync state to URL when filters/pagination change (so Back from view restores filters)
   useEffect(() => {
-    const urlPage = searchParams.get('page');
-    if (urlPage !== String(pagination.page)) {
-      setSearchParams(prev => {
-        const next = new URLSearchParams(prev);
-        next.set('page', String(pagination.page));
-        return next;
-      }, { replace: true });
+    const next = new URLSearchParams();
+    next.set('page', String(pagination.page));
+    if (activeSearchQuery && activeSearchQuery.trim()) next.set('search', activeSearchQuery.trim());
+    if (statusFilter !== 'all') next.set('status', statusFilter);
+    const types = ['CORP', 'SUB', 'BRANCH'].filter(t => typeFilters[t]);
+    if (types.length < 3) next.set('types', types.join(','));
+    if (selectedParentIds.length > 0) next.set('parentIds', selectedParentIds.join(','));
+    const nextStr = next.toString();
+    if (nextStr !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
     }
-  }, [pagination.page]);
+  }, [pagination.page, activeSearchQuery, statusFilter, typeFilters, selectedParentIds]);
 
   // Handle edit from CompanyView page
   useEffect(() => {
@@ -1506,7 +1533,7 @@ const Companies = () => {
                               <div className="btn-list">
                                 <button
                                   className="btn btn-sm btn-primary"
-                                  onClick={() => navigate(`/companies/${company.id}/view`, { state: { listPage: pagination.page } })}
+                                  onClick={() => navigate(`/companies/${company.id}/view`, { state: { returnQuery: searchParams.toString() } })}
                                 >
                                   View
                                 </button>
@@ -1957,7 +1984,7 @@ const Companies = () => {
                                       className="btn btn-sm btn-primary"
                                       onClick={() => {
                                         setShowRelationshipsModal(false);
-                                        navigate(`/companies/${rel.id}/view`, { state: { listPage: pagination.page } });
+                                        navigate(`/companies/${rel.id}/view`, { state: { returnQuery: searchParams.toString() } });
                                       }}
                                     >
                                       View

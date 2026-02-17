@@ -13,6 +13,7 @@ const CreditNoteEdit = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const listPage = location.state?.listPage ?? 1;
+  const returnQuery = location.state?.returnQuery || `page=${listPage}`;
   const { user: currentUser } = useAuth();
   const [creditNote, setCreditNote] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -100,7 +101,7 @@ const CreditNoteEdit = () => {
     } catch (error) {
       console.error('Error fetching credit note:', error);
       toast.error('Error loading credit note: ' + (error.response?.data?.message || error.message));
-      navigate('/credit-notes');
+      navigate(`/credit-notes?${returnQuery}`);
     } finally {
       setLoading(false);
     }
@@ -223,7 +224,7 @@ const CreditNoteEdit = () => {
       };
       await api.put(`/api/credit-notes/${id}`, updateData);
       toast.success('Credit note updated successfully');
-      navigate(`/credit-notes/${id}/view`, { state: { listPage } });
+      navigate(`/credit-notes/${id}/view`, { state: { returnQuery, listPage } });
     } catch (error) {
       console.error('Error saving credit note:', error);
       toast.error('Error saving credit note: ' + (error.response?.data?.message || error.message));
@@ -274,7 +275,7 @@ const CreditNoteEdit = () => {
         <div className="page-body">
           <div className="container-xl">
             <div className="alert alert-warning">
-              Credit note not found. <button className="btn btn-sm btn-link p-0" onClick={() => navigate(`/credit-notes?page=${listPage}`)}>Return to Credit Notes</button>
+              Credit note not found. <button className="btn btn-sm btn-link p-0" onClick={() => navigate(`/credit-notes?${returnQuery}`)}>Return to Credit Notes</button>
             </div>
           </div>
         </div>
@@ -293,7 +294,7 @@ const CreditNoteEdit = () => {
               <h2 className="page-title">Edit Credit Note: {displayNumber}</h2>
             </div>
             <div className="col-auto">
-              <button className="btn btn-secondary" onClick={() => navigate(`/credit-notes/${id}/view`, { state: { listPage } })}>
+              <button className="btn btn-secondary" onClick={() => navigate(`/credit-notes/${id}/view`, { state: { returnQuery, listPage } })}>
                 Back to View
               </button>
             </div>
@@ -525,7 +526,7 @@ const CreditNoteEdit = () => {
                         'Save Changes'
                       )}
                     </button>
-                    <button className="btn btn-secondary" onClick={() => navigate(`/credit-notes/${id}/view`, { state: { listPage } })}>
+                    <button className="btn btn-secondary" onClick={() => navigate(`/credit-notes/${id}/view`, { state: { returnQuery, listPage } })}>
                       Cancel
                     </button>
                   </div>
