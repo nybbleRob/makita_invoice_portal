@@ -1553,7 +1553,7 @@ const Companies = () => {
                                   onClick={() => {
                                   const q = returnQueryRef.current || searchParams.toString();
                                   try { sessionStorage.setItem('companiesReturnQuery', q); } catch (_) {}
-                                  navigate(`/companies/${company.id}/view`, { state: { returnQuery: q } });
+                                  navigate(`/companies/${company.id}/view?returnQuery=${encodeURIComponent(q)}`, { state: { returnQuery: q } });
                                 }}
                                 >
                                   View
@@ -2007,7 +2007,7 @@ const Companies = () => {
                                         setShowRelationshipsModal(false);
                                         const q = returnQueryRef.current || searchParams.toString();
                                         try { sessionStorage.setItem('companiesReturnQuery', q); } catch (_) {}
-                                        navigate(`/companies/${rel.id}/view`, { state: { returnQuery: q } });
+                                        navigate(`/companies/${rel.id}/view?returnQuery=${encodeURIComponent(q)}`, { state: { returnQuery: q } });
                                       }}
                                     >
                                       View

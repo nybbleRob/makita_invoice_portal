@@ -1148,7 +1148,7 @@ const Invoices = () => {
                                 onClick={() => {
                                   const q = returnQueryRef.current || searchParams.toString();
                                   try { sessionStorage.setItem('invoicesReturnQuery', q); } catch (_) {}
-                                  navigate(`/invoices/${invoice.id}/view`, { state: { returnQuery: q } });
+                                  navigate(`/invoices/${invoice.id}/view?returnQuery=${encodeURIComponent(q)}`, { state: { returnQuery: q } });
                                 }}
                                 title="View"
                               >
@@ -1161,7 +1161,7 @@ const Invoices = () => {
                                   onClick={() => {
                                   const q = returnQueryRef.current || searchParams.toString();
                                   try { sessionStorage.setItem('invoicesReturnQuery', q); } catch (_) {}
-                                  navigate(`/invoices/${invoice.id}/edit`, { state: { returnQuery: q } });
+                                  navigate(`/invoices/${invoice.id}/edit?returnQuery=${encodeURIComponent(q)}`, { state: { returnQuery: q } });
                                 }}
                                 >
                                   Edit

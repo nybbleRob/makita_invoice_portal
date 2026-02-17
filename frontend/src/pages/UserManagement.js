@@ -1338,7 +1338,7 @@ const UserManagement = () => {
                                 onClick={() => {
                                 const q = returnQueryRef.current || searchParams.toString();
                                 try { sessionStorage.setItem('usersReturnQuery', q); } catch (_) {}
-                                navigate(`/users/${user.id}/view`, { state: { returnQuery: q } });
+                                navigate(`/users/${user.id}/view?returnQuery=${encodeURIComponent(q)}`, { state: { returnQuery: q } });
                               }}
                               >
                                 View

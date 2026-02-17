@@ -30,6 +30,8 @@ const CreditNoteView = () => {
   const returnQuery = (() => {
     const fromState = location.state?.returnQuery;
     if (fromState) return fromState;
+    const fromUrl = new URLSearchParams(location.search).get('returnQuery');
+    if (fromUrl) return decodeURIComponent(fromUrl);
     try {
       const fromStorage = sessionStorage.getItem('creditNotesReturnQuery');
       if (fromStorage) return fromStorage;

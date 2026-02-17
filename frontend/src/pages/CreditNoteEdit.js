@@ -13,7 +13,17 @@ const CreditNoteEdit = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const listPage = location.state?.listPage ?? 1;
-  const returnQuery = location.state?.returnQuery || `page=${listPage}`;
+  const returnQuery = (() => {
+    const fromState = location.state?.returnQuery;
+    if (fromState) return fromState;
+    const fromUrl = new URLSearchParams(location.search).get('returnQuery');
+    if (fromUrl) return decodeURIComponent(fromUrl);
+    try {
+      const fromStorage = sessionStorage.getItem('creditNotesReturnQuery');
+      if (fromStorage) return fromStorage;
+    } catch (_) {}
+    return `page=${listPage}`;
+  })();
   const { user: currentUser } = useAuth();
   const [creditNote, setCreditNote] = useState(null);
   const [loading, setLoading] = useState(true);

@@ -75,26 +75,39 @@ const CreditNotes = () => {
     };
   }, [importPollingInterval]);
 
-  // Hydrate state from URL on load / when user uses browser back
+  // Hydrate state from URL on load / when user uses browser back.
+  // Only apply a param when it's present in the URL so we don't overwrite user's in-flight filter changes before sync runs.
   useEffect(() => {
     const pageFromUrl = parseInt(searchParams.get('page'), 10);
     const page = (!isNaN(pageFromUrl) && pageFromUrl >= 1) ? pageFromUrl : 1;
-    const companyIdsParam = searchParams.get('companyIds');
-    const companyIds = companyIdsParam ? companyIdsParam.split(',').filter(Boolean) : [];
-    const search = searchParams.get('search') || '';
-    const status = searchParams.get('status') || 'all';
-    const sortByParam = searchParams.get('sortBy') || 'createdAt';
-    const sortOrderParam = searchParams.get('sortOrder') || 'DESC';
-    const retention = searchParams.get('retentionFilter') || 'all';
-
     setPagination(prev => (prev.page !== page ? { ...prev, page } : prev));
-    setSelectedCompanyIds(prev => (prev.length !== companyIds.length || companyIds.some((id, i) => id !== prev[i]) ? companyIds : prev));
-    setSearchQuery(prev => (prev !== search ? search : prev));
-    setActiveSearchQuery(prev => (prev !== search ? search : prev));
-    setStatusFilter(prev => (prev !== status ? status : prev));
-    setSortBy(prev => (prev !== sortByParam ? sortByParam : prev));
-    setSortOrder(prev => (prev !== sortOrderParam ? sortOrderParam : prev));
-    setRetentionFilter(prev => (prev !== retention ? retention : prev));
+
+    if (searchParams.has('companyIds')) {
+      const companyIdsParam = searchParams.get('companyIds') || '';
+      const companyIds = companyIdsParam ? companyIdsParam.split(',').filter(Boolean) : [];
+      setSelectedCompanyIds(prev => (prev.length !== companyIds.length || companyIds.some((id, i) => id !== prev[i]) ? companyIds : prev));
+    }
+    if (searchParams.has('search')) {
+      const search = searchParams.get('search') || '';
+      setSearchQuery(prev => (prev !== search ? search : prev));
+      setActiveSearchQuery(prev => (prev !== search ? search : prev));
+    }
+    if (searchParams.has('status')) {
+      const status = searchParams.get('status') || 'all';
+      setStatusFilter(prev => (prev !== status ? status : prev));
+    }
+    if (searchParams.has('sortBy')) {
+      const sortByParam = searchParams.get('sortBy') || 'createdAt';
+      setSortBy(prev => (prev !== sortByParam ? sortByParam : prev));
+    }
+    if (searchParams.has('sortOrder')) {
+      const sortOrderParam = searchParams.get('sortOrder') || 'DESC';
+      setSortOrder(prev => (prev !== sortOrderParam ? sortOrderParam : prev));
+    }
+    if (searchParams.has('retentionFilter')) {
+      const retention = searchParams.get('retentionFilter') || 'all';
+      setRetentionFilter(prev => (prev !== retention ? retention : prev));
+    }
   }, [searchParams]);
 
   // Populate selectedCompanyFilters when we have selectedCompanyIds from URL and companies loaded
@@ -1084,7 +1097,7 @@ const CreditNotes = () => {
                                 onClick={() => {
                                   const q = returnQueryRef.current || searchParams.toString();
                                   try { sessionStorage.setItem('creditNotesReturnQuery', q); } catch (_) {}
-                                  navigate(`/credit-notes/${creditNote.id}/view`, { state: { returnQuery: q } });
+                                  navigate(`/credit-notes/${creditNote.id}/view?returnQuery=${encodeURIComponent(q)}`, { state: { returnQuery: q } });
                                 }}
                                 title="View"
                               >
@@ -1104,7 +1117,7 @@ const CreditNotes = () => {
                                   onClick={() => {
                                   const q = returnQueryRef.current || searchParams.toString();
                                   try { sessionStorage.setItem('creditNotesReturnQuery', q); } catch (_) {}
-                                  navigate(`/credit-notes/${creditNote.id}/edit`, { state: { returnQuery: q } });
+                                  navigate(`/credit-notes/${creditNote.id}/edit?returnQuery=${encodeURIComponent(q)}`, { state: { returnQuery: q } });
                                 }}
                                 >
                                   Edit

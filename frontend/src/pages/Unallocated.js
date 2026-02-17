@@ -913,7 +913,7 @@ const Unallocated = () => {
                                 onClick={() => {
                                 const q = returnQueryRef.current || searchParams.toString();
                                 try { sessionStorage.setItem('unallocatedReturnQuery', q); } catch (_) {}
-                                navigate(`/unallocated/${doc.id}/view`, { state: { returnQuery: q } });
+                                navigate(`/unallocated/${doc.id}/view?returnQuery=${encodeURIComponent(q)}`, { state: { returnQuery: q } });
                               }}
                                 title="View"
                               >
