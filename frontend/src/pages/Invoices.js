@@ -74,7 +74,6 @@ const Invoices = () => {
   }, [importPollingInterval]);
 
   // Hydrate state from URL on mount and when browser back/forward changes the URL.
-  const hydratedRef = useRef(false);
   useEffect(() => {
     const pageFromUrl = parseInt(searchParams.get('page'), 10);
     const page = (!isNaN(pageFromUrl) && pageFromUrl >= 1) ? pageFromUrl : 1;
@@ -94,7 +93,6 @@ const Invoices = () => {
     setSortBy(prev => (prev !== sortByParam ? sortByParam : prev));
     setSortOrder(prev => (prev !== sortOrderParam ? sortOrderParam : prev));
     setRetentionFilter(prev => (prev !== retention ? retention : prev));
-    hydratedRef.current = true;
   }, [searchParams]);
 
   // Populate selectedCompanyFilters when we have selectedCompanyIds from URL and companies loaded
@@ -109,9 +107,10 @@ const Invoices = () => {
   }, [selectedCompanyIds, companies]);
 
   // Sync state to URL when filters/pagination change (so Back from view restores filters).
-  // Skip until hydrate has run at least once so we don't overwrite a URL we just navigated to.
+  // Skip the first render so hydrate's state updates are applied before we touch the URL.
+  const syncMountRef = useRef(true);
   useEffect(() => {
-    if (!hydratedRef.current) return;
+    if (syncMountRef.current) { syncMountRef.current = false; return; }
     const next = new URLSearchParams();
     next.set('page', String(pagination.page));
     if (selectedCompanyIds.length > 0 && selectedCompanyIds.join(',').length <= 1500) {
