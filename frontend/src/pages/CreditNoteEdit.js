@@ -13,9 +13,15 @@ const CreditNoteEdit = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const listPage = location.state?.listPage ?? 1;
+  const returnQueryRef = useRef(null);
+  if (returnQueryRef.current === null && typeof window !== 'undefined') {
+    const q = new URLSearchParams(window.location.search).get('returnQuery');
+    if (q) returnQueryRef.current = decodeURIComponent(q);
+  }
   const returnQuery = (() => {
     const fromState = location.state?.returnQuery;
     if (fromState) return fromState;
+    if (returnQueryRef.current) return returnQueryRef.current;
     const fromUrl = new URLSearchParams(location.search).get('returnQuery');
     if (fromUrl) return decodeURIComponent(fromUrl);
     try {

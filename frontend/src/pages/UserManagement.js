@@ -119,7 +119,8 @@ const UserManagement = () => {
     }
   }, [searchParams]);
 
-  // Sync state to URL when filters/pagination change (so Back from view restores filters)
+  // Sync state to URL when filters/pagination change (so Back from view restores filters).
+  // Never strip URL params: if current URL has more params than we'd write, let hydrate run first (don't overwrite).
   useEffect(() => {
     const next = new URLSearchParams();
     next.set('page', String(usersPage));
@@ -128,9 +129,12 @@ const UserManagement = () => {
     if (roleFilter !== 'all') next.set('role', roleFilter);
     if (selectedCompanyFilters.length > 0) next.set('companyIds', selectedCompanyFilters.map(c => c.id).join(','));
     const nextStr = next.toString();
-    if (nextStr !== searchParams.toString()) {
-      setSearchParams(next, { replace: true });
-    }
+    const currentStr = searchParams.toString();
+    if (nextStr === currentStr) return;
+    const currentParamCount = Array.from(searchParams.keys()).length;
+    const nextParamCount = Array.from(next.keys()).length;
+    if (nextParamCount < currentParamCount) return;
+    setSearchParams(next, { replace: true });
   }, [usersPage, activeSearchQuery, statusFilter, roleFilter, selectedCompanyFilters]);
 
   // Persist current list query for Back from view (fallback when location.state is lost)

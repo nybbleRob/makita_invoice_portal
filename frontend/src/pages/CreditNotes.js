@@ -121,7 +121,8 @@ const CreditNotes = () => {
     }
   }, [selectedCompanyIds, companies]);
 
-  // Sync state to URL when filters/pagination change (so Back from view restores filters)
+  // Sync state to URL when filters/pagination change (so Back from view restores filters).
+  // Never strip URL params: if current URL has more params than we'd write, let hydrate run first (don't overwrite).
   useEffect(() => {
     const next = new URLSearchParams();
     next.set('page', String(pagination.page));
@@ -134,9 +135,12 @@ const CreditNotes = () => {
     if (sortOrder !== 'DESC') next.set('sortOrder', sortOrder);
     if (retentionFilter !== 'all') next.set('retentionFilter', retentionFilter);
     const nextStr = next.toString();
-    if (nextStr !== searchParams.toString()) {
-      setSearchParams(next, { replace: true });
-    }
+    const currentStr = searchParams.toString();
+    if (nextStr === currentStr) return;
+    const currentParamCount = Array.from(searchParams.keys()).length;
+    const nextParamCount = Array.from(next.keys()).length;
+    if (nextParamCount < currentParamCount) return;
+    setSearchParams(next, { replace: true });
   }, [pagination.page, activeSearchQuery, statusFilter, selectedCompanyIds, sortBy, sortOrder, retentionFilter]);
 
   // Persist current list query for Back from view (fallback when location.state is lost)
