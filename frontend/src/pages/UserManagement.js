@@ -87,29 +87,36 @@ const UserManagement = () => {
     fetchManageableRoles();
   }, []);
 
-  // Hydrate state from URL on load / when user uses browser back
+  // Hydrate state from URL on load / when user uses browser back.
+  // Only apply a param when present in URL so we don't overwrite in-flight filter changes before sync runs.
   useEffect(() => {
     const pageFromUrl = parseInt(searchParams.get('page'), 10);
     const page = (!isNaN(pageFromUrl) && pageFromUrl >= 1) ? pageFromUrl : 1;
-    const search = searchParams.get('search') || '';
-    const status = searchParams.get('status') || 'all';
-    const role = searchParams.get('role') || 'all';
-    const companyIdsParam = searchParams.get('companyIds') || '';
-    const companyIds = companyIdsParam ? companyIdsParam.split(',').filter(Boolean) : [];
-
     setUsersPage(prev => (prev !== page ? page : prev));
-    setSearchQuery(prev => (prev !== search ? search : prev));
-    setActiveSearchQuery(prev => (prev !== search ? search : prev));
-    setStatusFilter(prev => (prev !== status ? status : prev));
-    setRoleFilter(prev => (prev !== role ? role : prev));
-    setSelectedCompanyFilters(prev => {
-      const ids = companyIds;
-      if (ids.length === 0) return prev.length === 0 ? prev : [];
-      if (prev.length !== ids.length || ids.some((id, i) => id !== (prev[i]?.id ?? prev[i]))) {
-        return ids.map(id => ({ id }));
-      }
-      return prev;
-    });
+    if (searchParams.has('search')) {
+      const search = searchParams.get('search') || '';
+      setSearchQuery(prev => (prev !== search ? search : prev));
+      setActiveSearchQuery(prev => (prev !== search ? search : prev));
+    }
+    if (searchParams.has('status')) {
+      const status = searchParams.get('status') || 'all';
+      setStatusFilter(prev => (prev !== status ? status : prev));
+    }
+    if (searchParams.has('role')) {
+      const role = searchParams.get('role') || 'all';
+      setRoleFilter(prev => (prev !== role ? role : prev));
+    }
+    if (searchParams.has('companyIds')) {
+      const companyIdsParam = searchParams.get('companyIds') || '';
+      const companyIds = companyIdsParam ? companyIdsParam.split(',').filter(Boolean) : [];
+      setSelectedCompanyFilters(prev => {
+        if (companyIds.length === 0) return prev.length === 0 ? prev : [];
+        if (prev.length !== companyIds.length || companyIds.some((id, i) => id !== (prev[i]?.id ?? prev[i]))) {
+          return companyIds.map(id => ({ id }));
+        }
+        return prev;
+      });
+    }
   }, [searchParams]);
 
   // Sync state to URL when filters/pagination change (so Back from view restores filters)
@@ -125,6 +132,15 @@ const UserManagement = () => {
       setSearchParams(next, { replace: true });
     }
   }, [usersPage, activeSearchQuery, statusFilter, roleFilter, selectedCompanyFilters]);
+
+  // Persist current list query for Back from view (fallback when location.state is lost)
+  const returnQueryRef = useRef(searchParams.toString());
+  returnQueryRef.current = searchParams.toString();
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('usersReturnQuery', searchParams.toString());
+    } catch (_) {}
+  }, [searchParams]);
   
   // Fetch users when pagination or filters change (server-side)
   useEffect(() => {
@@ -1319,7 +1335,11 @@ const UserManagement = () => {
                             <div className="btn-list">
                               <button
                                 className="btn btn-sm btn-primary"
-                                onClick={() => navigate(`/users/${user.id}/view`, { state: { returnQuery: searchParams.toString() } })}
+                                onClick={() => {
+                                const q = returnQueryRef.current || searchParams.toString();
+                                try { sessionStorage.setItem('usersReturnQuery', q); } catch (_) {}
+                                navigate(`/users/${user.id}/view`, { state: { returnQuery: q } });
+                              }}
                               >
                                 View
                               </button>

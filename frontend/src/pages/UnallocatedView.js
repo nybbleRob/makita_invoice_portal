@@ -13,7 +13,15 @@ const UnallocatedView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const listPage = location.state?.listPage ?? 1;
-  const returnQuery = location.state?.returnQuery || `page=${listPage}`;
+  const returnQuery = (() => {
+    const fromState = location.state?.returnQuery;
+    if (fromState) return fromState;
+    try {
+      const fromStorage = sessionStorage.getItem('unallocatedReturnQuery');
+      if (fromStorage) return fromStorage;
+    } catch (_) {}
+    return `page=${listPage}`;
+  })();
   const { user: currentUser } = useAuth();
   const [unallocatedDocument, setUnallocatedDocument] = useState(null);
   const [loading, setLoading] = useState(true);

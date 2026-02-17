@@ -9,7 +9,15 @@ const UserView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const listPage = location.state?.listPage ?? 1;
-  const returnQuery = location.state?.returnQuery || `page=${listPage}`;
+  const returnQuery = (() => {
+    const fromState = location.state?.returnQuery;
+    if (fromState) return fromState;
+    try {
+      const fromStorage = sessionStorage.getItem('usersReturnQuery');
+      if (fromStorage) return fromStorage;
+    } catch (_) {}
+    return `page=${listPage}`;
+  })();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [assignedCompanies, setAssignedCompanies] = useState([]);

@@ -117,36 +117,44 @@ const Companies = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, pagination.limit, activeSearchQuery, typeFilters, statusFilter, selectedParentIds]);
 
-  // Hydrate state from URL on load / when user uses browser back
+  // Hydrate state from URL on load / when user uses browser back.
+  // Only apply a param when present in URL so we don't overwrite in-flight filter changes before sync runs.
   useEffect(() => {
     const pageFromUrl = parseInt(searchParams.get('page'), 10);
     const page = (!isNaN(pageFromUrl) && pageFromUrl >= 1) ? pageFromUrl : 1;
-    const search = searchParams.get('search') || '';
-    const status = searchParams.get('status') || 'all';
-    const typesParam = searchParams.get('types') || '';
-    const parentIdsParam = searchParams.get('parentIds') || '';
-    const parentIds = parentIdsParam ? parentIdsParam.split(',').filter(Boolean) : [];
-    const typeFiltersFromUrl = { CORP: true, SUB: true, BRANCH: true };
-    if (typesParam) {
-      const types = typesParam.split(',').filter(Boolean);
-      typeFiltersFromUrl.CORP = types.includes('CORP');
-      typeFiltersFromUrl.SUB = types.includes('SUB');
-      typeFiltersFromUrl.BRANCH = types.includes('BRANCH');
-    }
-
     setPagination(prev => (prev.page !== page ? { ...prev, page } : prev));
-    setSearchQuery(prev => (prev !== search ? search : prev));
-    setActiveSearchQuery(prev => (prev !== search ? search : prev));
-    setStatusFilter(prev => (prev !== status ? status : prev));
-    setTypeFilters(prev => (JSON.stringify(prev) !== JSON.stringify(typeFiltersFromUrl) ? typeFiltersFromUrl : prev));
-    setSelectedParentIds(prev => (prev.length !== parentIds.length || parentIds.some((id, i) => id !== prev[i]) ? parentIds : prev));
-    setSelectedParentFilters(prev => {
-      if (parentIds.length === 0) return prev.length === 0 ? prev : [];
-      if (prev.length !== parentIds.length || parentIds.some((id, i) => id !== (prev[i]?.id ?? prev[i]))) {
-        return parentIds.map(id => ({ id }));
+    if (searchParams.has('search')) {
+      const search = searchParams.get('search') || '';
+      setSearchQuery(prev => (prev !== search ? search : prev));
+      setActiveSearchQuery(prev => (prev !== search ? search : prev));
+    }
+    if (searchParams.has('status')) {
+      const status = searchParams.get('status') || 'all';
+      setStatusFilter(prev => (prev !== status ? status : prev));
+    }
+    if (searchParams.has('types')) {
+      const typesParam = searchParams.get('types') || '';
+      const typeFiltersFromUrl = { CORP: true, SUB: true, BRANCH: true };
+      if (typesParam) {
+        const types = typesParam.split(',').filter(Boolean);
+        typeFiltersFromUrl.CORP = types.includes('CORP');
+        typeFiltersFromUrl.SUB = types.includes('SUB');
+        typeFiltersFromUrl.BRANCH = types.includes('BRANCH');
       }
-      return prev;
-    });
+      setTypeFilters(prev => (JSON.stringify(prev) !== JSON.stringify(typeFiltersFromUrl) ? typeFiltersFromUrl : prev));
+    }
+    if (searchParams.has('parentIds')) {
+      const parentIdsParam = searchParams.get('parentIds') || '';
+      const parentIds = parentIdsParam ? parentIdsParam.split(',').filter(Boolean) : [];
+      setSelectedParentIds(prev => (prev.length !== parentIds.length || parentIds.some((id, i) => id !== prev[i]) ? parentIds : prev));
+      setSelectedParentFilters(prev => {
+        if (parentIds.length === 0) return prev.length === 0 ? prev : [];
+        if (prev.length !== parentIds.length || parentIds.some((id, i) => id !== (prev[i]?.id ?? prev[i]))) {
+          return parentIds.map(id => ({ id }));
+        }
+        return prev;
+      });
+    }
   }, [searchParams]);
 
   // Sync state to URL when filters/pagination change (so Back from view restores filters)
@@ -163,6 +171,15 @@ const Companies = () => {
       setSearchParams(next, { replace: true });
     }
   }, [pagination.page, activeSearchQuery, statusFilter, typeFilters, selectedParentIds]);
+
+  // Persist current list query for Back from view (fallback when location.state is lost)
+  const returnQueryRef = useRef(searchParams.toString());
+  returnQueryRef.current = searchParams.toString();
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('companiesReturnQuery', searchParams.toString());
+    } catch (_) {}
+  }, [searchParams]);
 
   // Handle edit from CompanyView page
   useEffect(() => {
@@ -1533,7 +1550,11 @@ const Companies = () => {
                               <div className="btn-list">
                                 <button
                                   className="btn btn-sm btn-primary"
-                                  onClick={() => navigate(`/companies/${company.id}/view`, { state: { returnQuery: searchParams.toString() } })}
+                                  onClick={() => {
+                                  const q = returnQueryRef.current || searchParams.toString();
+                                  try { sessionStorage.setItem('companiesReturnQuery', q); } catch (_) {}
+                                  navigate(`/companies/${company.id}/view`, { state: { returnQuery: q } });
+                                }}
                                 >
                                   View
                                 </button>
@@ -1984,7 +2005,9 @@ const Companies = () => {
                                       className="btn btn-sm btn-primary"
                                       onClick={() => {
                                         setShowRelationshipsModal(false);
-                                        navigate(`/companies/${rel.id}/view`, { state: { returnQuery: searchParams.toString() } });
+                                        const q = returnQueryRef.current || searchParams.toString();
+                                        try { sessionStorage.setItem('companiesReturnQuery', q); } catch (_) {}
+                                        navigate(`/companies/${rel.id}/view`, { state: { returnQuery: q } });
                                       }}
                                     >
                                       View
