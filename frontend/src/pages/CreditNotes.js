@@ -126,6 +126,15 @@ const CreditNotes = () => {
     }
   }, [pagination.page, activeSearchQuery, statusFilter, selectedCompanyIds, sortBy, sortOrder, retentionFilter]);
 
+  // Persist current list query for Back from view (fallback when location.state is lost)
+  const returnQueryRef = useRef(searchParams.toString());
+  returnQueryRef.current = searchParams.toString();
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('creditNotesReturnQuery', searchParams.toString());
+    } catch (_) {}
+  }, [searchParams]);
+
   const fetchCreditNotes = useCallback(async () => {
     try {
       setLoading(true);
@@ -1072,7 +1081,11 @@ const CreditNotes = () => {
                             <div className="btn-list flex-nowrap">
                               <button 
                                 className="btn btn-sm btn-primary"
-                                onClick={() => navigate(`/credit-notes/${creditNote.id}/view`, { state: { returnQuery: searchParams.toString() } })}
+                                onClick={() => {
+                                  const q = returnQueryRef.current || searchParams.toString();
+                                  try { sessionStorage.setItem('creditNotesReturnQuery', q); } catch (_) {}
+                                  navigate(`/credit-notes/${creditNote.id}/view`, { state: { returnQuery: q } });
+                                }}
                                 title="View"
                               >
                                 View
@@ -1088,7 +1101,11 @@ const CreditNotes = () => {
                                 <button 
                                   className="btn btn-sm btn-info" 
                                   title="Edit"
-                                  onClick={() => navigate(`/credit-notes/${creditNote.id}/edit`, { state: { returnQuery: searchParams.toString() } })}
+                                  onClick={() => {
+                                  const q = returnQueryRef.current || searchParams.toString();
+                                  try { sessionStorage.setItem('creditNotesReturnQuery', q); } catch (_) {}
+                                  navigate(`/credit-notes/${creditNote.id}/edit`, { state: { returnQuery: q } });
+                                }}
                                 >
                                   Edit
                                 </button>
