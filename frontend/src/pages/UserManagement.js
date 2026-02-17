@@ -87,54 +87,45 @@ const UserManagement = () => {
     fetchManageableRoles();
   }, []);
 
-  // Hydrate state from URL on load / when user uses browser back.
-  // Only apply a param when present in URL so we don't overwrite in-flight filter changes before sync runs.
+  // Hydrate state from URL on mount and when browser back/forward changes the URL.
+  const hydratedRef = useRef(false);
   useEffect(() => {
     const pageFromUrl = parseInt(searchParams.get('page'), 10);
     const page = (!isNaN(pageFromUrl) && pageFromUrl >= 1) ? pageFromUrl : 1;
+    const search = searchParams.get('search') || '';
+    const status = searchParams.get('status') || 'all';
+    const role = searchParams.get('role') || 'all';
+    const companyIdsParam = searchParams.get('companyIds') || '';
+    const companyIds = companyIdsParam ? companyIdsParam.split(',').filter(Boolean) : [];
+
     setUsersPage(prev => (prev !== page ? page : prev));
-    if (searchParams.has('search')) {
-      const search = searchParams.get('search') || '';
-      setSearchQuery(prev => (prev !== search ? search : prev));
-      setActiveSearchQuery(prev => (prev !== search ? search : prev));
-    }
-    if (searchParams.has('status')) {
-      const status = searchParams.get('status') || 'all';
-      setStatusFilter(prev => (prev !== status ? status : prev));
-    }
-    if (searchParams.has('role')) {
-      const role = searchParams.get('role') || 'all';
-      setRoleFilter(prev => (prev !== role ? role : prev));
-    }
-    if (searchParams.has('companyIds')) {
-      const companyIdsParam = searchParams.get('companyIds') || '';
-      const companyIds = companyIdsParam ? companyIdsParam.split(',').filter(Boolean) : [];
-      setSelectedCompanyFilters(prev => {
-        if (companyIds.length === 0) return prev.length === 0 ? prev : [];
-        if (prev.length !== companyIds.length || companyIds.some((id, i) => id !== (prev[i]?.id ?? prev[i]))) {
-          return companyIds.map(id => ({ id }));
-        }
-        return prev;
-      });
-    }
+    setSearchQuery(prev => (prev !== search ? search : prev));
+    setActiveSearchQuery(prev => (prev !== search ? search : prev));
+    setStatusFilter(prev => (prev !== status ? status : prev));
+    setRoleFilter(prev => (prev !== role ? role : prev));
+    setSelectedCompanyFilters(prev => {
+      if (companyIds.length === 0) return prev.length === 0 ? prev : [];
+      if (prev.length !== companyIds.length || companyIds.some((id, i) => id !== (prev[i]?.id ?? prev[i]))) {
+        return companyIds.map(id => ({ id }));
+      }
+      return prev;
+    });
+    hydratedRef.current = true;
   }, [searchParams]);
 
   // Sync state to URL when filters/pagination change (so Back from view restores filters).
-  // Never strip URL params: if current URL has more params than we'd write, let hydrate run first (don't overwrite).
+  // Skip until hydrate has run at least once so we don't overwrite a URL we just navigated to.
   useEffect(() => {
+    if (!hydratedRef.current) return;
     const next = new URLSearchParams();
     next.set('page', String(usersPage));
     if (activeSearchQuery && activeSearchQuery.trim()) next.set('search', activeSearchQuery.trim());
     if (statusFilter !== 'all') next.set('status', statusFilter);
     if (roleFilter !== 'all') next.set('role', roleFilter);
     if (selectedCompanyFilters.length > 0) next.set('companyIds', selectedCompanyFilters.map(c => c.id).join(','));
-    const nextStr = next.toString();
-    const currentStr = searchParams.toString();
-    if (nextStr === currentStr) return;
-    const currentParamCount = Array.from(searchParams.keys()).length;
-    const nextParamCount = Array.from(next.keys()).length;
-    if (nextParamCount < currentParamCount) return;
-    setSearchParams(next, { replace: true });
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
   }, [usersPage, activeSearchQuery, statusFilter, roleFilter, selectedCompanyFilters]);
 
   // Persist current list query for Back from view (fallback when location.state is lost)

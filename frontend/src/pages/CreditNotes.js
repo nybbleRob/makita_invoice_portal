@@ -75,39 +75,28 @@ const CreditNotes = () => {
     };
   }, [importPollingInterval]);
 
-  // Hydrate state from URL on load / when user uses browser back.
-  // Only apply a param when it's present in the URL so we don't overwrite user's in-flight filter changes before sync runs.
+  // Hydrate state from URL on mount and when browser back/forward changes the URL.
+  const hydratedRef = useRef(false);
   useEffect(() => {
     const pageFromUrl = parseInt(searchParams.get('page'), 10);
     const page = (!isNaN(pageFromUrl) && pageFromUrl >= 1) ? pageFromUrl : 1;
-    setPagination(prev => (prev.page !== page ? { ...prev, page } : prev));
+    const companyIdsParam = searchParams.get('companyIds') || '';
+    const companyIds = companyIdsParam ? companyIdsParam.split(',').filter(Boolean) : [];
+    const search = searchParams.get('search') || '';
+    const status = searchParams.get('status') || 'all';
+    const sortByParam = searchParams.get('sortBy') || 'createdAt';
+    const sortOrderParam = searchParams.get('sortOrder') || 'DESC';
+    const retention = searchParams.get('retentionFilter') || 'all';
 
-    if (searchParams.has('companyIds')) {
-      const companyIdsParam = searchParams.get('companyIds') || '';
-      const companyIds = companyIdsParam ? companyIdsParam.split(',').filter(Boolean) : [];
-      setSelectedCompanyIds(prev => (prev.length !== companyIds.length || companyIds.some((id, i) => id !== prev[i]) ? companyIds : prev));
-    }
-    if (searchParams.has('search')) {
-      const search = searchParams.get('search') || '';
-      setSearchQuery(prev => (prev !== search ? search : prev));
-      setActiveSearchQuery(prev => (prev !== search ? search : prev));
-    }
-    if (searchParams.has('status')) {
-      const status = searchParams.get('status') || 'all';
-      setStatusFilter(prev => (prev !== status ? status : prev));
-    }
-    if (searchParams.has('sortBy')) {
-      const sortByParam = searchParams.get('sortBy') || 'createdAt';
-      setSortBy(prev => (prev !== sortByParam ? sortByParam : prev));
-    }
-    if (searchParams.has('sortOrder')) {
-      const sortOrderParam = searchParams.get('sortOrder') || 'DESC';
-      setSortOrder(prev => (prev !== sortOrderParam ? sortOrderParam : prev));
-    }
-    if (searchParams.has('retentionFilter')) {
-      const retention = searchParams.get('retentionFilter') || 'all';
-      setRetentionFilter(prev => (prev !== retention ? retention : prev));
-    }
+    setPagination(prev => (prev.page !== page ? { ...prev, page } : prev));
+    setSelectedCompanyIds(prev => (prev.length !== companyIds.length || companyIds.some((id, i) => id !== prev[i]) ? companyIds : prev));
+    setSearchQuery(prev => (prev !== search ? search : prev));
+    setActiveSearchQuery(prev => (prev !== search ? search : prev));
+    setStatusFilter(prev => (prev !== status ? status : prev));
+    setSortBy(prev => (prev !== sortByParam ? sortByParam : prev));
+    setSortOrder(prev => (prev !== sortOrderParam ? sortOrderParam : prev));
+    setRetentionFilter(prev => (prev !== retention ? retention : prev));
+    hydratedRef.current = true;
   }, [searchParams]);
 
   // Populate selectedCompanyFilters when we have selectedCompanyIds from URL and companies loaded
@@ -122,8 +111,9 @@ const CreditNotes = () => {
   }, [selectedCompanyIds, companies]);
 
   // Sync state to URL when filters/pagination change (so Back from view restores filters).
-  // Never strip URL params: if current URL has more params than we'd write, let hydrate run first (don't overwrite).
+  // Skip until hydrate has run at least once so we don't overwrite a URL we just navigated to.
   useEffect(() => {
+    if (!hydratedRef.current) return;
     const next = new URLSearchParams();
     next.set('page', String(pagination.page));
     if (selectedCompanyIds.length > 0 && selectedCompanyIds.join(',').length <= 1500) {
@@ -134,13 +124,9 @@ const CreditNotes = () => {
     if (sortBy !== 'createdAt') next.set('sortBy', sortBy);
     if (sortOrder !== 'DESC') next.set('sortOrder', sortOrder);
     if (retentionFilter !== 'all') next.set('retentionFilter', retentionFilter);
-    const nextStr = next.toString();
-    const currentStr = searchParams.toString();
-    if (nextStr === currentStr) return;
-    const currentParamCount = Array.from(searchParams.keys()).length;
-    const nextParamCount = Array.from(next.keys()).length;
-    if (nextParamCount < currentParamCount) return;
-    setSearchParams(next, { replace: true });
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
   }, [pagination.page, activeSearchQuery, statusFilter, selectedCompanyIds, sortBy, sortOrder, retentionFilter]);
 
   // Persist current list query for Back from view (fallback when location.state is lost)

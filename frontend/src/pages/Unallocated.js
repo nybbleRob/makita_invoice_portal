@@ -54,35 +54,31 @@ const Unallocated = () => {
     setSelectedFiles(new Set());
   }, [pagination.page, activeSearchQuery, reasonFilter, debouncedAccountNumber, debouncedInvoiceNumber, debouncedDate]);
 
-  // Hydrate state from URL on load / when user uses browser back.
-  // Only apply a param when present in URL so we don't overwrite in-flight filter changes before sync runs.
+  // Hydrate state from URL on mount and when browser back/forward changes the URL.
+  const hydratedRef = useRef(false);
   useEffect(() => {
     const pageFromUrl = parseInt(searchParams.get('page'), 10);
     const page = (!isNaN(pageFromUrl) && pageFromUrl >= 1) ? pageFromUrl : 1;
+    const search = searchParams.get('search') || '';
+    const reason = searchParams.get('failureReason') || 'all';
+    const accountNumber = searchParams.get('accountNumber') || '';
+    const invoiceNumber = searchParams.get('invoiceNumber') || '';
+    const date = searchParams.get('date') || '';
+
     setPagination(prev => (prev.page !== page ? { ...prev, page } : prev));
-    if (searchParams.has('search')) {
-      const search = searchParams.get('search') || '';
-      setSearchQuery(prev => (prev !== search ? search : prev));
-      setActiveSearchQuery(prev => (prev !== search ? search : prev));
-    }
-    if (searchParams.has('failureReason')) {
-      const reason = searchParams.get('failureReason') || 'all';
-      setReasonFilter(prev => (prev !== reason ? reason : prev));
-    }
-    if (searchParams.has('accountNumber')) {
-      setAccountNumberFilter(prev => (prev !== searchParams.get('accountNumber') ? searchParams.get('accountNumber') || '' : prev));
-    }
-    if (searchParams.has('invoiceNumber')) {
-      setInvoiceNumberFilter(prev => (prev !== searchParams.get('invoiceNumber') ? searchParams.get('invoiceNumber') || '' : prev));
-    }
-    if (searchParams.has('date')) {
-      setDateFilter(prev => (prev !== searchParams.get('date') ? searchParams.get('date') || '' : prev));
-    }
+    setSearchQuery(prev => (prev !== search ? search : prev));
+    setActiveSearchQuery(prev => (prev !== search ? search : prev));
+    setReasonFilter(prev => (prev !== reason ? reason : prev));
+    setAccountNumberFilter(prev => (prev !== accountNumber ? accountNumber : prev));
+    setInvoiceNumberFilter(prev => (prev !== invoiceNumber ? invoiceNumber : prev));
+    setDateFilter(prev => (prev !== date ? date : prev));
+    hydratedRef.current = true;
   }, [searchParams]);
 
   // Sync state to URL when filters/pagination change (so Back from view restores filters).
-  // Never strip URL params: if current URL has more params than we'd write, let hydrate run first (don't overwrite).
+  // Skip until hydrate has run at least once so we don't overwrite a URL we just navigated to.
   useEffect(() => {
+    if (!hydratedRef.current) return;
     const next = new URLSearchParams();
     next.set('page', String(pagination.page));
     if (activeSearchQuery && activeSearchQuery.trim()) next.set('search', activeSearchQuery.trim());
@@ -90,13 +86,9 @@ const Unallocated = () => {
     if (accountNumberFilter && accountNumberFilter.trim()) next.set('accountNumber', accountNumberFilter.trim());
     if (invoiceNumberFilter && invoiceNumberFilter.trim()) next.set('invoiceNumber', invoiceNumberFilter.trim());
     if (dateFilter && dateFilter.trim()) next.set('date', dateFilter.trim());
-    const nextStr = next.toString();
-    const currentStr = searchParams.toString();
-    if (nextStr === currentStr) return;
-    const currentParamCount = Array.from(searchParams.keys()).length;
-    const nextParamCount = Array.from(next.keys()).length;
-    if (nextParamCount < currentParamCount) return;
-    setSearchParams(next, { replace: true });
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
   }, [pagination.page, activeSearchQuery, reasonFilter, accountNumberFilter, invoiceNumberFilter, dateFilter]);
 
   // Persist current list query for Back from view (fallback when location.state is lost)

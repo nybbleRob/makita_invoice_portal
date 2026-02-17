@@ -182,7 +182,7 @@ router.get('/', async (req, res) => {
     const sortDir = (sortOrder || 'DESC').toString().toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
     if (retentionFilter === 'expiring_soonest') {
       orderClause = [
-        [sequelize.literal('CASE WHEN "retentionExpiryDate" IS NULL THEN 1 ELSE 0 END'), 'ASC'],
+        [sequelize.literal('CASE WHEN "CreditNote"."retentionExpiryDate" IS NULL THEN 1 ELSE 0 END'), 'ASC'],
         ['retentionExpiryDate', 'ASC'],
         ['issueDate', 'DESC']
       ];

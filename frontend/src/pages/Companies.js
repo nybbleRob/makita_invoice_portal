@@ -117,49 +117,44 @@ const Companies = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, pagination.limit, activeSearchQuery, typeFilters, statusFilter, selectedParentIds]);
 
-  // Hydrate state from URL on load / when user uses browser back.
-  // Only apply a param when present in URL so we don't overwrite in-flight filter changes before sync runs.
+  // Hydrate state from URL on mount and when browser back/forward changes the URL.
+  const hydratedRef = useRef(false);
   useEffect(() => {
     const pageFromUrl = parseInt(searchParams.get('page'), 10);
     const page = (!isNaN(pageFromUrl) && pageFromUrl >= 1) ? pageFromUrl : 1;
+    const search = searchParams.get('search') || '';
+    const status = searchParams.get('status') || 'all';
+    const typesParam = searchParams.get('types') || '';
+    const parentIdsParam = searchParams.get('parentIds') || '';
+    const parentIds = parentIdsParam ? parentIdsParam.split(',').filter(Boolean) : [];
+    const typeFiltersFromUrl = { CORP: true, SUB: true, BRANCH: true };
+    if (typesParam) {
+      const types = typesParam.split(',').filter(Boolean);
+      typeFiltersFromUrl.CORP = types.includes('CORP');
+      typeFiltersFromUrl.SUB = types.includes('SUB');
+      typeFiltersFromUrl.BRANCH = types.includes('BRANCH');
+    }
+
     setPagination(prev => (prev.page !== page ? { ...prev, page } : prev));
-    if (searchParams.has('search')) {
-      const search = searchParams.get('search') || '';
-      setSearchQuery(prev => (prev !== search ? search : prev));
-      setActiveSearchQuery(prev => (prev !== search ? search : prev));
-    }
-    if (searchParams.has('status')) {
-      const status = searchParams.get('status') || 'all';
-      setStatusFilter(prev => (prev !== status ? status : prev));
-    }
-    if (searchParams.has('types')) {
-      const typesParam = searchParams.get('types') || '';
-      const typeFiltersFromUrl = { CORP: true, SUB: true, BRANCH: true };
-      if (typesParam) {
-        const types = typesParam.split(',').filter(Boolean);
-        typeFiltersFromUrl.CORP = types.includes('CORP');
-        typeFiltersFromUrl.SUB = types.includes('SUB');
-        typeFiltersFromUrl.BRANCH = types.includes('BRANCH');
+    setSearchQuery(prev => (prev !== search ? search : prev));
+    setActiveSearchQuery(prev => (prev !== search ? search : prev));
+    setStatusFilter(prev => (prev !== status ? status : prev));
+    setTypeFilters(prev => (JSON.stringify(prev) !== JSON.stringify(typeFiltersFromUrl) ? typeFiltersFromUrl : prev));
+    setSelectedParentIds(prev => (prev.length !== parentIds.length || parentIds.some((id, i) => id !== prev[i]) ? parentIds : prev));
+    setSelectedParentFilters(prev => {
+      if (parentIds.length === 0) return prev.length === 0 ? prev : [];
+      if (prev.length !== parentIds.length || parentIds.some((id, i) => id !== (prev[i]?.id ?? prev[i]))) {
+        return parentIds.map(id => ({ id }));
       }
-      setTypeFilters(prev => (JSON.stringify(prev) !== JSON.stringify(typeFiltersFromUrl) ? typeFiltersFromUrl : prev));
-    }
-    if (searchParams.has('parentIds')) {
-      const parentIdsParam = searchParams.get('parentIds') || '';
-      const parentIds = parentIdsParam ? parentIdsParam.split(',').filter(Boolean) : [];
-      setSelectedParentIds(prev => (prev.length !== parentIds.length || parentIds.some((id, i) => id !== prev[i]) ? parentIds : prev));
-      setSelectedParentFilters(prev => {
-        if (parentIds.length === 0) return prev.length === 0 ? prev : [];
-        if (prev.length !== parentIds.length || parentIds.some((id, i) => id !== (prev[i]?.id ?? prev[i]))) {
-          return parentIds.map(id => ({ id }));
-        }
-        return prev;
-      });
-    }
+      return prev;
+    });
+    hydratedRef.current = true;
   }, [searchParams]);
 
   // Sync state to URL when filters/pagination change (so Back from view restores filters).
-  // Never strip URL params: if current URL has more params than we'd write, let hydrate run first (don't overwrite).
+  // Skip until hydrate has run at least once so we don't overwrite a URL we just navigated to.
   useEffect(() => {
+    if (!hydratedRef.current) return;
     const next = new URLSearchParams();
     next.set('page', String(pagination.page));
     if (activeSearchQuery && activeSearchQuery.trim()) next.set('search', activeSearchQuery.trim());
@@ -167,13 +162,9 @@ const Companies = () => {
     const types = ['CORP', 'SUB', 'BRANCH'].filter(t => typeFilters[t]);
     if (types.length < 3) next.set('types', types.join(','));
     if (selectedParentIds.length > 0) next.set('parentIds', selectedParentIds.join(','));
-    const nextStr = next.toString();
-    const currentStr = searchParams.toString();
-    if (nextStr === currentStr) return;
-    const currentParamCount = Array.from(searchParams.keys()).length;
-    const nextParamCount = Array.from(next.keys()).length;
-    if (nextParamCount < currentParamCount) return;
-    setSearchParams(next, { replace: true });
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
   }, [pagination.page, activeSearchQuery, statusFilter, typeFilters, selectedParentIds]);
 
   // Persist current list query for Back from view (fallback when location.state is lost)

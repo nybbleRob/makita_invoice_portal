@@ -216,7 +216,7 @@ router.get('/', async (req, res) => {
     if (retentionFilter === 'expiring_soonest') {
       // Sort by retention expiry date (ascending - soonest first)
       orderClause = [
-        [sequelize.literal('CASE WHEN "retentionExpiryDate" IS NULL THEN 1 ELSE 0 END'), 'ASC'],
+        [sequelize.literal('CASE WHEN "Invoice"."retentionExpiryDate" IS NULL THEN 1 ELSE 0 END'), 'ASC'],
         ['retentionExpiryDate', 'ASC'],
         ['issueDate', 'DESC']
       ];
