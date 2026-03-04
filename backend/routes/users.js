@@ -1399,7 +1399,94 @@ router.post('/:id/reset-password', canManageUsers, async (req, res) => {
   }
 });
 
-// Delete user - GA + Admin only
+// Bulk delete users
+router.post('/bulk-delete', requirePermission('USERS_DELETE'), async (req, res) => {
+  try {
+    const { userIds, reason } = req.body;
+
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ message: 'No user IDs provided' });
+    }
+
+    let deleted = 0;
+    let failed = 0;
+    const errors = [];
+
+    for (const userId of userIds) {
+      try {
+        const validation = validateUUID(userId, 'user ID');
+        if (!validation.valid) {
+          failed++;
+          errors.push(`Invalid ID: ${userId}`);
+          continue;
+        }
+
+        const user = await User.findByPk(validation.value);
+        if (!user) {
+          failed++;
+          errors.push(`User not found: ${userId}`);
+          continue;
+        }
+
+        if (user.id === req.user.userId) {
+          failed++;
+          errors.push(`Cannot delete your own account`);
+          continue;
+        }
+
+        if (!canManageRole(req.user.role, user.role)) {
+          failed++;
+          errors.push(`Access denied for user: ${user.name}`);
+          continue;
+        }
+
+        if (user.role === 'administrator' && req.user.role !== 'global_admin') {
+          failed++;
+          errors.push(`Only Global Administrators can delete Administrators: ${user.name}`);
+          continue;
+        }
+
+        const deletedUserName = user.name;
+        const deletedUserEmail = user.email;
+        const deletedUserRole = user.role;
+
+        await user.destroy();
+
+        await logActivity({
+          type: ActivityType.USER_DELETED,
+          userId: req.user.userId,
+          userEmail: req.user.email,
+          userRole: req.user.role,
+          action: `Deleted user ${deletedUserName} (${deletedUserEmail})`,
+          details: {
+            deletedUserId: userId,
+            deletedUserName,
+            deletedUserEmail,
+            deletedUserRole,
+            reason: reason || '',
+            bulkOperation: true
+          },
+          companyId: null,
+          companyName: null,
+          ipAddress: req.ip || req.connection.remoteAddress,
+          userAgent: req.get('user-agent')
+        });
+
+        deleted++;
+      } catch (err) {
+        failed++;
+        errors.push(`Error deleting ${userId}: ${err.message}`);
+      }
+    }
+
+    res.json({ deleted, failed, errors: errors.length > 0 ? errors : undefined });
+  } catch (error) {
+    console.error('[Bulk Delete Users] Error:', error.message);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Delete user
 router.delete('/:id', requirePermission('USERS_DELETE'), async (req, res) => {
   try {
     const userId = req.params.id;
@@ -1455,15 +1542,14 @@ router.delete('/:id', requirePermission('USERS_DELETE'), async (req, res) => {
       return res.status(403).json({ message: 'Only Global Administrators can delete Administrators' });
     }
     
-    // Store user info before deletion for logging
     const deletedUserName = user.name;
     const deletedUserEmail = user.email;
     const deletedUserRole = user.role;
+    const deleteReason = req.body?.reason || '';
     
     await user.destroy();
     console.log('[Delete User] Success: User deleted');
     
-    // Log user deletion
     await logActivity({
       type: ActivityType.USER_DELETED,
       userId: req.user.userId,
@@ -1474,7 +1560,8 @@ router.delete('/:id', requirePermission('USERS_DELETE'), async (req, res) => {
         deletedUserId: validatedUserId,
         deletedUserName: deletedUserName,
         deletedUserEmail: deletedUserEmail,
-        deletedUserRole: deletedUserRole
+        deletedUserRole: deletedUserRole,
+        reason: deleteReason
       },
       companyId: null,
       companyName: null,

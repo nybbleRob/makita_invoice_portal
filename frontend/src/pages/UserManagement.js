@@ -34,6 +34,18 @@ const UserManagement = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState([]);
+
+  // Delete modal states
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  // Bulk delete modal states
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleteReason, setBulkDeleteReason] = useState('');
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -606,35 +618,62 @@ const UserManagement = () => {
     resetForm();
   };
 
-  const handleDeleteUser = async (userId) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
-    
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+
+    if (!deleteReason || deleteReason.trim().length === 0) {
+      toast.error('Please provide a reason for deletion');
+      return;
+    }
+
     try {
-      await api.delete(`/api/users/${userId}`);
+      setDeleting(true);
+      await api.delete(`/api/users/${userToDelete.id}`, {
+        data: { reason: deleteReason.trim() }
+      });
       toast.success('User deleted successfully!');
-      setSelectedUserIds(selectedUserIds.filter(id => id !== userId));
+      setSelectedUserIds(selectedUserIds.filter(id => id !== userToDelete.id));
+      setShowDeleteModal(false);
+      setUserToDelete(null);
+      setDeleteReason('');
       fetchUsers();
     } catch (error) {
       toast.error('Error deleting user: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setDeleting(false);
     }
   };
 
   const handleBulkDelete = async () => {
     if (selectedUserIds.length === 0) return;
-    
-    const count = selectedUserIds.length;
-    if (!window.confirm(`Are you sure you want to delete ${count} user(s)?`)) return;
-    
+
+    if (!bulkDeleteReason || bulkDeleteReason.trim().length === 0) {
+      toast.error('Please provide a reason for deletion');
+      return;
+    }
+
     try {
-      // Delete users in parallel
-      await Promise.all(
-        selectedUserIds.map((userId) => api.delete(`/api/users/${userId}`))
-      );
-      toast.success(`${count} user(s) deleted successfully!`);
+      setBulkDeleting(true);
+      const response = await api.post('/api/users/bulk-delete', {
+        userIds: selectedUserIds,
+        reason: bulkDeleteReason.trim()
+      });
+
+      const { deleted, failed } = response.data;
+      if (failed > 0) {
+        toast.warning(`Deleted ${deleted} user(s), ${failed} failed`);
+      } else {
+        toast.success(`Successfully deleted ${deleted} user(s)`);
+      }
+
+      setShowBulkDeleteModal(false);
+      setBulkDeleteReason('');
       setSelectedUserIds([]);
       fetchUsers();
     } catch (error) {
       toast.error('Error deleting users: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -1165,7 +1204,10 @@ const UserManagement = () => {
                             <button
                               className="dropdown-item text-danger"
                               type="button"
-                              onClick={handleBulkDelete}
+                              onClick={() => {
+                                setShowBulkDeleteModal(true);
+                                setBulkDeleteReason('');
+                              }}
                             >
                               Delete Selected Users
                             </button>
@@ -1369,11 +1411,14 @@ const UserManagement = () => {
                                 </button>
                               )}
                               {user.id !== currentUser?.id && 
-                               // Only Global Admins can delete Administrators
                                !(user.role === 'administrator' && currentUser?.role === 'administrator') && (
                                 <button
                                   className="btn btn-sm btn-danger"
-                                  onClick={() => handleDeleteUser(user.id)}
+                                  onClick={() => {
+                                    setUserToDelete(user);
+                                    setShowDeleteModal(true);
+                                    setDeleteReason('');
+                                  }}
                                 >
                                   Delete
                                 </button>
@@ -2399,6 +2444,157 @@ const UserManagement = () => {
           onClose={() => setShowCompanyAssignmentModal(false)}
           onApply={() => setShowCompanyAssignmentModal(false)}
         />
+      )}
+
+      {/* Delete User Confirmation Modal */}
+      {showDeleteModal && userToDelete && (
+        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Delete User</h5>
+                <button 
+                  type="button" 
+                  className="btn-close" 
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setUserToDelete(null);
+                    setDeleteReason('');
+                  }}
+                  disabled={deleting}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <p className="text-danger">
+                    <strong>Warning:</strong> This action cannot be undone. The user account will be permanently deleted.
+                  </p>
+                  <p>
+                    You are about to delete user <strong>{userToDelete.name}</strong> ({userToDelete.email}) with role <strong>{getRoleLabel(userToDelete.role)}</strong>.
+                  </p>
+                </div>
+                <div className="mb-3">
+                  <label className="form-label required">Reason for Deletion</label>
+                  <textarea
+                    className="form-control"
+                    rows="4"
+                    placeholder="Please provide a reason for deleting this user (required for accountability)..."
+                    value={deleteReason}
+                    onChange={(e) => setDeleteReason(e.target.value)}
+                    disabled={deleting}
+                    required
+                  />
+                  <small className="form-hint">
+                    This reason will be recorded in the system for accountability purposes.
+                  </small>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button 
+                  type="button" 
+                  className="btn btn-danger" 
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setUserToDelete(null);
+                    setDeleteReason('');
+                  }}
+                  disabled={deleting}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-danger" 
+                  onClick={handleDeleteUser}
+                  disabled={deleting || !deleteReason.trim()}
+                >
+                  {deleting ? 'Deleting...' : 'Delete User'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Users Confirmation Modal */}
+      {showBulkDeleteModal && selectedUserIds.length > 0 && (
+        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Delete Multiple Users</h5>
+                <button 
+                  type="button" 
+                  className="btn-close" 
+                  onClick={() => {
+                    setShowBulkDeleteModal(false);
+                    setBulkDeleteReason('');
+                  }}
+                  disabled={bulkDeleting}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <p className="text-danger">
+                    <strong>Warning:</strong> This action cannot be undone. {selectedUserIds.length} user(s) will be permanently deleted.
+                  </p>
+                  <p>
+                    You are about to delete the following users:
+                  </p>
+                  <ul className="list-unstyled">
+                    {users
+                      .filter(u => selectedUserIds.includes(u.id))
+                      .slice(0, 10)
+                      .map(u => (
+                        <li key={u.id} className="text-muted">
+                          • {u.name} ({u.email}) - {getRoleLabel(u.role)}
+                        </li>
+                      ))}
+                    {selectedUserIds.length > 10 && (
+                      <li className="text-muted">... and {selectedUserIds.length - 10} more</li>
+                    )}
+                  </ul>
+                </div>
+                <div className="mb-3">
+                  <label className="form-label required">Reason for Deletion</label>
+                  <textarea
+                    className="form-control"
+                    rows="4"
+                    placeholder="Please provide a reason for deleting these users (required for accountability)..."
+                    value={bulkDeleteReason}
+                    onChange={(e) => setBulkDeleteReason(e.target.value)}
+                    disabled={bulkDeleting}
+                    required
+                  />
+                  <small className="form-hint">
+                    This reason will be recorded in the system for each deleted user for accountability purposes.
+                  </small>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button 
+                  type="button" 
+                  className="btn btn-danger" 
+                  onClick={() => {
+                    setShowBulkDeleteModal(false);
+                    setBulkDeleteReason('');
+                  }}
+                  disabled={bulkDeleting}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-danger" 
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleting || !bulkDeleteReason.trim()}
+                >
+                  {bulkDeleting ? 'Deleting...' : `Delete ${selectedUserIds.length} User(s)`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
