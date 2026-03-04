@@ -1501,9 +1501,8 @@ async function processInvoiceImport(job) {
                 await sendEmail({
                   to: user.email,
                   subject: emailSubject,
-                  html: themedContent,
-                  settings: settings
-                });
+                  html: themedContent
+                }, settings);
                 console.log(`📧 [Import ${importId}] Sent duplicate notification to: ${user.email}`);
               } catch (emailError) {
                 console.error(`⚠️  [Import ${importId}] Failed to send email to ${user.email}:`, emailError.message);

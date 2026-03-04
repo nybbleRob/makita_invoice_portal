@@ -121,7 +121,11 @@ const recaptchaMiddleware = (options = {}) => {
       const verification = await verifyRecaptchaToken(token, secretKey);
       
       if (!verification.success) {
-        console.warn('reCAPTCHA verification failed:', verification['error-codes'] || 'Unknown error');
+        const errorCodes = verification['error-codes'] || [];
+        console.warn('reCAPTCHA verification failed. Google error-codes:', errorCodes.length ? errorCodes.join(', ') : 'Unknown error');
+        if (errorCodes.length) {
+          console.warn('  Common fixes: RECAPTCHA_SECRET_KEY must match your reCAPTCHA v3 secret; token may be expired (refresh page). Set RECAPTCHA_ENABLED=false to disable.');
+        }
         return res.status(400).json({ 
           message: 'reCAPTCHA verification failed. Please try again.',
           recaptchaFailed: true
@@ -130,7 +134,9 @@ const recaptchaMiddleware = (options = {}) => {
       
       // Check score (v3 returns a score from 0.0 to 1.0)
       if (verification.score !== undefined && verification.score < minScore) {
-        console.warn(`reCAPTCHA score too low: ${verification.score} (minimum: ${minScore})`);
+        const clientEmail = req.body.email || 'unknown';
+        const clientIp = req.ip || req.connection.remoteAddress;
+        console.warn(`reCAPTCHA score too low: ${verification.score} (minimum: ${minScore}) | email: ${clientEmail} | ip: ${clientIp} | action: ${verification.action}`);
         return res.status(400).json({ 
           message: 'reCAPTCHA verification failed. Please try again.',
           recaptchaFailed: true,

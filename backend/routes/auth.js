@@ -50,7 +50,7 @@ router.post('/register', async (req, res) => {
 });
 
 // Login
-router.post('/login', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) => {
+router.post('/login', recaptchaMiddleware({ minScore: 0.3 }), async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -441,7 +441,7 @@ router.get('/me', auth, async (req, res) => {
 });
 
 // Forgot password - Request password reset
-router.post('/forgot-password', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) => {
+router.post('/forgot-password', recaptchaMiddleware({ minScore: 0.3 }), async (req, res) => {
   try {
     const { email } = req.body;
 
