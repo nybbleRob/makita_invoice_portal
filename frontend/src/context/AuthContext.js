@@ -66,8 +66,9 @@ export const AuthProvider = ({ children }) => {
           success: false,
           requires2FA: true,
           user: response.data.user,
-          sessionToken: response.data.sessionToken, // IMPORTANT: Pass session token
+          sessionToken: response.data.sessionToken,
           twoFactorMethod: response.data.twoFactorMethod || 'authenticator',
+          emailSendFailed: response.data.emailSendFailed || false,
           message: response.data.message
         };
       }

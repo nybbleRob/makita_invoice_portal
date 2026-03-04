@@ -25,6 +25,7 @@ const TwoFactorVerify = () => {
   const sessionToken = location.state?.sessionToken;
   const isSetup = location.state?.isSetup || false; // True if coming from method selection (first-time setup)
   const fromProfile = location.state?.fromProfile || false; // True if coming from Profile page (already logged in)
+  const emailSendFailed = location.state?.emailSendFailed || false;
   const from = location.state?.from;
 
   // Cooldown timer for resend button
@@ -34,6 +35,13 @@ const TwoFactorVerify = () => {
       return () => clearTimeout(timer);
     }
   }, [cooldown]);
+
+  // Auto-trigger resend if the initial email failed to send
+  useEffect(() => {
+    if (emailSendFailed && isEmailMethod && !isSetup) {
+      toast.error('The verification email could not be sent. Click "Resend" to try again.');
+    }
+  }, [emailSendFailed, isEmailMethod, isSetup]);
 
   const handleVerify = async (e) => {
     e.preventDefault();
@@ -199,6 +207,12 @@ const TwoFactorVerify = () => {
                 }
               </p>
             </div>
+
+            {emailSendFailed && isEmailMethod && !error && (
+              <div className="alert alert-warning" role="alert">
+                <strong>Email could not be sent.</strong> Please click "Resend" below to try again.
+              </div>
+            )}
 
             {error && (
               <div key={error} className="alert alert-danger" role="alert">

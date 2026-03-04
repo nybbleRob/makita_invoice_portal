@@ -171,8 +171,9 @@ const Login = () => {
             sessionToken: result.sessionToken,
             password: password,
             twoFactorMethod: result.twoFactorMethod || 'authenticator',
-            maskedEmail: result.user?.maskedEmail, // For display
-            from: getRedirectPath() // Preserve redirect destination
+            maskedEmail: result.user?.maskedEmail,
+            emailSendFailed: result.emailSendFailed || false,
+            from: getRedirectPath()
           }
         });
       } else if (result.mustChangePassword) {

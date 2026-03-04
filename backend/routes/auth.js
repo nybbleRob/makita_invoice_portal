@@ -285,6 +285,7 @@ router.post('/login', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) =
         const twoFactorMethod = user.twoFactorMethod || 'authenticator';
         
         // For email method, auto-send a code
+        let emailSendFailed = false;
         if (twoFactorMethod === 'email') {
           const crypto = require('crypto');
           const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
@@ -298,37 +299,46 @@ router.post('/login', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) =
           user.emailTwoFactorExpires = expiresAt;
           await user.save();
           
-          // Send email
-          try {
-            const emailSettings = await Settings.getSettings();
-            await sendTemplatedEmail(
-              'two-factor-code',
-              user.email,
-              {
-                userName: user.name,
-                verificationCode: code,
-                expiryMinutes: '10'
-              },
-              emailSettings,
-              { context: { type: '2fa-login', userId: user.id } }
-            );
-          } catch (emailError) {
-            console.error('Failed to send 2FA email:', emailError);
-            // Continue anyway - user can request resend
+          // Send email with retry
+          const maxRetries = 2;
+          for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+              const emailSettings = await Settings.getSettings();
+              await sendTemplatedEmail(
+                'two-factor-code',
+                user.email,
+                {
+                  userName: user.name,
+                  verificationCode: code,
+                  expiryMinutes: '10'
+                },
+                emailSettings,
+                { context: { type: '2fa-login', userId: user.id } }
+              );
+              emailSendFailed = false;
+              break;
+            } catch (emailError) {
+              console.error(`Failed to send 2FA email (attempt ${attempt}/${maxRetries}):`, emailError.message);
+              emailSendFailed = true;
+              if (attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+              }
+            }
           }
         }
         
         return res.status(200).json({
           requires2FA: true,
-          message: twoFactorMethod === 'email' 
-            ? 'Verification code sent to your email' 
+          message: twoFactorMethod === 'email'
+            ? (emailSendFailed ? 'Failed to send verification code. Please use the resend button.' : 'Verification code sent to your email')
             : '2FA verification code required',
+          emailSendFailed: emailSendFailed,
           twoFactorMethod: twoFactorMethod,
-          sessionToken: sessionToken, // Temporary token for 2FA verification
+          sessionToken: sessionToken,
           user: {
             id: user.id,
-            email: user.email, // Keep full email for re-authentication
-            maskedEmail: user.email.replace(/(.{2})(.*)(@.*)/, '$1***$3'), // Masked for display
+            email: user.email,
+            maskedEmail: user.email.replace(/(.{2})(.*)(@.*)/, '$1***$3'),
             name: user.name
           }
         });

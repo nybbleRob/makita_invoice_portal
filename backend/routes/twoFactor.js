@@ -528,29 +528,45 @@ router.post('/send-email-code', async (req, res) => {
     // Set rate limit
     setEmailRateLimit(user.id);
 
-    // Get settings for email
-    const emailSettings = await Settings.getSettings();
+    // Send email with retry
+    const maxRetries = 2;
+    let lastError = null;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const emailSettings = await Settings.getSettings();
+        await sendTemplatedEmail(
+          'two-factor-code',
+          user.email,
+          {
+            userName: user.name,
+            verificationCode: code,
+            expiryMinutes: '10'
+          },
+          emailSettings,
+          { context: { type: '2fa-login', userId: user.id } }
+        );
+        lastError = null;
+        break;
+      } catch (emailError) {
+        console.error(`Send email code error (attempt ${attempt}/${maxRetries}):`, emailError.message);
+        lastError = emailError;
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    }
 
-    // Send email
-    await sendTemplatedEmail(
-      'two-factor-code',
-      user.email,
-      {
-        userName: user.name,
-        verificationCode: code,
-        expiryMinutes: '10'
-      },
-      emailSettings,
-      { context: { type: '2fa-login', userId: user.id } }
-    );
+    if (lastError) {
+      throw lastError;
+    }
 
     res.json({
       message: 'Verification code sent to your email',
-      email: user.email.replace(/(.{2})(.*)(@.*)/, '$1***$3') // Mask email
+      email: user.email.replace(/(.{2})(.*)(@.*)/, '$1***$3')
     });
   } catch (error) {
     console.error('Send email code error:', error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: 'Failed to send verification email. Please try again.' });
   }
 });
 
