@@ -601,9 +601,8 @@ const Companies = () => {
     }
   };
 
-  // Check if user is administrator
   const isAdministrator = () => {
-    return currentUser?.role === 'global_admin' || currentUser?.role === 'administrator';
+    return currentUser?.role === 'global_admin' || currentUser?.role === 'administrator' || currentUser?.role === 'manager';
   };
 
   // Export companies to CSV or XLSX
@@ -1445,7 +1444,7 @@ const Companies = () => {
                       <th>Type</th>
                       <th>Account Number / Company Number</th>
                       <th>Relationships</th>
-                      {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && (
+                      {isAdministrator() && (
                         <th>Assigned Users</th>
                       )}
                       <th>EDI</th>
@@ -1474,7 +1473,7 @@ const Companies = () => {
                       ))
                     ) : filteredCompanies.length === 0 ? (
                       <tr>
-                        <td colSpan={(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') ? 9 : 8} className="text-center text-muted py-4">
+                        <td colSpan={isAdministrator() ? 9 : 8} className="text-center text-muted py-4">
                           {pagination.total === 0 ? 'No companies found' : 'No companies match your filters on this page'}
                         </td>
                       </tr>
@@ -1518,7 +1517,7 @@ const Companies = () => {
                                 );
                               })()}
                             </td>
-                            {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && (
+                            {isAdministrator() && (
                               <td>
                                 <button
                                   className="btn btn-sm btn-link p-0 text-decoration-none"

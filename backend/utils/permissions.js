@@ -26,7 +26,7 @@ const PERMISSIONS = {
   SETTINGS_EDIT: ['global_admin'],
   
   IMPORT_DATA_VIEW: ['global_admin', 'manager', 'credit_senior', 'credit_controller'],
-  IMPORT_DATA_MANAGE: ['global_admin'],
+  IMPORT_DATA_MANAGE: ['global_admin', 'administrator', 'manager'],
   
   TEMPLATES_VIEW: ['global_admin'],
   TEMPLATES_EDIT: ['global_admin'],
@@ -43,8 +43,8 @@ const PERMISSIONS = {
   // INVOICES
   // =====================
   INVOICES_VIEW: PORTAL_ROLES,
-  INVOICES_IMPORT: ['global_admin', 'administrator'],
-  INVOICES_EDIT: ['global_admin', 'administrator'],
+  INVOICES_IMPORT: ['global_admin', 'administrator', 'manager'],
+  INVOICES_EDIT: ['global_admin', 'administrator', 'manager'],
   INVOICES_DELETE: ['global_admin', 'administrator'],
   INVOICES_DOWNLOAD: PORTAL_ROLES,
   
@@ -52,8 +52,8 @@ const PERMISSIONS = {
   // CREDIT NOTES
   // =====================
   CREDIT_NOTES_VIEW: PORTAL_ROLES,
-  CREDIT_NOTES_IMPORT: ['global_admin', 'administrator'],
-  CREDIT_NOTES_EDIT: ['global_admin', 'administrator'],
+  CREDIT_NOTES_IMPORT: ['global_admin', 'administrator', 'manager'],
+  CREDIT_NOTES_EDIT: ['global_admin', 'administrator', 'manager'],
   CREDIT_NOTES_DELETE: ['global_admin', 'administrator'],
   CREDIT_NOTES_DOWNLOAD: PORTAL_ROLES,
   
@@ -99,9 +99,9 @@ const PERMISSIONS = {
   USERS_VIEW: ['global_admin', 'administrator', 'manager', 'credit_senior', 'credit_controller'],
   USERS_CREATE: ['global_admin', 'administrator', 'manager'],
   USERS_EDIT: ['global_admin', 'administrator', 'manager'],
-  USERS_DELETE: ['global_admin', 'administrator'],
-  USERS_DEACTIVATE: ['global_admin', 'administrator'],
-  USERS_IMPORT: ['global_admin'],
+  USERS_DELETE: ['global_admin', 'administrator', 'manager'],
+  USERS_DEACTIVATE: ['global_admin', 'administrator', 'manager'],
+  USERS_IMPORT: ['global_admin', 'administrator', 'manager'],
   
   // =====================
   // ACTIVITY LOGS

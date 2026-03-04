@@ -10,13 +10,15 @@ const router = express.Router();
 // Apply auth to all routes
 router.use(auth);
 
-// Get all pending registrations (Global Admin and Administrator only)
+// Roles that can manage pending accounts (view, edit, approve, reject)
+const PENDING_ACCOUNTS_ROLES = ['global_admin', 'administrator', 'manager'];
+
+// Get all pending registrations (Global Admin, Administrator, Manager)
 router.get('/', async (req, res) => {
   try {
-    // Only global admins and administrators can view pending registrations
-    if (!['global_admin', 'administrator'].includes(req.user.role)) {
+    if (!PENDING_ACCOUNTS_ROLES.includes(req.user.role)) {
       return res.status(403).json({ 
-        message: 'Access denied. Only Global Administrators and Administrators can view pending registrations.' 
+        message: 'Access denied. Only Global Administrators, Administrators and Managers can view pending registrations.' 
       });
     }
     
@@ -62,10 +64,9 @@ router.get('/', async (req, res) => {
 // Get single pending registration
 router.get('/:id', async (req, res) => {
   try {
-    // Only global admins and administrators can view pending registrations
-    if (!['global_admin', 'administrator'].includes(req.user.role)) {
+    if (!PENDING_ACCOUNTS_ROLES.includes(req.user.role)) {
       return res.status(403).json({ 
-        message: 'Access denied. Only Global Administrators and Administrators can view pending registrations.' 
+        message: 'Access denied. Only Global Administrators, Administrators and Managers can view pending registrations.' 
       });
     }
     
@@ -95,10 +96,9 @@ router.get('/:id', async (req, res) => {
 // Update pending registration (edit before approval)
 router.put('/:id', async (req, res) => {
   try {
-    // Only global admins and administrators can edit pending registrations
-    if (!['global_admin', 'administrator'].includes(req.user.role)) {
+    if (!PENDING_ACCOUNTS_ROLES.includes(req.user.role)) {
       return res.status(403).json({ 
-        message: 'Access denied. Only Global Administrators and Administrators can edit pending registrations.' 
+        message: 'Access denied. Only Global Administrators, Administrators and Managers can edit pending registrations.' 
       });
     }
     
@@ -205,10 +205,9 @@ router.put('/:id', async (req, res) => {
 // Approve registration and create user
 router.post('/:id/approve', async (req, res) => {
   try {
-    // Only global admins and administrators can approve registrations
-    if (!['global_admin', 'administrator'].includes(req.user.role)) {
+    if (!PENDING_ACCOUNTS_ROLES.includes(req.user.role)) {
       return res.status(403).json({ 
-        message: 'Access denied. Only Global Administrators and Administrators can approve registrations.' 
+        message: 'Access denied. Only Global Administrators, Administrators and Managers can approve registrations.' 
       });
     }
     
@@ -380,10 +379,9 @@ router.post('/:id/approve', async (req, res) => {
 // Reject registration
 router.post('/:id/reject', async (req, res) => {
   try {
-    // Only global admins and administrators can reject registrations
-    if (!['global_admin', 'administrator'].includes(req.user.role)) {
+    if (!PENDING_ACCOUNTS_ROLES.includes(req.user.role)) {
       return res.status(403).json({ 
-        message: 'Access denied. Only Global Administrators and Administrators can reject registrations.' 
+        message: 'Access denied. Only Global Administrators, Administrators and Managers can reject registrations.' 
       });
     }
     

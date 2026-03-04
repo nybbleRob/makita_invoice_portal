@@ -1174,7 +1174,7 @@ const UserManagement = () => {
                       </div>
                     )}
                     {/* Pending Accounts button */}
-                    {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && (
+                    {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator' || currentUser?.role === 'manager') && (
                       <button
                         className="btn btn-sm btn-warning"
                         onClick={() => navigate('/users/pending-accounts')}

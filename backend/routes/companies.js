@@ -374,8 +374,11 @@ router.get('/', auth, checkDocumentAccess, async (req, res) => {
       where.type = type;
     }
     
+    // Default to active companies only so soft-deleted (inactive) companies are hidden
     if (isActive !== undefined) {
       where.isActive = isActive === 'true';
+    } else {
+      where.isActive = true;
     }
     
     // Handle comma-separated account numbers (referenceNo) - takes priority over regular search
@@ -470,10 +473,9 @@ router.get('/', auth, checkDocumentAccess, async (req, res) => {
  */
 router.get('/export', auth, async (req, res) => {
   try {
-    // Check if user is administrator (same as import)
-    if (req.user.role !== 'global_admin' && req.user.role !== 'administrator') {
+    if (!['global_admin', 'administrator', 'manager'].includes(req.user.role)) {
       return res.status(403).json({ 
-        message: 'Access denied. Administrator privileges required.' 
+        message: 'Access denied. Manager privileges or above required.' 
       });
     }
 
@@ -849,6 +851,37 @@ router.put('/bulk-update-all', auth, globalAdmin, async (req, res) => {
   }
 });
 
+// Restore (reactivate) a soft-deleted company - documents remain assigned
+router.put('/:id/restore', requirePermission('COMPANIES_EDIT'), async (req, res) => {
+  try {
+    const company = await Company.findByPk(req.params.id);
+    if (!company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+    if (company.isActive) {
+      return res.status(400).json({ message: 'Company is already active.' });
+    }
+    company.isActive = true;
+    await company.save();
+    await logActivity({
+      type: ActivityType.COMPANY_UPDATED,
+      userId: req.user.userId,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: `Restored company ${company.name}`,
+      details: { companyId: company.id, companyName: company.name, isActive: { from: false, to: true } },
+      companyId: company.id,
+      companyName: company.name,
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    });
+    res.json({ message: 'Company restored successfully.', company: { id: company.id, name: company.name, isActive: company.isActive } });
+  } catch (error) {
+    console.error('Error restoring company:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Update company
 router.put('/:id', auth, async (req, res) => {
   try {
@@ -1086,7 +1119,8 @@ router.delete('/purge-all', auth, globalAdmin, async (req, res) => {
   }
 });
 
-// Delete company - GA + Admin + Manager only
+// Delete company (soft delete: deactivate only - no documents are removed)
+// GA + Admin + Manager only. Company row and all linked documents are preserved for possible restore.
 router.delete('/:id', requirePermission('COMPANIES_DELETE'), async (req, res) => {
   try {
     const company = await Company.findByPk(req.params.id);
@@ -1095,7 +1129,11 @@ router.delete('/:id', requirePermission('COMPANIES_DELETE'), async (req, res) =>
       return res.status(404).json({ message: 'Company not found' });
     }
     
-    // Check if company has children
+    if (!company.isActive) {
+      return res.status(400).json({ message: 'Company is already deleted (inactive).' });
+    }
+    
+    // Check if company has children (must deactivate children first to keep hierarchy clear)
     const children = await Company.count({ where: { parentId: company.id } });
     if (children > 0) {
       return res.status(400).json({ 
@@ -1103,35 +1141,33 @@ router.delete('/:id', requirePermission('COMPANIES_DELETE'), async (req, res) =>
       });
     }
     
-    // Store company info before deletion
-    const deletedCompanyName = company.name;
-    const deletedCompanyId = company.id;
+    const companyName = company.name;
+    const companyId = company.id;
     
-    await company.destroy();
+    // Soft delete: deactivate only. No documents are deleted; they remain assigned to this company.
+    company.isActive = false;
+    await company.save();
     
-    // Queue nested set update after deletion (non-blocking)
-    queueNestedSetUpdate();
-    
-    // Log company deletion
+    // Log company deletion (soft)
     await logActivity({
       type: ActivityType.COMPANY_DELETED,
       userId: req.user.userId,
       userEmail: req.user.email,
       userRole: req.user.role,
-      action: `Deleted company ${deletedCompanyName}`,
+      action: `Deleted company ${companyName} (deactivated; documents retained)`,
       details: { 
-        companyId: deletedCompanyId,
-        companyName: deletedCompanyName,
+        companyId,
+        companyName,
         companyType: company.type,
         referenceNo: company.referenceNo
       },
-      companyId: deletedCompanyId,
-      companyName: deletedCompanyName,
+      companyId,
+      companyName,
       ipAddress: req.ip || req.connection.remoteAddress,
       userAgent: req.get('user-agent')
     });
     
-    res.json({ message: 'Company deleted successfully' });
+    res.json({ message: 'Company deleted successfully. Documents remain assigned and can be restored if the company is re-activated.' });
   } catch (error) {
     console.error('Error deleting company:', error);
     res.status(500).json({ message: error.message });
@@ -1648,10 +1684,9 @@ async function processRowForPreview(row, rowNum, existingCompaniesMap, csvCompan
 
 // Preview import endpoint - parses CSV and returns preview without importing
 router.post('/import/preview', auth, upload.single('file'), async (req, res) => {
-  // Check if user is administrator
-  if (req.user.role !== 'global_admin' && req.user.role !== 'administrator') {
+  if (!['global_admin', 'administrator', 'manager'].includes(req.user.role)) {
     return res.status(403).json({ 
-      message: 'Access denied. Administrator privileges required.' 
+      message: 'Access denied. Manager privileges or above required.' 
     });
   }
 
@@ -1897,10 +1932,9 @@ router.post('/import/preview', auth, upload.single('file'), async (req, res) => 
 });
 
 router.post('/import', auth, upload.single('file'), async (req, res) => {
-  // Check if user is administrator
-  if (req.user.role !== 'global_admin' && req.user.role !== 'administrator') {
+  if (!['global_admin', 'administrator', 'manager'].includes(req.user.role)) {
     return res.status(403).json({ 
-      message: 'Access denied. Administrator privileges required.' 
+      message: 'Access denied. Manager privileges or above required.' 
     });
   }
 
