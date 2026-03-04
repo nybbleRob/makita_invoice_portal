@@ -3,12 +3,14 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
+import { usePermissions } from '../context/PermissionContext';
 import { useDebounce } from '../hooks/useDebounce';
 
 const Unallocated = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user: currentUser } = useAuth();
+  const { hasPermission } = usePermissions();
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -665,27 +667,31 @@ const Unallocated = () => {
                     {/* Bulk actions */}
                     {selectedFiles.size > 0 && (
                       <>
-                        <button
-                          className="btn btn-sm btn-success"
-                          onClick={() => handleBulkAllocate([...selectedFiles])}
-                          disabled={allocating}
-                        >
-                          Allocate Selected ({selectedFiles.size})
-                        </button>
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => {
-                            setShowDeleteModal(true);
-                            setDeleteReason('');
-                          }}
-                          disabled={deleting}
-                        >
-                          Delete Selected ({selectedFiles.size})
-                        </button>
+                        {hasPermission('UNALLOCATED_REALLOCATE') && (
+                          <button
+                            className="btn btn-sm btn-success"
+                            onClick={() => handleBulkAllocate([...selectedFiles])}
+                            disabled={allocating}
+                          >
+                            Allocate Selected ({selectedFiles.size})
+                          </button>
+                        )}
+                        {hasPermission('UNALLOCATED_DELETE') && (
+                          <button
+                            className="btn btn-sm btn-danger"
+                            onClick={() => {
+                              setShowDeleteModal(true);
+                              setDeleteReason('');
+                            }}
+                            disabled={deleting}
+                          >
+                            Delete Selected ({selectedFiles.size})
+                          </button>
+                        )}
                       </>
                     )}
                     {/* Allocate All - only show when NO items selected */}
-                    {currentUser?.role && ['global_admin', 'administrator'].includes(currentUser.role) && pagination.total > 0 && selectedFiles.size === 0 && (
+                    {hasPermission('UNALLOCATED_REALLOCATE') && pagination.total > 0 && selectedFiles.size === 0 && (
                       <button
                         className="btn btn-sm btn-success"
                         onClick={() => handleBulkAllocate([])}
@@ -694,8 +700,8 @@ const Unallocated = () => {
                         Allocate All ({pagination.total})
                       </button>
                     )}
-                    {/* Clear All - always show for admins */}
-                    {currentUser?.role && ['global_admin', 'administrator'].includes(currentUser.role) && pagination.total > 0 && (
+                    {/* Clear All - only for users with delete permission */}
+                    {hasPermission('UNALLOCATED_DELETE') && pagination.total > 0 && (
                       <button
                         className="btn btn-sm btn-danger"
                         onClick={() => {
@@ -914,7 +920,7 @@ const Unallocated = () => {
                               >
                                 View
                               </button>
-                              {(currentUser?.role === 'global_admin' || currentUser?.role === 'administrator') && (
+                              {hasPermission('UNALLOCATED_DELETE') && (
                                 <button 
                                   className="btn btn-sm btn-danger"
                                   onClick={() => handleDeleteDocument(doc)}

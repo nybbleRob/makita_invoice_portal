@@ -70,9 +70,9 @@ const PERMISSIONS = {
   // UNALLOCATED DOCUMENTS
   // =====================
   UNALLOCATED_VIEW: ['global_admin', 'administrator', 'manager', 'credit_senior', 'credit_controller'],
-  UNALLOCATED_EDIT: ['global_admin', 'administrator'],
+  UNALLOCATED_EDIT: ['global_admin', 'administrator', 'manager'],
   UNALLOCATED_DELETE: ['global_admin', 'administrator', 'manager'],
-  UNALLOCATED_REALLOCATE: ['global_admin', 'administrator', 'manager', 'credit_senior'],
+  UNALLOCATED_REALLOCATE: ['global_admin', 'administrator', 'manager'],
   UNALLOCATED_DOWNLOAD: ['global_admin', 'administrator', 'manager', 'credit_senior', 'credit_controller'],
   
   // =====================

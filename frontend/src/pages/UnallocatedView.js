@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
+import { usePermissions } from '../context/PermissionContext';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Set worker path for PDF.js - use local worker file from public folder
@@ -31,6 +32,9 @@ const UnallocatedView = () => {
     return `page=${listPage}`;
   })();
   const { user: currentUser } = useAuth();
+  const { hasPermission } = usePermissions();
+  const canEdit = hasPermission('UNALLOCATED_EDIT');
+  const canAllocate = hasPermission('UNALLOCATED_REALLOCATE');
   const [unallocatedDocument, setUnallocatedDocument] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -470,6 +474,8 @@ const UnallocatedView = () => {
                       value={editingData.documentType || ''}
                       onChange={(e) => setEditingData(prev => ({ ...prev, documentType: e.target.value }))}
                       placeholder="invoice, credit_note, statement"
+                      readOnly={!canEdit}
+                      disabled={!canEdit}
                     />
                   </div>
 
@@ -481,6 +487,8 @@ const UnallocatedView = () => {
                       value={editingData.accountNumber || ''}
                       onChange={(e) => setEditingData(prev => ({ ...prev, accountNumber: e.target.value }))}
                       placeholder="Enter account number"
+                      readOnly={!canEdit}
+                      disabled={!canEdit}
                     />
                     <small className="form-hint">This must match a company's Account / Company Number</small>
                   </div>
@@ -565,6 +573,8 @@ const UnallocatedView = () => {
                           taxPoint: value
                         }));
                       }}
+                      readOnly={!canEdit}
+                      disabled={!canEdit}
                     />
                   </div>
 
@@ -580,6 +590,8 @@ const UnallocatedView = () => {
                         documentNumber: e.target.value 
                       }))}
                       placeholder="Enter invoice number"
+                      readOnly={!canEdit}
+                      disabled={!canEdit}
                     />
                   </div>
 
@@ -595,6 +607,8 @@ const UnallocatedView = () => {
                         poNumber: e.target.value 
                       }))}
                       placeholder="Enter PO number"
+                      readOnly={!canEdit}
+                      disabled={!canEdit}
                     />
                   </div>
 
@@ -614,6 +628,8 @@ const UnallocatedView = () => {
                         }));
                       }}
                       placeholder="0.00"
+                      readOnly={!canEdit}
+                      disabled={!canEdit}
                     />
                   </div>
 
@@ -633,6 +649,8 @@ const UnallocatedView = () => {
                         }));
                       }}
                       placeholder="0.00"
+                      readOnly={!canEdit}
+                      disabled={!canEdit}
                     />
                   </div>
 
@@ -644,6 +662,8 @@ const UnallocatedView = () => {
                       value={editingData.deliveryAddress || ''}
                       onChange={(e) => setEditingData(prev => ({ ...prev, deliveryAddress: e.target.value }))}
                       placeholder="Enter delivery address"
+                      readOnly={!canEdit}
+                      disabled={!canEdit}
                     />
                   </div>
 
@@ -659,6 +679,8 @@ const UnallocatedView = () => {
                         setEditingData(prev => ({ ...prev, goodsAmount: value }));
                       }}
                       placeholder="0.00"
+                      readOnly={!canEdit}
+                      disabled={!canEdit}
                     />
                   </div>
 
@@ -670,50 +692,56 @@ const UnallocatedView = () => {
                       value={editingData.invoiceTo || ''}
                       onChange={(e) => setEditingData(prev => ({ ...prev, invoiceTo: e.target.value }))}
                       placeholder="Enter invoice to address or name"
+                      readOnly={!canEdit}
+                      disabled={!canEdit}
                     />
                   </div>
 
                       <div className="d-flex gap-2 mt-4">
-                        <button
-                          className="btn btn-primary"
-                          onClick={handleSave}
-                          disabled={saving || attemptingAllocation}
-                        >
-                          {saving ? (
-                            <>
-                              <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                              Saving...
-                            </>
-                          ) : (
-                            'Save Changes'
-                          )}
-                        </button>
-                        <button
-                          className="btn btn-success"
-                          onClick={handleAttemptAllocation}
-                          disabled={saving || attemptingAllocation || !editingData.accountNumber}
-                          title={!editingData.accountNumber ? 'Account number is required for allocation' : 'Attempt to allocate this document to a company'}
-                        >
-                          {attemptingAllocation ? (
-                            <>
-                              <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                              Allocating...
-                            </>
-                          ) : (
-                            <>
-                              <svg xmlns="http://www.w3.org/2000/svg" className="icon me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                                <path d="M5 12l5 5l10 -10"/>
-                              </svg>
-                              Attempt Allocation
-                            </>
-                          )}
-                        </button>
+                        {canEdit && (
+                          <button
+                            className="btn btn-primary"
+                            onClick={handleSave}
+                            disabled={saving || attemptingAllocation}
+                          >
+                            {saving ? (
+                              <>
+                                <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                                Saving...
+                              </>
+                            ) : (
+                              'Save Changes'
+                            )}
+                          </button>
+                        )}
+                        {canAllocate && (
+                          <button
+                            className="btn btn-success"
+                            onClick={handleAttemptAllocation}
+                            disabled={saving || attemptingAllocation || !editingData.accountNumber}
+                            title={!editingData.accountNumber ? 'Account number is required for allocation' : 'Attempt to allocate this document to a company'}
+                          >
+                            {attemptingAllocation ? (
+                              <>
+                                <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                                Allocating...
+                              </>
+                            ) : (
+                              <>
+                                <svg xmlns="http://www.w3.org/2000/svg" className="icon me-1" width="24" height="24" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                  <path d="M5 12l5 5l10 -10"/>
+                                </svg>
+                                Attempt Allocation
+                              </>
+                            )}
+                          </button>
+                        )}
                         <button
                           className="btn btn-secondary"
                           onClick={() => navigate(`/unallocated?${returnQuery}`)}
                         >
-                          Cancel
+                          {canEdit || canAllocate ? 'Cancel' : 'Back'}
                         </button>
                       </div>
                     </div>

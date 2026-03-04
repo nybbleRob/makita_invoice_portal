@@ -379,8 +379,8 @@ router.get('/:id/view-pdf', async (req, res) => {
   }
 });
 
-// Update parsed data and requeue for processing - GA + Admin + Manager + Credit Senior
-router.put('/:id', requirePermission('UNALLOCATED_REALLOCATE'), async (req, res) => {
+// Update parsed data and requeue for processing - GA + Admin + Manager only
+router.put('/:id', requirePermission('UNALLOCATED_EDIT'), async (req, res) => {
   try {
     const file = await File.findByPk(req.params.id);
     if (!file) {
@@ -973,7 +973,7 @@ router.delete('/:id', requirePermission('UNALLOCATED_DELETE'), async (req, res) 
 });
 
 // POST /api/unallocated/:id/attempt-allocation - Re-attempt to allocate an unallocated document
-router.post('/:id/attempt-allocation', async (req, res) => {
+router.post('/:id/attempt-allocation', requirePermission('UNALLOCATED_REALLOCATE'), async (req, res) => {
   try {
     const file = await File.findOne({
       where: { 
