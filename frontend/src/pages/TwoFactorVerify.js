@@ -38,10 +38,10 @@ const TwoFactorVerify = () => {
 
   // Auto-trigger resend if the initial email failed to send
   useEffect(() => {
-    if (emailSendFailed && isEmailMethod && !isSetup) {
+    if (emailSendFailed && twoFactorMethod === 'email' && !isSetup) {
       toast.error('The verification email could not be sent. Click "Resend" to try again.');
     }
-  }, [emailSendFailed, isEmailMethod, isSetup]);
+  }, [emailSendFailed, twoFactorMethod, isSetup]);
 
   const handleVerify = async (e) => {
     e.preventDefault();
