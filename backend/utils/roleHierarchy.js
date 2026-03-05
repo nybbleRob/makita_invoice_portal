@@ -53,6 +53,11 @@ function canManageRole(userRole, targetRole) {
   if (userRole === 'administrator') {
     return ROLE_HIERARCHY[userRole] >= ROLE_HIERARCHY[targetRole];
   }
+
+  // Managers can manage other Managers and roles below
+  if (userRole === 'manager') {
+    return ROLE_HIERARCHY[userRole] >= ROLE_HIERARCHY[targetRole];
+  }
   
   // Other roles can only manage roles below their level
   return ROLE_HIERARCHY[userRole] > ROLE_HIERARCHY[targetRole];
@@ -71,6 +76,14 @@ function getManageableRoles(userRole) {
   
   // Administrators can manage other Administrators and roles below
   if (userRole === 'administrator') {
+    const userLevel = ROLE_HIERARCHY[userRole];
+    return Object.keys(ROLE_HIERARCHY).filter(
+      role => ROLE_HIERARCHY[role] <= userLevel
+    );
+  }
+
+  // Managers can manage other Managers and roles below (e.g. for bulk import)
+  if (userRole === 'manager') {
     const userLevel = ROLE_HIERARCHY[userRole];
     return Object.keys(ROLE_HIERARCHY).filter(
       role => ROLE_HIERARCHY[role] <= userLevel

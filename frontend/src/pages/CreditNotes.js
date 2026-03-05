@@ -416,9 +416,7 @@ const CreditNotes = () => {
   // Download handlers
   const handleDownloadCreditNote = async (creditNoteId) => {
     try {
-      // Mark as viewed first (fire and forget)
-      api.post(`/api/credit-notes/${creditNoteId}/view`).catch(err => console.warn('Failed to mark as viewed:', err));
-      
+      // Only call download endpoint - it sets status to 'downloaded' (do not call /view here or status can end up 'viewed')
       // Get the download URL
       const baseUrl = API_BASE_URL;
       const token = localStorage.getItem('token');
