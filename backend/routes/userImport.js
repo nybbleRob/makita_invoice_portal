@@ -11,7 +11,7 @@ const XLSX = require('xlsx');
 const { User, Company, UserCompany, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
-const globalAdmin = require('../middleware/globalAdmin');
+const { requirePermission } = require('../middleware/permissions');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const router = express.Router();
 
@@ -254,7 +254,7 @@ async function processRowForPreview(row, rowNum, existingUsersMap, existingCompa
 /**
  * Preview import endpoint
  */
-router.post('/preview', globalAdmin, upload.single('file'), async (req, res) => {
+router.post('/preview', auth, requirePermission('USERS_IMPORT'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
@@ -319,7 +319,7 @@ router.post('/preview', globalAdmin, upload.single('file'), async (req, res) => 
 /**
  * Execute import endpoint
  */
-router.post('/', globalAdmin, upload.single('file'), async (req, res) => {
+router.post('/', auth, requirePermission('USERS_IMPORT'), upload.single('file'), async (req, res) => {
   const transaction = await sequelize.transaction();
   
   try {
@@ -472,7 +472,7 @@ router.post('/', globalAdmin, upload.single('file'), async (req, res) => {
 /**
  * Download sample import template
  */
-router.get('/template', auth, (req, res) => {
+router.get('/template', auth, requirePermission('USERS_IMPORT'), (req, res) => {
   const csvContent = `Name,Email,Role,All Companies,Company Codes,Send Invoice Email,With Attachment,Send Statement Email,Statement Attachment,Send Summary
 John Doe,john@example.com,notification_contact,false,"1001,1002",true,false,true,false,false
 Jane Smith,jane@example.com,external_user,true,,true,true,true,true,true

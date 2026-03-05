@@ -180,7 +180,7 @@ function AppRoutes() {
         {/* Reports - GA only */}
         <Route path="reports" element={<PermissionRoute permission="REPORTS_VIEW"><Reports /></PermissionRoute>} />
         
-        {/* Import Data - GA only */}
+        {/* Import Data - Managers and above can import Accounts & Users */}
         <Route path="import-data" element={<PermissionRoute permission="IMPORT_DATA_VIEW"><ImportData /></PermissionRoute>} />
         
         {/* User Management - GA, Admin, Manager */}
