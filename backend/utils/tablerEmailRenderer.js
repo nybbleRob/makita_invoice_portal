@@ -45,12 +45,12 @@ function loadTemplate(templateName) {
  */
 function replaceVariables(template, variables) {
   let result = template;
-  
+
   for (const [key, value] of Object.entries(variables)) {
     const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-    result = result.replace(regex, value ?? '');
+    result = result.replace(regex, escapeHtml(String(value ?? '')));
   }
-  
+
   return result;
 }
 

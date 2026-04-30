@@ -387,11 +387,11 @@ async function notifyCompanyUsers(company, documentTypeLabel, documentNumber, se
  * @param {number} retentionPeriod - Retention period in days
  */
 async function notifyAdministrators(deletedCount, deletionLog, settings, retentionPeriod) {
-  // Find all administrators and global administrators
+  // Find all administrators and global administrators (User model has no deletedAt; use isActive)
   const admins = await User.findAll({
     where: {
       role: { [Op.in]: ['global_admin', 'administrator'] },
-      deletedAt: null
+      isActive: true
     }
   });
   
@@ -464,63 +464,66 @@ async function notifyAdministrators(deletedCount, deletionLog, settings, retenti
 
 /**
  * Clean up orphaned File records (files not associated with any document)
- * These can occur if a document was deleted but the file record wasn't
+ * In this schema, File has no invoiceId/creditNoteId; documents reference files via fileUrl.
+ * We find parsed Files whose filePath is not referenced by any Invoice or CreditNote.
  * @returns {Promise<Object>} - Result with deletion count
  */
 async function cleanupOrphanedFiles() {
   try {
-    // Find File records where the associated invoice/credit note no longer exists
-    const orphanedFiles = await File.findAll({
-      where: {
-        status: 'parsed', // Was successfully processed
-        [Op.or]: [
-          { invoiceId: { [Op.ne]: null } },
-          { creditNoteId: { [Op.ne]: null } }
-        ]
-      },
-      paranoid: false
+    const parsedFiles = await File.findAll({
+      where: { status: 'parsed', deletedAt: null }
     });
-    
+
     let deletedCount = 0;
-    
-    for (const file of orphanedFiles) {
-      // Check if the associated document still exists
-      let documentExists = false;
-      
-      if (file.invoiceId) {
-        const invoice = await Invoice.findByPk(file.invoiceId, { paranoid: false });
-        documentExists = !!invoice;
-      }
-      
-      if (file.creditNoteId && !documentExists) {
-        const creditNote = await CreditNote.findByPk(file.creditNoteId, { paranoid: false });
-        documentExists = !!creditNote;
-      }
-      
-      // If document doesn't exist, the file is orphaned
-      if (!documentExists) {
-        console.log(`🗑️  Cleaning up orphaned File record: ${file.fileName}`);
-        
-        // Delete physical file
-        if (file.filePath && fs.existsSync(file.filePath)) {
-          try {
-            fs.unlinkSync(file.filePath);
-            console.log(`   📁 Deleted orphaned file: ${file.filePath}`);
-          } catch (e) {
-            console.error(`   ⚠️  Error deleting orphaned file:`, e.message);
-          }
+
+    for (const file of parsedFiles) {
+      if (!file.filePath) continue;
+
+      const pathPattern = `%${path.basename(file.filePath)}%`;
+      const [invoiceMatch] = await Invoice.findAll({
+        where: { fileUrl: { [Op.like]: pathPattern } },
+        limit: 1,
+        attributes: ['id'],
+        paranoid: false
+      });
+      if (invoiceMatch) continue;
+
+      const [creditNoteMatch] = await CreditNote.findAll({
+        where: { fileUrl: { [Op.like]: pathPattern } },
+        limit: 1,
+        attributes: ['id'],
+        paranoid: false
+      });
+      if (creditNoteMatch) continue;
+
+      const [statementMatch] = await Statement.findAll({
+        where: { fileUrl: { [Op.like]: pathPattern } },
+        limit: 1,
+        attributes: ['id'],
+        paranoid: false
+      });
+      if (statementMatch) continue;
+
+      // No document references this file – treat as orphaned
+      console.log(`🗑️  Cleaning up orphaned File record: ${file.fileName}`);
+
+      if (file.filePath && fs.existsSync(file.filePath)) {
+        try {
+          fs.unlinkSync(file.filePath);
+          console.log(`   📁 Deleted orphaned file: ${file.filePath}`);
+        } catch (e) {
+          console.error(`   ⚠️  Error deleting orphaned file:`, e.message);
         }
-        
-        // Hard delete the File record
-        await file.destroy({ force: true });
-        deletedCount++;
       }
+
+      await file.update({ deletedAt: new Date() });
+      deletedCount++;
     }
-    
+
     if (deletedCount > 0) {
       console.log(`🧹 Cleaned up ${deletedCount} orphaned File record(s)`);
     }
-    
+
     return { deleted: deletedCount };
   } catch (error) {
     console.error('Error cleaning up orphaned files:', error.message);

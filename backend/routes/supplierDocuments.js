@@ -448,7 +448,7 @@ router.post('/', upload.single('file'), async (req, res) => {
 });
 
 // Update supplier document (edit extracted fields)
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireManager, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -506,7 +506,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // Delete supplier document (soft delete)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireManager, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -567,7 +567,7 @@ router.get('/:id/download', async (req, res) => {
 });
 
 // Re-parse document with different template
-router.post('/:id/reparse', async (req, res) => {
+router.post('/:id/reparse', requireManager, async (req, res) => {
   try {
     const { id } = req.params;
     const { templateId } = req.body;

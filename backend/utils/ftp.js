@@ -42,7 +42,7 @@ async function testConnection(ftpConfig) {
  * Test FTP connection
  */
 async function testFTPConnection(ftpConfig) {
-  const { host, port, username, password, directory, secure, passive } = ftpConfig;
+  const { host, port, username, password, directory, secure, passive, allowSelfSignedCert } = ftpConfig;
   const client = new ftp.Client();
   
   try {
@@ -54,9 +54,9 @@ async function testFTPConnection(ftpConfig) {
       user: username,
       password,
       secure: secure ? 'implicit' : false, // 'implicit' for FTPS
-      secureOptions: secure ? { rejectUnauthorized: false } : undefined
+      secureOptions: secure ? { rejectUnauthorized: !allowSelfSignedCert } : undefined
     });
-    
+
     // Test directory access
     if (directory && directory !== '/') {
       await client.cd(directory);
@@ -205,7 +205,7 @@ async function downloadFile(ftpConfig, remotePath, localPath) {
  * Download file from FTP
  */
 async function downloadFromFTP(ftpConfig, remotePath, localPath) {
-  const { host, port, username, password, directory, secure, passive } = ftpConfig;
+  const { host, port, username, password, directory, secure, passive, allowSelfSignedCert } = ftpConfig;
   const client = new ftp.Client();
   
   try {
@@ -216,7 +216,7 @@ async function downloadFromFTP(ftpConfig, remotePath, localPath) {
       user: username,
       password,
       secure: secure ? 'implicit' : false,
-      secureOptions: secure ? { rejectUnauthorized: false } : undefined
+      secureOptions: secure ? { rejectUnauthorized: !allowSelfSignedCert } : undefined
     });
     console.log(`✅ [FTP] Connected successfully`);
     
@@ -349,7 +349,7 @@ async function listFiles(ftpConfig, pattern = null) {
  * List files in FTP directory
  */
 async function listFTPFiles(ftpConfig, pattern = null) {
-  const { host, port, username, password, directory, secure } = ftpConfig;
+  const { host, port, username, password, directory, secure, allowSelfSignedCert } = ftpConfig;
   const client = new ftp.Client();
   
   try {
@@ -359,9 +359,9 @@ async function listFTPFiles(ftpConfig, pattern = null) {
       user: username,
       password,
       secure: secure ? 'implicit' : false,
-      secureOptions: secure ? { rejectUnauthorized: false } : undefined
+      secureOptions: secure ? { rejectUnauthorized: !allowSelfSignedCert } : undefined
     });
-    
+
     if (directory && directory !== '/') {
       await client.cd(directory);
     }
@@ -461,7 +461,7 @@ async function moveFile(ftpConfig, sourcePath, destinationPath) {
  * Move file on FTP server
  */
 async function moveFileFTP(ftpConfig, sourcePath, destinationPath) {
-  const { host, port, username, password, directory, secure } = ftpConfig;
+  const { host, port, username, password, directory, secure, allowSelfSignedCert } = ftpConfig;
   const client = new ftp.Client();
   
   try {
@@ -471,9 +471,9 @@ async function moveFileFTP(ftpConfig, sourcePath, destinationPath) {
       user: username,
       password,
       secure: secure ? 'implicit' : false,
-      secureOptions: secure ? { rejectUnauthorized: false } : undefined
+      secureOptions: secure ? { rejectUnauthorized: !allowSelfSignedCert } : undefined
     });
-    
+
     // Navigate to base directory if specified
     if (directory && directory !== '/') {
       await client.cd(directory);

@@ -1,3 +1,4 @@
+const path = require('path');
 const { listFiles } = require('../utils/ftp');
 const { File, Settings } = require('../models');
 const { fileImportQueue } = require('../config/queue');
@@ -51,6 +52,14 @@ async function scanFTPFolders() {
         
         // Use folder path as-is (should be relative to base directory)
         const folderPath = folder.path;
+
+        // Reject absolute paths and traversal sequences
+        const normalised = path.posix.normalize(folderPath);
+        if (path.posix.isAbsolute(normalised) || normalised.startsWith('..')) {
+          console.error(`⚠️  Skipping folder with unsafe path: ${folderPath}`);
+          continue;
+        }
+
         const fileType = folder.fileType || 'auto'; // 'auto' means detect from filename
         
         console.log(`📁 Scanning folder: ${folderPath} (type: ${fileType === 'auto' ? 'auto-detect' : fileType})`);

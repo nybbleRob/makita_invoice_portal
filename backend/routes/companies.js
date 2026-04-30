@@ -614,7 +614,7 @@ router.get('/export', auth, async (req, res) => {
 });
 
 // Get company by ID
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, checkDocumentAccess, async (req, res) => {
   try {
     const company = await Company.findByPk(req.params.id, {
       include: [{
@@ -645,7 +645,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // Create company
-router.post('/', auth, async (req, res) => {
+router.post('/', requirePermission('COMPANIES_CREATE'), async (req, res) => {
   try {
     const {
       name,
@@ -883,7 +883,7 @@ router.put('/:id/restore', requirePermission('COMPANIES_EDIT'), async (req, res)
 });
 
 // Update company
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', requirePermission('COMPANIES_EDIT'), async (req, res) => {
   try {
     const company = await Company.findByPk(req.params.id);
     

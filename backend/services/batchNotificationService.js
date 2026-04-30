@@ -165,6 +165,7 @@ async function recordJobCompletion(importId, result) {
         const batch = await getBatch(importId);
         if (!batch) {
           console.error(`[Batch ${importId}] CRITICAL: Batch not found in Redis! Notifications will NOT be sent.`);
+          console.error(`[Batch ${importId}] Import summary email will NOT be sent (batch data missing - check Redis or batch TTL).`);
           return;
         }
         
@@ -287,6 +288,7 @@ async function recordJobCompletion(importId, result) {
  * @param {Object} batch - Batch data
  */
 async function sendBatchNotifications(importId, batch) {
+  console.log(`[Batch ${importId}] sendBatchNotifications: starting (admin import summary will be sent to opted-in admins)`);
   const settings = await Settings.getSettings();
   const processingTime = Date.now() - batch.startTime;
   let totalNotificationsSent = 0;
@@ -394,7 +396,7 @@ async function sendBatchNotifications(importId, batch) {
         successfulJobs: batch.successfulJobs,
         failedJobs: batch.failedJobs,
         documentsCreated: batch.documents.length,
-        companiesNotified: companyDocuments.size,
+        companiesNotified: Object.keys(companyDocuments).length,
         notificationsQueued: totalNotificationsSent,
         processingTimeMs: processingTime,
         source: batch.source
@@ -444,6 +446,8 @@ async function sendAdminSummaryEmail(importId, batch, processingTime, notificati
     console.log(`[Batch ${importId}] No admins with sendImportSummaryReport=true found, skipping summary email`);
     return;
   }
+  const recipientEmails = adminRecipients.map(a => a.email).join(', ');
+  console.log(`[Batch ${importId}] Sending import summary email to ${adminRecipients.length} recipient(s): ${recipientEmails}`);
   
   // Count unallocated documents (those without company assignment)
   const allocatedCount = batch.documents.length;
@@ -520,9 +524,9 @@ ${batch.failedJobs > 0 ? 'Warning: ' + batch.failedJobs + ' document(s) failed t
 Import ID: ${importId}
 Triggered by: ${batch.userEmail || 'System (scheduled scan)'}`
       }, settings);
-      console.log(`[Batch ${importId}] Admin summary sent to ${admin.email}`);
+      console.log(`[Batch ${importId}] Import summary email sent successfully to ${admin.email}`);
     } catch (error) {
-      console.error(`[Batch ${importId}] Failed to send admin summary to ${admin.email}:`, error.message);
+      console.error(`[Batch ${importId}] Import summary email FAILED to ${admin.email}:`, error.message);
     }
   }
 }

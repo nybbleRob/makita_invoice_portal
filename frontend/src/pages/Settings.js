@@ -1198,6 +1198,20 @@ const Settings = () => {
                               />
                               <span className="form-check-label">Use FTPS (FTP over TLS)</span>
                             </label>
+                            {settings.ftp?.secure && (
+                              <label className="form-check form-switch mt-2 ms-3">
+                                <input
+                                  className="form-check-input"
+                                  type="checkbox"
+                                  checked={settings.ftp?.allowSelfSignedCert || false}
+                                  onChange={(e) => handleNestedChange('ftp', 'allowSelfSignedCert', e.target.checked)}
+                                  disabled={!settings.ftp?.enabled}
+                                />
+                                <span className="form-check-label text-warning">
+                                  Allow self-signed certificate <small>(reduces security)</small>
+                                </span>
+                              </label>
+                            )}
                           </div>
                           <div className="col-md-6">
                             <label className="form-check form-switch mt-3">

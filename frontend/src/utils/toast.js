@@ -58,8 +58,9 @@ const createToast = (message, type = 'info', duration = 3000) => {
       <strong class="me-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong>
       <button type="button" class="ms-2 btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
     </div>
-    <div class="toast-body">${message}</div>
+    <div class="toast-body"></div>
   `;
+  toast.querySelector('.toast-body').textContent = message;
   
   toastContainer.appendChild(toast);
   

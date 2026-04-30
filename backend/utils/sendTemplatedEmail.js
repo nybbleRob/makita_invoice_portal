@@ -59,17 +59,26 @@ function extractSubject(html, data) {
   return 'Notification';
 }
 
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
 /**
  * Replace all occurrences of {{variable}} with values
  */
 function replaceVariables(template, variables) {
   let result = template;
-  
+
   for (const [key, value] of Object.entries(variables)) {
     const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-    result = result.replace(regex, value ?? '');
+    result = result.replace(regex, escapeHtml(String(value ?? '')));
   }
-  
+
   return result;
 }
 

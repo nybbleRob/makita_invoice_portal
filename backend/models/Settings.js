@@ -163,6 +163,7 @@ module.exports = (sequelize) => {
         password: '',
         directory: '/InvoicePortal', // Base directory (recommended: /InvoicePortal or /Documents)
         secure: false, // Use FTPS (FTP over TLS)
+        allowSelfSignedCert: false, // Allow self-signed TLS certificates (disables verification — only enable if required)
         passive: true,
         testFileName: '', // File to use for test import
         folderStructure: {

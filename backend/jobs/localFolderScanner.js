@@ -133,14 +133,16 @@ async function scanLocalFolder() {
   const runContext = await importLogger.startRun();
   
   try {
-    await importLogger.log.info(`Scanning FTP upload folder: ${FTP_UPLOAD_PATH}`);
+    // Resolve to absolute path so we always scan the same path regardless of process cwd
+    const uploadDir = path.resolve(FTP_UPLOAD_PATH);
+    await importLogger.log.info(`Scanning FTP upload folder: ${uploadDir}`);
     
     // Check if upload directory exists
-    if (!fs.existsSync(FTP_UPLOAD_PATH)) {
-      console.log(`⚠️  FTP upload folder does not exist: ${FTP_UPLOAD_PATH}`);
+    if (!fs.existsSync(uploadDir)) {
+      console.log(`⚠️  FTP upload folder does not exist: ${uploadDir}`);
       console.log('   Creating folder...');
-      ensureDir(FTP_UPLOAD_PATH);
-      await importLogger.log.warn(`Created missing FTP upload folder: ${FTP_UPLOAD_PATH}`);
+      ensureDir(uploadDir);
+      await importLogger.log.warn(`Created missing FTP upload folder: ${uploadDir}`);
       return results;
     }
     
@@ -148,16 +150,27 @@ async function scanLocalFolder() {
     ensureDir(UNPROCESSED_DUPLICATES);
     ensureDir(UNPROCESSED_FAILED);
     
-    // Read files from upload directory
-    console.log(`🔍 DEBUG: Reading directory: ${FTP_UPLOAD_PATH}`);
-    console.log(`🔍 DEBUG: Directory exists: ${fs.existsSync(FTP_UPLOAD_PATH)}`);
+    console.log(`🔍 DEBUG: Reading directory: ${uploadDir}`);
+    console.log(`🔍 DEBUG: Directory exists: ${fs.existsSync(uploadDir)}`);
     
-    const files = fs.readdirSync(FTP_UPLOAD_PATH);
+    let files = [];
+    try {
+      files = fs.readdirSync(uploadDir);
+    } catch (readErr) {
+      console.error(`❌ Cannot read FTP upload directory: ${readErr.code || readErr.message}`);
+      console.error(`   Path: ${uploadDir}`);
+      if (readErr.code === 'EACCES') {
+        console.error('   💡 Process user may not have read permission. Run PM2 as the same user that can ls this folder (e.g. rob).');
+      }
+      await importLogger.log.warn(`Failed to read directory: ${readErr.message}`);
+      await importLogger.endRun(runContext, results);
+      return results;
+    }
     console.log(`🔍 DEBUG: Total files/dirs in folder: ${files.length}`);
     if (files.length > 0) {
       console.log(`🔍 DEBUG: First 5 files: ${files.slice(0, 5).join(', ')}`);
     }
-    
+
     // Filter for supported file types
     const supportedFiles = files.filter(file => {
       const ext = path.extname(file).toLowerCase();
@@ -197,7 +210,7 @@ async function scanLocalFolder() {
     const filesToQueue = [];
     
     for (const fileName of supportedFiles) {
-      const filePath = path.join(FTP_UPLOAD_PATH, fileName);
+      const filePath = path.join(uploadDir, fileName);
       
       try {
         const stats = fs.statSync(filePath);

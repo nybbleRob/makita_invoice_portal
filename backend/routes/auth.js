@@ -11,7 +11,7 @@ const router = express.Router();
 // Register
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
 
     // Check if user exists
     const existingUser = await User.findOne({ where: { email: email.toLowerCase().trim() } });
@@ -19,12 +19,12 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'User already exists' });
     }
 
-    // Create user
-    const user = await User.create({ 
-      name, 
-      email: email.toLowerCase().trim(), 
-      password, 
-      role: role || 'external_user' 
+    // Create user — role is always external_user on self-registration
+    const user = await User.create({
+      name,
+      email: email.toLowerCase().trim(),
+      password,
+      role: 'external_user'
     });
 
     // Generate token (expiration configurable via environment)
@@ -131,21 +131,8 @@ router.post('/login', recaptchaMiddleware({ minScore: 0.3 }), async (req, res) =
       });
     }
 
-    // DEBUG: Log password comparison details
-    console.log('[LOGIN DEBUG] ===== Password Check =====');
-    console.log('[LOGIN DEBUG] Email:', user.email);
-    console.log('[LOGIN DEBUG] User ID:', user.id);
-    console.log('[LOGIN DEBUG] Password provided length:', password.length);
-    console.log('[LOGIN DEBUG] Password provided (first 3 chars):', password.substring(0, 3));
-    console.log('[LOGIN DEBUG] Stored hash exists:', !!user.password);
-    console.log('[LOGIN DEBUG] Stored hash length:', user.password ? user.password.length : 0);
-    console.log('[LOGIN DEBUG] Stored hash starts with $2:', user.password ? user.password.startsWith('$2') : false);
-    console.log('[LOGIN DEBUG] mustChangePassword:', user.mustChangePassword);
-    
     // Check password
     const isMatch = await user.comparePassword(password);
-    console.log('[LOGIN DEBUG] Password match result:', isMatch);
-    console.log('[LOGIN DEBUG] ===========================');
     
     if (!isMatch) {
       // Increment failed login attempts
@@ -213,24 +200,6 @@ router.post('/login', recaptchaMiddleware({ minScore: 0.3 }), async (req, res) =
     
     // Password is correct - reset failed attempts
     await resetFailedAttempts(user);
-
-    // Check if user must change password (first time login or admin reset)
-    if (user.mustChangePassword) {
-      // Generate temporary session token for password change (avoids passing password)
-      const { generateSessionToken } = require('../utils/sessionToken');
-      const sessionToken = await generateSessionToken(user.id, user.email);
-      
-      return res.status(200).json({
-        mustChangePassword: true,
-        message: 'You must change your password before continuing.',
-        sessionToken: sessionToken, // Temporary token for password change
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name
-        }
-      });
-    }
 
     // Check if user is active
     if (!user.isActive) {
@@ -383,6 +352,22 @@ router.post('/login', recaptchaMiddleware({ minScore: 0.3 }), async (req, res) =
       if (!verified) {
         return res.status(401).json({ message: 'Invalid 2FA code' });
       }
+    }
+
+    // Check if user must change password — placed here so 2FA is always satisfied first
+    if (user.mustChangePassword) {
+      const { generateSessionToken } = require('../utils/sessionToken');
+      const sessionToken = await generateSessionToken(user.id, user.email);
+      return res.status(200).json({
+        mustChangePassword: true,
+        message: 'You must change your password before continuing.',
+        sessionToken: sessionToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name
+        }
+      });
     }
 
     // Update last login
@@ -550,12 +535,7 @@ ${fromName}
           // Still return success to user, but log the error
         }
       } else {
-        // SMTP not configured - log the reset token (for development)
-        console.log('\n=== PASSWORD RESET TOKEN ===');
-        console.log(`User: ${user.email}`);
-        console.log(`Reset Token: ${resetToken}`);
-        console.log(`Reset URL: ${getResetPasswordUrl(resetToken)}`);
-        console.log('===========================\n');
+        console.warn('[AUTH] Password reset requested but SMTP is not configured — email not sent for:', user.email);
       }
     }
 
@@ -693,7 +673,7 @@ router.post('/change-password', async (req, res) => {
 
     // Verify session token
     const { verifySessionToken } = require('../utils/sessionToken');
-    const tokenData = await verifySessionToken(sessionToken);
+    const tokenData = await verifySessionToken(sessionToken, true);
     
     if (!tokenData || !tokenData.userId) {
       return res.status(401).json({ message: 'Invalid or expired session token' });

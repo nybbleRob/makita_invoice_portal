@@ -12,6 +12,7 @@ const { User, Company, UserCompany, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const auth = require('../middleware/auth');
 const { requirePermission } = require('../middleware/permissions');
+const { getManageableRoles } = require('../utils/roleHierarchy');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const router = express.Router();
 
@@ -102,7 +103,7 @@ function getRowValue(row, possibleNames) {
 /**
  * Process a single row for preview
  */
-async function processRowForPreview(row, rowNum, existingUsersMap, existingCompaniesMap) {
+async function processRowForPreview(row, rowNum, existingUsersMap, existingCompaniesMap, importerRole) {
   const result = {
     rowNum,
     status: 'valid',
@@ -163,6 +164,13 @@ async function processRowForPreview(row, rowNum, existingUsersMap, existingCompa
       'contact': 'notification_contact'
     };
     normalizedRole = roleMap[roleLower] || 'notification_contact';
+  }
+
+  // Verify the importer is allowed to assign this role
+  const manageableRoles = getManageableRoles(importerRole);
+  if (!manageableRoles.includes(normalizedRole)) {
+    result.errors.push(`Role '${role || normalizedRole}' cannot be assigned by your account`);
+    result.status = 'error';
   }
 
   // Parse boolean fields
@@ -289,7 +297,7 @@ router.post('/preview', auth, requirePermission('USERS_IMPORT'), upload.single('
     };
 
     for (let i = 0; i < rows.length; i++) {
-      const processed = await processRowForPreview(rows[i], i + 1, existingUsersMap, existingCompaniesMap);
+      const processed = await processRowForPreview(rows[i], i + 1, existingUsersMap, existingCompaniesMap, req.user.role);
       previewData.push(processed);
 
       if (processed.status === 'error') {
@@ -356,7 +364,7 @@ router.post('/', auth, requirePermission('USERS_IMPORT'), upload.single('file'),
       const rowNum = i + 1;
       
       try {
-        const processed = await processRowForPreview(rows[i], rowNum, existingUsersMap, existingCompaniesMap);
+        const processed = await processRowForPreview(rows[i], rowNum, existingUsersMap, existingCompaniesMap, req.user.role);
         
         if (processed.status === 'error') {
           results.errors.push({

@@ -359,8 +359,13 @@ router.get('/stats/summary', globalAdmin, async (req, res) => {
  */
 router.post('/test-import', auth, globalAdmin, async (req, res) => {
   try {
+    const rawFileName = req.body.fileName;
+    const sanitizedFileName = rawFileName ? path.basename(rawFileName) : null;
+    if (sanitizedFileName && !/^[a-zA-Z0-9._-]+$/.test(sanitizedFileName)) {
+      return res.status(400).json({ message: 'Invalid fileName: only alphanumeric characters, dots, hyphens, and underscores are allowed' });
+    }
+    const fileName = sanitizedFileName || `test-invoice-${Date.now()}.pdf`;
     const {
-      fileName = `test-invoice-${Date.now()}.pdf`,
       fileType = 'invoice', // 'invoice', 'credit_note', 'statement'
       parsedData = {},
       accountNumber = null, // Will try to match to company
