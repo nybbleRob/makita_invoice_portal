@@ -1716,6 +1716,19 @@ function parseBooleanValue(value) {
   return v === 'TRUE' || v === 'YES' || v === 'Y' || v === '1';
 }
 
+// Resolve a user's active state from an import row.
+// Accepts either a `Status` column (ACTIVE/INACTIVE) or the legacy `active`
+// boolean column. `Status` takes precedence when present and recognised.
+function parseUserActiveState(row) {
+  const statusRaw = row['status'] || row['Status'] || row['STATUS'];
+  if (statusRaw !== undefined && statusRaw !== null && String(statusRaw).trim() !== '') {
+    const s = String(statusRaw).trim().toUpperCase();
+    if (s === 'INACTIVE' || s === 'DISABLED' || s === 'FALSE') return false;
+    if (s === 'ACTIVE' || s === 'ENABLED' || s === 'TRUE') return true;
+  }
+  return parseBooleanValue(row['active'] || row['Active'] || row['ACTIVE'] || row['isActive'] || 'TRUE');
+}
+
 /**
  * Process a single user row and return preview data
  */
@@ -1803,10 +1816,10 @@ async function processUserRowForPreview(row, rowNum, existingUsersMap, existingU
     const name = row['name'] || row['Name'] || row['NAME'] || '';
     const email = row['email'] || row['Email'] || row['EMAIL'] || '';
     const role = (row['role'] || row['Role'] || row['ROLE'] || 'external_user').toLowerCase();
-    const active = parseBooleanValue(row['active'] || row['Active'] || row['ACTIVE'] || row['isActive'] || 'TRUE');
+    const active = parseUserActiveState(row);
     const allCompanies = parseBooleanValue(row['all_companies'] || row['allCompanies'] || row['All Companies'] || 'FALSE');
     const companyAccountNumbersRaw = row['company_account_numbers'] || row['companyAccountNumbers'] || row['Company Account Numbers'] || row['companies'] || '';
-    
+
     // Email notification preferences
     const sendInvoiceEmail = parseBooleanValue(row['send_invoice_email'] || row['sendInvoiceEmail'] || 'FALSE');
     const sendInvoiceAttachment = parseBooleanValue(row['send_invoice_attachment'] || row['sendInvoiceAttachment'] || 'FALSE');
@@ -2237,7 +2250,7 @@ router.post('/import', canManageUsers, upload.single('file'), async (req, res) =
         const name = (row['name'] || row['Name'] || row['NAME'] || '').trim();
         const email = (row['email'] || row['Email'] || row['EMAIL'] || '').trim().toLowerCase();
         const role = (row['role'] || row['Role'] || row['ROLE'] || 'external_user').toLowerCase();
-        const active = parseBooleanValue(row['active'] || row['Active'] || row['ACTIVE'] || row['isActive'] || 'TRUE');
+        const active = parseUserActiveState(row);
         const allCompanies = parseBooleanValue(row['all_companies'] || row['allCompanies'] || row['All Companies'] || 'FALSE');
         const companyAccountNumbersRaw = row['company_account_numbers'] || row['companyAccountNumbers'] || row['Company Account Numbers'] || row['companies'] || '';
 
@@ -2499,8 +2512,9 @@ router.post('/import', canManageUsers, upload.single('file'), async (req, res) =
             await newUser.setCompanies(companies);
           }
 
-          // Send welcome email
-          if (isEmailEnabled(settings)) {
+          // Send welcome email — skipped for users imported as inactive so a
+          // bulk inactive-load doesn't blast credentials to dormant accounts.
+          if (active && isEmailEnabled(settings)) {
             try {
               await sendTemplatedEmail(
                 'welcome',
