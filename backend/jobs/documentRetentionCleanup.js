@@ -294,89 +294,15 @@ async function hardDeleteDocument(document, documentType, settings) {
     // Association columns may not exist, continue
   }
   
-  // Send email notification to company users BEFORE deletion
-  if (company && !company.edi) {
-    try {
-      await notifyCompanyUsers(company, documentTypeLabel, documentNumber, settings);
-    } catch (emailError) {
-      console.error(`   ⚠️  Error sending notifications:`, emailError.message);
-    }
-  }
-  
+  // Note: customers are intentionally NOT emailed about retention deletions.
+  // Administrators receive a consolidated summary via notifyAdministrators().
+
   // HARD DELETE the document from database (no soft delete, completely remove)
   await document.destroy({ force: true });
   
   console.log(`   ✅ HARD DELETED ${documentTypeLabel} ${documentNumber}`);
   
   return deletionInfo;
-}
-
-/**
- * Send email notification to company users about document deletion
- */
-async function notifyCompanyUsers(company, documentTypeLabel, documentNumber, settings) {
-  // Find company users to notify
-  const companyUsers = await User.findAll({
-    where: {
-      role: 'external_user'
-    },
-    include: [{
-      model: Company,
-      as: 'companies',
-      where: { id: company.id },
-      attributes: [],
-      required: true
-    }]
-  });
-  
-  // Also try to find users by companyId if the association is different
-  let allUsers = [...companyUsers];
-  try {
-    const directUsers = await User.findAll({
-      where: {
-        companyId: company.id,
-        role: 'external_user'
-      }
-    });
-    // Deduplicate users
-    const existingIds = new Set(allUsers.map(u => u.id));
-    for (const user of directUsers) {
-      if (!existingIds.has(user.id)) {
-        allUsers.push(user);
-      }
-    }
-  } catch (e) {
-    // Association might not exist, continue
-  }
-  
-  // Send email to each user
-  for (const user of allUsers) {
-    if (user.email) {
-      try {
-        await sendTemplatedEmail(
-          'document-deleted',
-          user.email,
-          {
-            userName: user.name || user.email,
-            documentType: documentTypeLabel,
-            documentNumber: documentNumber,
-            deletionDate: new Date().toLocaleDateString('en-GB'),
-            retentionPeriod: settings.documentRetentionPeriod,
-            companyName: settings.companyName || 'Makita Invoice Portal'
-          },
-          settings,
-          {
-            ipAddress: 'system',
-            userAgent: 'document-retention-cleanup',
-            userId: null
-          }
-        );
-        console.log(`   📧 Sent deletion notification to ${user.email}`);
-      } catch (emailError) {
-        console.error(`   ⚠️  Error sending email to ${user.email}:`, emailError.message);
-      }
-    }
-  }
 }
 
 /**
