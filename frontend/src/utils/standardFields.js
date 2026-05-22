@@ -34,6 +34,7 @@ export const STANDARD_FIELDS = {
     isMandatory: true,
     isRequired: true, // Required for supplier templates - retention metric
     parsingOrder: 4, // Parse fourth - date validation
+    templateTypes: ['invoice', 'credit_note'], // Statements use statementDate instead
     aliases: ['date', 'invoice_date', 'tax_point', 'taxpoint', 'date_tax_point', 'invoiceDate', 'taxPoint', 'invoice_date', 'tax_point_date']
   },
   
@@ -45,7 +46,7 @@ export const STANDARD_FIELDS = {
     isCrucial: false,
     isMandatory: true,
     parsingOrder: 5, // Parse fifth - document identifier
-    templateTypes: ['invoice', 'statement'], // Only for invoices and statements
+    templateTypes: ['invoice'], // Statements no longer use invoiceNumber as a parsed field
     aliases: ['invoice_number', 'invoice_no', 'invoicenumber', 'inv_no', 'invoice_ref']
   },
   creditNumber: {
@@ -65,6 +66,7 @@ export const STANDARD_FIELDS = {
     isCrucial: false,
     isMandatory: true,
     parsingOrder: 6, // Parse sixth
+    templateTypes: ['invoice', 'credit_note'], // Not used on statements
     aliases: ['customer_po', 'customerpo', 'po_number', 'po_no', 'purchase_order', 'po']
   },
   // Amount fields - parse from last page if multi-page (order 7-9)
@@ -75,6 +77,7 @@ export const STANDARD_FIELDS = {
     isCrucial: false,
     isMandatory: true,
     parsingOrder: 7, // Parse seventh - from last page if multi-page
+    templateTypes: ['invoice', 'credit_note'], // Statements use totalBalance instead
     aliases: ['total', 'amount', 'invoice_total', 'invoicetotal', 'total_amount', 'grand_total']
   },
   vatAmount: {
@@ -84,6 +87,7 @@ export const STANDARD_FIELDS = {
     isCrucial: false,
     isMandatory: true,
     parsingOrder: 8, // Parse eighth - from last page if multi-page
+    templateTypes: ['invoice', 'credit_note'], // Not used on statements
     aliases: ['vat_amount', 'vat_total', 'vatamount', 'tax_amount', 'tax']
   },
   goodsAmount: {
@@ -94,6 +98,7 @@ export const STANDARD_FIELDS = {
     isMandatory: false, // Optional for invoices, but will be made mandatory for credit notes
     mandatoryForTypes: ['credit_note'], // Mandatory for credit notes
     parsingOrder: 9, // Parse ninth - from last page if multi-page
+    templateTypes: ['invoice', 'credit_note'], // Not used on statements
     aliases: ['goods_amount', 'goods', 'goodsamount', 'subtotal', 'net_amount']
   },
   
@@ -106,6 +111,7 @@ export const STANDARD_FIELDS = {
     isMandatory: true,
     isRequired: true, // Required for supplier templates - fallback matching
     parsingOrder: 1, // Parse first for supplier matching
+    templateTypes: ['invoice', 'credit_note'], // Statements identify customer via accountNumber, not supplier
     aliases: ['supplier_name', 'vendor_name', 'vendor', 'supplier']
   },
   
@@ -126,6 +132,7 @@ export const STANDARD_FIELDS = {
     isCrucial: false,
     isMandatory: false,
     parsingOrder: 11,
+    templateTypes: ['invoice', 'credit_note'], // Not used on statements
     aliases: ['invoice_to', 'invoiceto', 'bill_to', 'billto']
   },
   deliveryAddress: {
@@ -135,7 +142,82 @@ export const STANDARD_FIELDS = {
     isCrucial: false,
     isMandatory: false,
     parsingOrder: 12,
+    templateTypes: ['invoice', 'credit_note'], // Not used on statements
     aliases: ['delivery_address', 'deliveryaddress', 'ship_to', 'shipto', 'shipping_address']
+  },
+
+  // STATEMENT-ONLY FIELDS - Customer statement aging buckets and totals
+  // These fields ONLY appear on statement templates and never on invoice/credit_note templates.
+  statementDate: {
+    standardName: 'statementDate',
+    displayName: 'Statement Date',
+    description: 'Date the statement was issued (used as the period end / retention metric)',
+    isCrucial: true,
+    isMandatory: true,
+    parsingOrder: 4, // Parsed early like invoiceDate (date validation)
+    templateTypes: ['statement'],
+    aliases: ['statement_date', 'statementdate', 'period_end', 'period_end_date']
+  },
+  totalBalance: {
+    standardName: 'totalBalance',
+    displayName: 'Total Balance',
+    description: 'Total outstanding balance shown on the statement (closing balance)',
+    isCrucial: false,
+    isMandatory: true,
+    parsingOrder: 7,
+    templateTypes: ['statement'],
+    aliases: ['total_balance', 'totalbalance', 'closing_balance', 'balance_due', 'amount_owed', 'total_owed']
+  },
+  currentAmount: {
+    standardName: 'currentAmount',
+    displayName: 'Current Amount',
+    description: 'Amount due in the current period (not yet overdue)',
+    isCrucial: false,
+    isMandatory: false,
+    parsingOrder: 13,
+    templateTypes: ['statement'],
+    aliases: ['current_amount', 'currentamount', 'current', 'current_balance', 'not_due']
+  },
+  overdue1To30: {
+    standardName: 'overdue1To30',
+    displayName: 'Overdue 1-30',
+    description: 'Amount overdue between 1 and 30 days',
+    isCrucial: false,
+    isMandatory: false,
+    parsingOrder: 14,
+    templateTypes: ['statement'],
+    // Aliases use 1-3 underscore-separated parts so mapToStandardName can resolve them.
+    aliases: ['overdue_1to30', 'overdue30', 'overdue_30']
+  },
+  overdue31To60: {
+    standardName: 'overdue31To60',
+    displayName: 'Overdue 31-60',
+    description: 'Amount overdue between 31 and 60 days',
+    isCrucial: false,
+    isMandatory: false,
+    parsingOrder: 15,
+    templateTypes: ['statement'],
+    aliases: ['overdue_31to60', 'overdue60', 'overdue_60']
+  },
+  overdue61To90: {
+    standardName: 'overdue61To90',
+    displayName: 'Overdue 61-90',
+    description: 'Amount overdue between 61 and 90 days',
+    isCrucial: false,
+    isMandatory: false,
+    parsingOrder: 16,
+    templateTypes: ['statement'],
+    aliases: ['overdue_61to90', 'overdue90', 'overdue_90']
+  },
+  overdue91Plus: {
+    standardName: 'overdue91Plus',
+    displayName: 'Overdue 91+',
+    description: 'Amount overdue 91 days or more',
+    isCrucial: false,
+    isMandatory: false,
+    parsingOrder: 17,
+    templateTypes: ['statement'],
+    aliases: ['overdue_91plus', 'overdue91', 'overdue_91']
   }
 };
 

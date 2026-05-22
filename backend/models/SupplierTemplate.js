@@ -351,8 +351,14 @@ module.exports = (sequelize, DataTypes) => {
           const orderB = fieldB?.parsingOrder ?? 999;
           
           // 3. If multi-page, prioritize amount fields from last page
+          // Includes invoice/credit-note totals AND statement totals/aging buckets,
+          // which all conventionally appear on the final page of a multi-page document.
           if (isMultiPage) {
-            const lastPageFields = ['totalAmount', 'vatAmount', 'goodsAmount'];
+            const lastPageFields = [
+              'totalAmount', 'vatAmount', 'goodsAmount',
+              'totalBalance', 'currentAmount',
+              'overdue1To30', 'overdue31To60', 'overdue61To90', 'overdue91Plus'
+            ];
             const aIsLastPageField = lastPageFields.includes(standardNameA);
             const bIsLastPageField = lastPageFields.includes(standardNameB);
             const aPage = coordsA?.normalized?.page || coordsA?.page || 1;
@@ -490,8 +496,13 @@ module.exports = (sequelize, DataTypes) => {
           const standardFieldName = mapFieldName(fieldName) || fieldName;
           
           // For multi-page documents, ensure amount fields are extracted from last page
+          // Includes statement totals/aging buckets which only show real values on the last page.
           if (isMultiPage) {
-            const lastPageFields = ['totalAmount', 'vatAmount', 'goodsAmount'];
+            const lastPageFields = [
+              'totalAmount', 'vatAmount', 'goodsAmount',
+              'totalBalance', 'currentAmount',
+              'overdue1To30', 'overdue31To60', 'overdue61To90', 'overdue91Plus'
+            ];
             if (lastPageFields.includes(standardFieldName)) {
               if (pageNum !== totalPages) {
                 console.warn(`⚠️  Field "${fieldName}" (${standardFieldName}) is on page ${pageNum} but should be on last page (${totalPages}) for multi-page documents. Overriding to last page.`);
@@ -540,9 +551,10 @@ module.exports = (sequelize, DataTypes) => {
                     }
                     
                     // Clean amount values (remove currency symbols, commas, etc.)
+                    // Applies to invoice/credit-note totals AND statement totals/aging buckets.
                     let cleanedValue = finalValue;
                     const standardField = STANDARD_FIELDS[standardFieldName];
-                    if (standardField && (standardFieldName === 'totalAmount' || standardFieldName === 'vatAmount' || standardFieldName === 'goodsAmount')) {
+                    if (standardField && isAmountField(standardFieldName)) {
                       cleanedValue = cleanAmountValue(finalValue);
                     }
                     
@@ -598,9 +610,10 @@ module.exports = (sequelize, DataTypes) => {
                 }
                 
                 // Clean amount values (remove currency symbols, commas, etc.)
+                // Applies to invoice/credit-note totals AND statement totals/aging buckets.
                 let cleanedValue = value;
                 const standardField = STANDARD_FIELDS[standardFieldName];
-                if (standardField && (standardFieldName === 'totalAmount' || standardFieldName === 'vatAmount' || standardFieldName === 'goodsAmount')) {
+                if (standardField && isAmountField(standardFieldName)) {
                   cleanedValue = cleanAmountValue(value);
                 }
                 
@@ -763,6 +776,21 @@ module.exports = (sequelize, DataTypes) => {
     
   return extracted;
 };
+
+/**
+ * Standard fields that hold a monetary value and should have their currency symbols stripped.
+ * Includes invoice/credit-note totals AND statement totals + aging buckets.
+ * Keep this list in sync with templateTypes-restricted amount fields in standardFields.js.
+ */
+const AMOUNT_FIELDS = new Set([
+  'totalAmount', 'vatAmount', 'goodsAmount',
+  'totalBalance', 'currentAmount',
+  'overdue1To30', 'overdue31To60', 'overdue61To90', 'overdue91Plus'
+]);
+
+function isAmountField(standardFieldName) {
+  return AMOUNT_FIELDS.has(standardFieldName);
+}
 
 /**
  * Clean amount value by removing currency symbols, commas, and other non-numeric characters

@@ -455,6 +455,55 @@ async function processFileImport(job) {
             } catch (creditNoteError) {
               console.error(`⚠️  Failed to create credit note:`, creditNoteError.message);
             }
+          } else if (fileType === 'statement' || parsedData.documentType?.toLowerCase() === 'statement') {
+            // Statement creation (Phase 1: aging buckets stored in metadata.aging)
+            try {
+              const statementDate = parsedData.statementDate
+                ? new Date(parsedData.statementDate)
+                : (parsedData.date ? new Date(parsedData.date) : new Date());
+              const closingBalance = parseFloat(
+                String(parsedData.totalBalance || parsedData.amount || 0).replace(/[£$€,\s]/g, '')
+              ) || 0;
+              const fileIdSlice = (file.id || '').toString().substring(0, 8);
+              const statementDateIso = isNaN(statementDate.getTime())
+                ? new Date().toISOString().split('T')[0]
+                : statementDate.toISOString().split('T')[0];
+              const generatedStatementNumber = `STMT-${matchedCompanyId}-${statementDateIso}-${fileIdSlice}`;
+
+              const aging = {
+                currentAmount: parseFloat(String(parsedData.currentAmount || 0).replace(/[£$€,\s]/g, '')) || 0,
+                overdue1To30: parseFloat(String(parsedData.overdue1To30 || 0).replace(/[£$€,\s]/g, '')) || 0,
+                overdue31To60: parseFloat(String(parsedData.overdue31To60 || 0).replace(/[£$€,\s]/g, '')) || 0,
+                overdue61To90: parseFloat(String(parsedData.overdue61To90 || 0).replace(/[£$€,\s]/g, '')) || 0,
+                overdue91Plus: parseFloat(String(parsedData.overdue91Plus || 0).replace(/[£$€,\s]/g, '')) || 0,
+                totalBalance: closingBalance
+              };
+
+              document = await Statement.create({
+                statementNumber: generatedStatementNumber,
+                companyId: matchedCompanyId,
+                periodStart: statementDate,
+                periodEnd: statementDate,
+                openingBalance: 0,
+                closingBalance: closingBalance,
+                totalDebits: 0,
+                totalCredits: 0,
+                status: 'sent',
+                fileUrl: file.filePath,
+                metadata: {
+                  source: 'ftp_import',
+                  fileId: file.id,
+                  fileName: fileName,
+                  parsedData: parsedData,
+                  processingMethod: processingMethod,
+                  aging: aging
+                }
+              });
+
+              console.log(`✅ Created statement: ${document.statementNumber} for company: ${company.name} (closingBalance=${closingBalance})`);
+            } catch (statementError) {
+              console.error(`⚠️  Failed to create statement:`, statementError.message);
+            }
           }
         } else {
           console.log(`⚠️  No company found with account number: ${parsedData.accountNumber}`);
@@ -534,6 +583,54 @@ async function processFileImport(job) {
               console.log(`🧪 TEST MODE: Created credit note: ${document.creditNoteNumber} (test-allocated)`);
             } catch (creditNoteError) {
               console.error(`⚠️  Failed to create test-allocated credit note:`, creditNoteError.message);
+            }
+          } else if (fileType === 'statement' || parsedData.documentType?.toLowerCase() === 'statement') {
+            try {
+              const statementDate = parsedData.statementDate
+                ? new Date(parsedData.statementDate)
+                : (parsedData.date ? new Date(parsedData.date) : new Date());
+              const closingBalance = parseFloat(
+                String(parsedData.totalBalance || parsedData.amount || 0).replace(/[£$€,\s]/g, '')
+              ) || 0;
+              const fileIdSlice = (file.id || '').toString().substring(0, 8);
+              const statementDateIso = isNaN(statementDate.getTime())
+                ? new Date().toISOString().split('T')[0]
+                : statementDate.toISOString().split('T')[0];
+              const generatedStatementNumber = `STMT-${matchedCompanyId}-${statementDateIso}-${fileIdSlice}`;
+
+              document = await Statement.create({
+                statementNumber: generatedStatementNumber,
+                companyId: matchedCompanyId,
+                periodStart: statementDate,
+                periodEnd: statementDate,
+                openingBalance: 0,
+                closingBalance: closingBalance,
+                totalDebits: 0,
+                totalCredits: 0,
+                status: 'sent',
+                fileUrl: file.filePath,
+                metadata: {
+                  source: 'ftp_import',
+                  fileId: file.id,
+                  fileName: fileName,
+                  parsedData: parsedData,
+                  processingMethod: processingMethod,
+                  testModeAllocation: true,
+                  originalAccountNumber: parsedData.accountNumber || null,
+                  aging: {
+                    currentAmount: parseFloat(String(parsedData.currentAmount || 0).replace(/[£$€,\s]/g, '')) || 0,
+                    overdue1To30: parseFloat(String(parsedData.overdue1To30 || 0).replace(/[£$€,\s]/g, '')) || 0,
+                    overdue31To60: parseFloat(String(parsedData.overdue31To60 || 0).replace(/[£$€,\s]/g, '')) || 0,
+                    overdue61To90: parseFloat(String(parsedData.overdue61To90 || 0).replace(/[£$€,\s]/g, '')) || 0,
+                    overdue91Plus: parseFloat(String(parsedData.overdue91Plus || 0).replace(/[£$€,\s]/g, '')) || 0,
+                    totalBalance: closingBalance
+                  }
+                }
+              });
+
+              console.log(`🧪 TEST MODE: Created statement: ${document.statementNumber} (test-allocated)`);
+            } catch (statementError) {
+              console.error(`⚠️  Failed to create test-allocated statement:`, statementError.message);
             }
           } else {
             // Default to invoice if type is unclear
@@ -635,7 +732,13 @@ async function processFileImport(job) {
         movedTo: destinationPath,
         companyId: matchedCompanyId,
         documentId: document?.id,
-        documentType: document ? (fileType === 'invoice' || parsedData.documentType?.toLowerCase() === 'invoice' ? 'invoice' : 'credit_note') : null
+        documentType: document
+          ? (fileType === 'statement' || parsedData.documentType?.toLowerCase() === 'statement'
+              ? 'statement'
+              : (fileType === 'invoice' || parsedData.documentType?.toLowerCase() === 'invoice'
+                  ? 'invoice'
+                  : 'credit_note'))
+          : null
       };
     } else {
       // Parsing failed

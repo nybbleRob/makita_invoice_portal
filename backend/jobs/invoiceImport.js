@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { File, Template, Company, Invoice, CreditNote, User, Sequelize, Settings } = require('../models');
+const { File, Template, Company, Invoice, CreditNote, Statement, User, Sequelize, Settings } = require('../models');
 const { Op } = Sequelize;
 const { extractTextFromPDF } = require('../utils/pdfExtractor');
 const { 
@@ -722,7 +722,13 @@ async function processInvoiceImport(job) {
     // Check for missing crucial fields (reuse accountNumber from above)
     const invoiceTotal = getParsedValue(parsedData, 'totalAmount') || getParsedValue(parsedData, 'amount') || parsedData.amount || parsedData.totalAmount;
     const invoiceNumber = getParsedValue(parsedData, 'invoiceNumber') || parsedData.invoiceNumber;
-    const invoiceDate = getParsedValue(parsedData, 'invoiceDate') || getParsedValue(parsedData, 'date') || parsedData.date || parsedData.invoiceDate;
+    // Statements use statementDate instead of invoiceDate; resolve both so date validation handles both flows.
+    const isStatementDoc = detectedDocType.includes('statement');
+    const statementDate = getParsedValue(parsedData, 'statementDate') || parsedData.statementDate;
+    const totalBalance = getParsedValue(parsedData, 'totalBalance') || parsedData.totalBalance;
+    const invoiceDate = isStatementDoc
+      ? statementDate
+      : (getParsedValue(parsedData, 'invoiceDate') || getParsedValue(parsedData, 'date') || parsedData.date || parsedData.invoiceDate);
     const vatAmount = getParsedValue(parsedData, 'vatAmount') || parsedData.vatAmount;
     const customerPO = getParsedValue(parsedData, 'customerPO') || parsedData.customerPO;
     
@@ -733,23 +739,38 @@ async function processInvoiceImport(job) {
       const fieldDef = STANDARD_FIELDS.accountNumber;
       missingFields.push(fieldDef ? fieldDef.displayName : 'Account Number');
     }
-    // Allow 0.00 as a valid amount - only check if it's missing or invalid
-    const parsedTotal = invoiceTotal ? parseFloat(invoiceTotal.toString().replace(/[£$€,]/g, '').trim()) : null;
-    if (invoiceTotal === null || invoiceTotal === undefined || invoiceTotal.toString().trim() === '' || isNaN(parsedTotal)) {
-      const fieldDef = STANDARD_FIELDS.totalAmount;
-      missingFields.push(fieldDef ? fieldDef.displayName : 'Total');
-    }
-    if (!invoiceNumber || invoiceNumber.toString().trim() === '') {
-      const fieldDef = STANDARD_FIELDS.invoiceNumber;
-      missingFields.push(fieldDef ? fieldDef.displayName : 'Invoice Number');
-    }
-    if (!vatAmount || vatAmount.toString().trim() === '') {
-      const fieldDef = STANDARD_FIELDS.vatAmount;
-      missingFields.push(fieldDef ? fieldDef.displayName : 'VAT Amount');
-    }
-    if (!customerPO || customerPO.toString().trim() === '') {
-      const fieldDef = STANDARD_FIELDS.customerPO;
-      missingFields.push(fieldDef ? fieldDef.displayName : 'PO Number');
+
+    if (isStatementDoc) {
+      // Statement-specific validation: only require statementDate + totalBalance.
+      // Invoice-only fields (invoiceNumber, totalAmount, vatAmount, customerPO) do not apply.
+      const parsedBalance = totalBalance ? parseFloat(totalBalance.toString().replace(/[£$€,]/g, '').trim()) : null;
+      if (totalBalance === null || totalBalance === undefined || totalBalance.toString().trim() === '' || isNaN(parsedBalance)) {
+        const fieldDef = STANDARD_FIELDS.totalBalance;
+        missingFields.push(fieldDef ? fieldDef.displayName : 'Total Balance');
+      }
+      if (!statementDate || statementDate.toString().trim() === '') {
+        const fieldDef = STANDARD_FIELDS.statementDate;
+        missingFields.push(fieldDef ? fieldDef.displayName : 'Statement Date');
+      }
+    } else {
+      // Allow 0.00 as a valid amount - only check if it's missing or invalid
+      const parsedTotal = invoiceTotal ? parseFloat(invoiceTotal.toString().replace(/[£$€,]/g, '').trim()) : null;
+      if (invoiceTotal === null || invoiceTotal === undefined || invoiceTotal.toString().trim() === '' || isNaN(parsedTotal)) {
+        const fieldDef = STANDARD_FIELDS.totalAmount;
+        missingFields.push(fieldDef ? fieldDef.displayName : 'Total');
+      }
+      if (!invoiceNumber || invoiceNumber.toString().trim() === '') {
+        const fieldDef = STANDARD_FIELDS.invoiceNumber;
+        missingFields.push(fieldDef ? fieldDef.displayName : 'Invoice Number');
+      }
+      if (!vatAmount || vatAmount.toString().trim() === '') {
+        const fieldDef = STANDARD_FIELDS.vatAmount;
+        missingFields.push(fieldDef ? fieldDef.displayName : 'VAT Amount');
+      }
+      if (!customerPO || customerPO.toString().trim() === '') {
+        const fieldDef = STANDARD_FIELDS.customerPO;
+        missingFields.push(fieldDef ? fieldDef.displayName : 'PO Number');
+      }
     }
     
     // Check date format - use intelligent parsing (same logic as parseDate function below)
@@ -945,8 +966,9 @@ async function processInvoiceImport(job) {
     
     const isInvoice = detectedType === 'invoice';
     const isCreditNote = detectedType === 'credit_note';
+    const isStatement = detectedType === 'statement';
     
-    console.log(`📄 [Import ${importId}] Final document type determination: ${detectedType} (isInvoice: ${isInvoice}, isCreditNote: ${isCreditNote})`);
+    console.log(`📄 [Import ${importId}] Final document type determination: ${detectedType} (isInvoice: ${isInvoice}, isCreditNote: ${isCreditNote}, isStatement: ${isStatement})`);
     
     // Helper function to intelligently parse date from various formats
     const parseDate = (dateStr) => {
@@ -1101,6 +1123,31 @@ async function processInvoiceImport(job) {
           console.log(`✅ [Import ${importId}] Credit note number "${cnNumber}" is unique (no non-deleted credit note found with this number)`);
         }
       }
+    } else if (matchedCompanyId && isStatement) {
+      // Statements: dedupe by (companyId, periodEnd) - one statement per customer per statement date.
+      // The file-hash check above already covers identical PDFs; this prevents two distinct PDFs
+      // from creating two Statement rows for the same customer + same statement date.
+      const statementDateValue = getParsedValue(parsedData, 'statementDate') || parsedData.statementDate;
+      if (statementDateValue) {
+        try {
+          const stmtDate = parseDate(statementDateValue);
+          const existingStatement = await Statement.findOne({
+            where: {
+              companyId: matchedCompanyId,
+              periodEnd: stmtDate
+            }
+          });
+          if (existingStatement) {
+            isDuplicateInvoiceNumber = true;
+            duplicateInvoiceNumber = `STMT-${matchedCompanyId}-${stmtDate.toISOString().split('T')[0]}`;
+            console.warn(`⚠️  [Import ${importId}] Duplicate statement detected for customer ${matchedCompanyId} on ${stmtDate.toISOString().split('T')[0]} (existing statement ID: ${existingStatement.id})`);
+          } else {
+            console.log(`✅ [Import ${importId}] Statement is unique for customer ${matchedCompanyId} on ${stmtDate.toISOString().split('T')[0]}`);
+          }
+        } catch (e) {
+          console.warn(`⚠️  [Import ${importId}] Could not parse statement date for duplicate check: ${e.message}`);
+        }
+      }
     }
     
     // If duplicate invoice number found, mark as duplicate and put in unallocated
@@ -1113,12 +1160,15 @@ async function processInvoiceImport(job) {
       console.log(`⚠️  [Import ${importId}] File will be marked as unallocated due to duplicate invoice/credit note number`);
     }
     
-    // Create invoice or credit note if company matched (after file is in correct location)
+    // Create invoice, credit note, or statement if company matched (after file is in correct location)
     // Skip document creation for duplicates - staff will review and decide
-    console.log(`🔍 [Import ${importId}] Document creation check: isDuplicate=${isDuplicate}, isDuplicateInvoiceNumber=${isDuplicateInvoiceNumber}, matchedCompanyId=${matchedCompanyId}, isInvoice=${isInvoice}, isCreditNote=${isCreditNote}`);
-    if (!isDuplicate && !isDuplicateInvoiceNumber && matchedCompanyId && (isInvoice || isCreditNote)) {
+    console.log(`🔍 [Import ${importId}] Document creation check: isDuplicate=${isDuplicate}, isDuplicateInvoiceNumber=${isDuplicateInvoiceNumber}, matchedCompanyId=${matchedCompanyId}, isInvoice=${isInvoice}, isCreditNote=${isCreditNote}, isStatement=${isStatement}`);
+    if (!isDuplicate && !isDuplicateInvoiceNumber && matchedCompanyId && (isInvoice || isCreditNote || isStatement)) {
       try {
-        const dateValue = getParsedValue(parsedData, 'invoiceDate') || getParsedValue(parsedData, 'date') || parsedData.date || parsedData.invoiceDate;
+        // For statements, the document date comes from statementDate; for invoices/credits use invoiceDate.
+        const dateValue = isStatement
+          ? (getParsedValue(parsedData, 'statementDate') || parsedData.statementDate)
+          : (getParsedValue(parsedData, 'invoiceDate') || getParsedValue(parsedData, 'date') || parsedData.date || parsedData.invoiceDate);
         console.log(`📅 [Import ${importId}] Raw date value: "${dateValue}"`);
         const issueDate = parseDate(dateValue);
         console.log(`📅 [Import ${importId}] Parsed date result: ${issueDate.toISOString().split('T')[0]} (${issueDate.toLocaleDateString('en-GB')})`);
@@ -1224,6 +1274,71 @@ async function processInvoiceImport(job) {
           });
           documentType = 'credit_note';
           console.log(`✅ [Import ${importId}] Created credit note: ${document.creditNoteNumber} for company: ${matchedCompanyId}`);
+        } else if (isStatement) {
+          // ----- Statement creation -----
+          // Phase 1: persist aging buckets in metadata.aging (per agreed product decision).
+          // Schema columns/filtering for aging buckets are deferred to a follow-up.
+          const totalBalanceValue = getParsedValue(parsedData, 'totalBalance') || parsedData.totalBalance;
+          const currentAmountValue = getParsedValue(parsedData, 'currentAmount') || parsedData.currentAmount;
+          const overdue1To30Value = getParsedValue(parsedData, 'overdue1To30') || parsedData.overdue1To30;
+          const overdue31To60Value = getParsedValue(parsedData, 'overdue31To60') || parsedData.overdue31To60;
+          const overdue61To90Value = getParsedValue(parsedData, 'overdue61To90') || parsedData.overdue61To90;
+          const overdue91PlusValue = getParsedValue(parsedData, 'overdue91Plus') || parsedData.overdue91Plus;
+
+          const closingBalance = parseAmount(totalBalanceValue);
+          const aging = {
+            currentAmount: parseAmount(currentAmountValue),
+            overdue1To30: parseAmount(overdue1To30Value),
+            overdue31To60: parseAmount(overdue31To60Value),
+            overdue61To90: parseAmount(overdue61To90Value),
+            overdue91Plus: parseAmount(overdue91PlusValue),
+            totalBalance: closingBalance
+          };
+
+          // documentStatus: 'ready' if no issues, 'review' if there were errors/alerts
+          const statementDocumentStatus = (matchedCompanyId && fileStatus === 'parsed') ? 'ready' : 'review';
+
+          // Get settings for retention calculation
+          const settingsForStatementRetention = await Settings.getSettings();
+          const statementDataForRetention = {
+            issueDate: issueDate,
+            createdAt: new Date(),
+            documentStatus: statementDocumentStatus
+          };
+          const statementRetentionDates = calculateDocumentRetentionDates(statementDataForRetention, settingsForStatementRetention);
+
+          // Synthesise a stable, unique statementNumber. The PDF does not contain an explicit
+          // statement number, so we combine company id + statement date + a short hash slice.
+          const statementDateIso = issueDate.toISOString().split('T')[0];
+          const generatedStatementNumber = `STMT-${matchedCompanyId}-${statementDateIso}-${fileHash.substring(0, 8)}`;
+
+          document = await Statement.create({
+            statementNumber: generatedStatementNumber,
+            companyId: matchedCompanyId,
+            // Phase 1: use statement date for both endpoints; period start derivation
+            // is deferred until we add explicit schema columns.
+            periodStart: issueDate,
+            periodEnd: issueDate,
+            openingBalance: 0,
+            closingBalance: closingBalance,
+            totalDebits: 0,
+            totalCredits: 0,
+            status: 'sent',
+            documentStatus: statementDocumentStatus,
+            fileUrl: actualFilePath,
+            retentionStartDate: statementRetentionDates.retentionStartDate,
+            retentionExpiryDate: statementRetentionDates.retentionExpiryDate,
+            metadata: {
+              source: 'manual_import',
+              fileName: originalName || fileName,
+              parsedData: parsedData,
+              processingMethod: processingMethod,
+              fileHash: fileHash,
+              aging: aging
+            }
+          });
+          documentType = 'statement';
+          console.log(`✅ [Import ${importId}] Created statement: ${document.statementNumber} for company: ${matchedCompanyId} (closingBalance=${closingBalance})`);
         }
       } catch (docError) {
         console.error(`❌ [Import ${importId}] Failed to create document:`, docError.message);
@@ -1286,7 +1401,7 @@ async function processInvoiceImport(job) {
           fileHash,
           filePath: actualFilePath,
           fileSize: fileBuffer.length,
-          fileType: isInvoice ? 'invoice' : (isCreditNote ? 'credit_note' : 'unknown'),
+          fileType: isInvoice ? 'invoice' : (isCreditNote ? 'credit_note' : (isStatement ? 'statement' : 'unknown')),
           status: fileStatus,
           failureReason: failureReason,
           parsedData: parsedData,
@@ -1312,7 +1427,7 @@ async function processInvoiceImport(job) {
         fileName: originalName || fileName,
         filePath: actualFilePath,
         fileSize: fileBuffer.length,
-        fileType: isInvoice ? 'invoice' : (isCreditNote ? 'credit_note' : 'unknown'),
+        fileType: isInvoice ? 'invoice' : (isCreditNote ? 'credit_note' : (isStatement ? 'statement' : 'unknown')),
         status: fileStatus,
         failureReason: failureReason,
         processingMethod: processingMethod,
@@ -1360,7 +1475,7 @@ async function processInvoiceImport(job) {
           fileName: originalName || fileName,
           filePath: actualFilePath,
           fileSize: fileBuffer.length,
-          fileType: isInvoice ? 'invoice' : (isCreditNote ? 'credit_note' : 'unknown'),
+          fileType: isInvoice ? 'invoice' : (isCreditNote ? 'credit_note' : (isStatement ? 'statement' : 'unknown')),
           status: fileStatus,
           failureReason: failureReason,
           processingMethod: processingMethod,
@@ -1395,7 +1510,7 @@ async function processInvoiceImport(job) {
             fileHash,
             filePath: actualFilePath,
             fileSize: fileBuffer.length,
-            fileType: isInvoice ? 'invoice' : (isCreditNote ? 'credit_note' : 'unknown'),
+            fileType: isInvoice ? 'invoice' : (isCreditNote ? 'credit_note' : (isStatement ? 'statement' : 'unknown')),
             status: fileStatus,
             failureReason: failureReason,
             processingMethod: processingMethod, // Now STRING type, can store any value
@@ -1428,7 +1543,7 @@ async function processInvoiceImport(job) {
           }
           console.error(`   File data:`, {
             fileName: originalName || fileName,
-            fileType: isInvoice ? 'invoice' : (isCreditNote ? 'credit_note' : 'unknown'),
+            fileType: isInvoice ? 'invoice' : (isCreditNote ? 'credit_note' : (isStatement ? 'statement' : 'unknown')),
             status: fileStatus,
             failureReason: failureReason
           });
@@ -1574,7 +1689,7 @@ async function processInvoiceImport(job) {
       isDuplicate: isDuplicate || isDuplicateInvoiceNumber,
       duplicateFileId: duplicateFileId,
       duplicateDocumentNumber: duplicateDocumentNumber || (isDuplicateInvoiceNumber ? duplicateInvoiceNumber : null),
-      duplicateDocumentType: duplicateDocumentType || (isDuplicateInvoiceNumber ? (isCreditNote ? 'credit_note' : 'invoice') : null),
+      duplicateDocumentType: duplicateDocumentType || (isDuplicateInvoiceNumber ? (isCreditNote ? 'credit_note' : (isStatement ? 'statement' : 'invoice')) : null),
       invoiceNumber: getParsedValue(parsedData, 'invoiceNumber') || parsedData.invoiceNumber,
       creditNoteNumber: getParsedValue(parsedData, 'creditNumber') || parsedData.creditNumber,
       accountNumber: getParsedValue(parsedData, 'accountNumber') || parsedData.accountNumber,

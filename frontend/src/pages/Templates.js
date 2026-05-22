@@ -120,14 +120,25 @@ const Templates = () => {
   }
 
   if (showBuilder) {
+    const builderTemplateType = editingTemplate?.templateType || 'invoice';
+    const isStatementBuilder = builderTemplateType === 'statement';
+    const builderTypeLabel = builderTemplateType === 'invoice'
+      ? 'Invoice'
+      : builderTemplateType === 'credit_note'
+        ? 'Credit Note'
+        : 'Statement';
     return (
       <div className="page-header d-print-none">
         <div className="container-fluid">
           <div className="row g-2 align-items-center">
             <div className="col">
-              <div className="page-pretitle">Customer Templates</div>
+              <div className="page-pretitle">
+                {isStatementBuilder ? 'Statement Templates' : 'Customer Templates'}
+              </div>
               <h2 className="page-title">
-                {editingTemplate?.id ? 'Edit Template' : 'Create Template'}
+                {editingTemplate?.id
+                  ? `Edit ${builderTypeLabel} Template`
+                  : `Create ${builderTypeLabel} Template`}
               </h2>
             </div>
             <div className="col-auto ms-auto d-flex gap-2">
@@ -154,7 +165,7 @@ const Templates = () => {
                 className="btn btn-secondary"
                 onClick={handleBuilderClose}
               >
-                Back to Customer Templates
+                {isStatementBuilder ? 'Back to Statement Templates' : 'Back to Customer Templates'}
               </button>
               <button
                 className="btn btn-danger"
