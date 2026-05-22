@@ -93,6 +93,16 @@ const UnallocatedView = () => {
         deliveryAddress: parsed.deliveryAddress || parsed.delivery_address || parsed.ship_to || parsed.shipping_address || '',
         goodsAmount: parsed.goodsAmount || parsed.goods_amount || parsed.subtotal || parsed.net_amount || '',
         invoiceTo: parsed.invoiceTo || parsed.invoice_to || parsed.bill_to || '',
+        // Statement-specific fields. Mapped from canonical names emitted by the
+        // parser so the form renders proper inputs when documentType==='statement'.
+        statementDate: parsed.statementDate || parsed.statement_date || parsed.periodEnd || parsed.period_end || '',
+        customerAddress: parsed.customerAddress || parsed.customer_address || parsed.billing_address || '',
+        totalBalance: parsed.totalBalance ?? '',
+        currentAmount: parsed.currentAmount ?? '',
+        overdue1To30: parsed.overdue1To30 ?? '',
+        overdue31To60: parsed.overdue31To60 ?? '',
+        overdue61To90: parsed.overdue61To90 ?? '',
+        overdue91Plus: parsed.overdue91Plus ?? '',
         // Keep legacy field names for backward compatibility
         amount: parsed.totalAmount || parsed.amount || parsed.invoiceTotal || parsed.total || '',
         date: parsed.invoiceDate || parsed.date || parsed.taxPoint || parsed.tax_point || ''
@@ -493,6 +503,14 @@ const UnallocatedView = () => {
                     <small className="form-hint">This must match a company's Account / Company Number</small>
                   </div>
 
+                  {/* Document-type-aware fields. Statements use a different set
+                      (statement period dates, total balance, aging buckets) and
+                      should never show invoice fields like PO/VAT/Delivery. */}
+                  {(() => {
+                    const isStatement = (editingData.documentType || '').toString().toLowerCase() === 'statement';
+                    if (isStatement) return null;
+                    return (
+                  <>
                   <div className="mb-3">
                     <label className="form-label">Date / Tax Point</label>
                     <input
@@ -696,6 +714,104 @@ const UnallocatedView = () => {
                       disabled={!canEdit}
                     />
                   </div>
+                  </>
+                    );
+                  })()}
+
+                  {/* Statement-specific fields. Rendered only when the document
+                      is a statement; uses the canonical fields emitted by the
+                      parser (statementDate, customerAddress, totalBalance,
+                      aging buckets). */}
+                  {((editingData.documentType || '').toString().toLowerCase() === 'statement') && (
+                    <>
+                      <div className="mb-3">
+                        <label className="form-label">Statement Date</label>
+                        <input
+                          type="date"
+                          className="form-control"
+                          value={(() => {
+                            const v = editingData.statementDate || '';
+                            if (!v) return '';
+                            try {
+                              const d = new Date(v);
+                              if (!isNaN(d.getTime()) && d.getFullYear() > 1900) {
+                                const y = d.getFullYear();
+                                const m = String(d.getMonth() + 1).padStart(2, '0');
+                                const day = String(d.getDate()).padStart(2, '0');
+                                return `${y}-${m}-${day}`;
+                              }
+                            } catch (_) {}
+                            return '';
+                          })()}
+                          onChange={(e) => {
+                            const value = e.target.value ? new Date(e.target.value + 'T00:00:00').toISOString() : null;
+                            setEditingData(prev => ({ ...prev, statementDate: value }));
+                          }}
+                          readOnly={!canEdit}
+                          disabled={!canEdit}
+                        />
+                      </div>
+
+                      <div className="mb-3">
+                        <label className="form-label">Customer Address</label>
+                        <textarea
+                          className="form-control"
+                          rows="3"
+                          value={editingData.customerAddress || ''}
+                          onChange={(e) => setEditingData(prev => ({ ...prev, customerAddress: e.target.value }))}
+                          placeholder="Customer billing address printed on the statement"
+                          readOnly={!canEdit}
+                          disabled={!canEdit}
+                        />
+                      </div>
+
+                      <div className="mb-3">
+                        <label className="form-label">Total Balance</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="form-control"
+                          value={editingData.totalBalance ?? ''}
+                          onChange={(e) => {
+                            const v = e.target.value === '' ? '' : parseFloat(e.target.value);
+                            setEditingData(prev => ({ ...prev, totalBalance: Number.isFinite(v) ? v : '' }));
+                          }}
+                          placeholder="0.00"
+                          readOnly={!canEdit}
+                          disabled={!canEdit}
+                        />
+                      </div>
+
+                      <div className="row g-2">
+                        {[
+                          { key: 'currentAmount', label: 'Current' },
+                          { key: 'overdue1To30', label: 'Overdue 1-30' },
+                          { key: 'overdue31To60', label: 'Overdue 31-60' },
+                          { key: 'overdue61To90', label: 'Overdue 61-90' },
+                          { key: 'overdue91Plus', label: 'Overdue 91+' }
+                        ].map(({ key, label }) => (
+                          <div key={key} className="col-12 col-md-6">
+                            <div className="mb-3">
+                              <label className="form-label">{label}</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                className="form-control"
+                                value={editingData[key] ?? ''}
+                                onChange={(e) => {
+                                  const v = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                  setEditingData(prev => ({ ...prev, [key]: Number.isFinite(v) ? v : '' }));
+                                }}
+                                placeholder="0.00"
+                                readOnly={!canEdit}
+                                disabled={!canEdit}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
 
                       <div className="d-flex gap-2 mt-4">
                         {canEdit && (
