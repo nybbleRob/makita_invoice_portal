@@ -27,7 +27,8 @@ const PendingAccounts = () => {
     sendInvoiceEmail: false,
     sendInvoiceAttachment: false,
     sendStatementEmail: false,
-    sendStatementAttachment: false,
+    sendStatementPdfAttachment: false,
+    sendStatementXlsAttachment: false,
     sendEmailAsSummary: false,
     sendImportSummaryReport: false
   });
@@ -267,10 +268,11 @@ const PendingAccounts = () => {
     }
     if (name === 'sendStatementEmail' && !checked) {
       setFormData(prev => {
-        const updated = { 
-          ...prev, 
+        const updated = {
+          ...prev,
           [name]: checked,
-          sendStatementAttachment: false 
+          sendStatementPdfAttachment: false,
+          sendStatementXlsAttachment: false
         };
         if (!prev.sendInvoiceEmail) {
           updated.sendEmailAsSummary = false;
@@ -322,7 +324,8 @@ const PendingAccounts = () => {
         sendInvoiceEmail: formData.sendInvoiceEmail,
         sendInvoiceAttachment: formData.sendInvoiceAttachment,
         sendStatementEmail: formData.sendStatementEmail,
-        sendStatementAttachment: formData.sendStatementAttachment,
+        sendStatementPdfAttachment: formData.sendStatementPdfAttachment,
+        sendStatementXlsAttachment: formData.sendStatementXlsAttachment,
         sendEmailAsSummary: formData.sendEmailAsSummary,
         sendImportSummaryReport: formData.sendImportSummaryReport
       });
@@ -567,18 +570,38 @@ const PendingAccounts = () => {
                                 </label>
                               </div>
                               <div className="col-6">
-                                <label 
-                                  className="row g-0 p-2 border" 
+                                <label
+                                  className="row g-0 p-2 border"
                                   style={{ cursor: formData.sendStatementEmail ? 'pointer' : 'default', opacity: formData.sendStatementEmail ? 1 : 0.5 }}
                                 >
-                                  <span className="col small">With Attachment</span>
+                                  <span className="col small">PDF Attachment</span>
                                   <span className="col-auto">
                                     <label className="form-check form-check-single form-switch mb-0">
                                       <input
                                         type="checkbox"
                                         className="form-check-input"
-                                        name="sendStatementAttachment"
-                                        checked={formData.sendStatementAttachment || false}
+                                        name="sendStatementPdfAttachment"
+                                        checked={formData.sendStatementPdfAttachment || false}
+                                        onChange={handleInputChange}
+                                        disabled={!formData.sendStatementEmail}
+                                      />
+                                    </label>
+                                  </span>
+                                </label>
+                              </div>
+                              <div className="col-6 offset-6">
+                                <label
+                                  className="row g-0 p-2 border"
+                                  style={{ cursor: formData.sendStatementEmail ? 'pointer' : 'default', opacity: formData.sendStatementEmail ? 1 : 0.5 }}
+                                >
+                                  <span className="col small">XLS Attachment</span>
+                                  <span className="col-auto">
+                                    <label className="form-check form-check-single form-switch mb-0">
+                                      <input
+                                        type="checkbox"
+                                        className="form-check-input"
+                                        name="sendStatementXlsAttachment"
+                                        checked={formData.sendStatementXlsAttachment || false}
                                         onChange={handleInputChange}
                                         disabled={!formData.sendStatementEmail}
                                       />

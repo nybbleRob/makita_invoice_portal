@@ -10,7 +10,7 @@
  * 3. When all jobs in a batch are complete, sendBatchNotifications() is triggered
  */
 
-const { Company, Invoice, CreditNote, File, Settings, User } = require('../models');
+const { Company, Invoice, CreditNote, Statement, File, Settings, User } = require('../models');
 const { queueDocumentNotifications } = require('./documentNotificationService');
 const { logActivity, ActivityType } = require('./activityLogger');
 const { isEmailEnabled, sendEmail } = require('../utils/emailService');
@@ -227,7 +227,13 @@ async function recordJobCompletion(importId, result) {
             }
             
             const companyDocs = batch.companyDocuments[companyId];
-            if (result.documentType === 'invoice') {
+            // skipNotification is set when this file was a second-format pairing
+            // (e.g. an XLS arriving for a Statement that already had a PDF).
+            // The Statement row was updated in place; we don't want to send a
+            // duplicate notification for the same logical document.
+            if (result.skipNotification) {
+              console.log(`[Batch ${importId}] DEBUG: Skipping notification bucket for second-format pairing (documentId=${result.documentId}, type=${result.documentType})`);
+            } else if (result.documentType === 'invoice') {
               companyDocs.invoices.push(docInfo);
               console.log(`[Batch ${importId}] DEBUG: Added invoice to company ${companyId}, now has ${companyDocs.invoices.length} invoices`);
             } else if (result.documentType === 'credit_note') {
@@ -348,6 +354,10 @@ async function sendBatchNotifications(importId, batch) {
         const creditNotes = docs.creditNotes && docs.creditNotes.length > 0
           ? await CreditNote.findAll({ where: { id: { [Op.in]: docs.creditNotes.map(d => d.id) } } })
           : [];
+
+        const statements = docs.statements && docs.statements.length > 0
+          ? await Statement.findAll({ where: { id: { [Op.in]: docs.statements.map(d => d.id) } } })
+          : [];
         
         // Queue notifications
         const result = await queueDocumentNotifications({
@@ -368,7 +378,15 @@ async function sendBatchNotifications(importId, batch) {
             date: cn.issueDate?.toISOString(),
             fileUrl: cn.fileUrl
           })),
-          statements: [], // Add statement support if needed
+          statements: statements.map(st => ({
+            id: st.id,
+            statementNumber: st.statementNumber,
+            closingBalance: st.closingBalance,
+            periodEnd: st.periodEnd?.toISOString(),
+            fileUrl: st.fileUrl,
+            pdfFileUrl: st.pdfFileUrl,
+            xlsFileUrl: st.xlsFileUrl
+          })),
           triggeredByUserId: batch.userId,
           triggeredByEmail: batch.userEmail
         });

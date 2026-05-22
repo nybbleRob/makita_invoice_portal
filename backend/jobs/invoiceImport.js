@@ -23,6 +23,7 @@ const {
 } = require('../config/storage');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const { calculateDocumentRetentionDates } = require('../utils/documentRetention');
+const { findOrCreateStatement } = require('../utils/statementImport');
 const { isEmailEnabled } = require('../utils/emailService');
 
 /**
@@ -583,6 +584,9 @@ async function processInvoiceImport(job) {
     let matchedCompanyId = null;
     let document = null;
     let documentType = null;
+    // Set when a Statement was paired with an existing row (e.g. PDF+XLS for the
+    // same period) so the downstream notification dispatch can skip re-notifying.
+    let statementSecondFormatPairing = false;
     
     // If this is a requeued file with an existing File record, check if it already has a customerId
     // This happens when a file is manually edited and requeued with a company assignment
@@ -681,9 +685,22 @@ async function processInvoiceImport(job) {
         }
       }
       
+      // For statements only, the matched company must be CORP - branches and
+      // subsidiaries never receive statements.
+      if (company) {
+        const lookedLikeStatement =
+          parsedData.documentType?.toLowerCase() === 'statement' ||
+          (parsedData.fileName || '').toLowerCase().includes('statement') ||
+          job.data.forceDocumentType === 'statement';
+        if (lookedLikeStatement && company.type && company.type !== 'CORP') {
+          console.log(`⚠️  [Import ${importId}] Company ${company.name} (Account ${company.referenceNo}) is type ${company.type}; statements only route to CORP accounts. Will not create Statement.`);
+          company = null; // Force statement creation to be skipped below
+        }
+      }
+
       if (company) {
         matchedCompanyId = company.id;
-        console.log(`✅ [Import ${importId}] Matched company: ${company.name} (Account: ${company.referenceNo}, ID: ${company.id})`);
+        console.log(`✅ [Import ${importId}] Matched company: ${company.name} (Account: ${company.referenceNo}, ID: ${company.id}, Type: ${company.type || 'n/a'})`);
       } else {
         console.log(`⚠️  [Import ${importId}] No company found with account number: "${accountStr}" (tried as integer: ${accountInt})`);
         console.log(`   Parsed data keys: ${Object.keys(parsedData).filter(k => k !== 'templateId' && k !== 'templateName' && k !== 'fieldLabels' && k !== 'fullText').join(', ')}`);
@@ -941,7 +958,15 @@ async function processInvoiceImport(job) {
     // Determine document type
     // First try from parsed data (most accurate - from template extraction)
     let detectedType = (getParsedValue(parsedData, 'documentType') || parsedData.documentType)?.toLowerCase();
-    
+
+    // If the dispatching route hinted a forced type (e.g. /api/statements/import
+    // always uploads statements), that hint takes precedence over a parsed/quick
+    // detection mismatch.
+    if (job.data.forceDocumentType) {
+      detectedType = String(job.data.forceDocumentType).toLowerCase();
+      console.log(`📄 [Import ${importId}] Document type forced by dispatcher: ${detectedType}`);
+    }
+
     // If not found in parsed data, use quick detection result as fallback
     if (!detectedType || detectedType === '' || detectedType === 'unknown') {
       if (quickDetectedDocType) {
@@ -1275,9 +1300,10 @@ async function processInvoiceImport(job) {
           documentType = 'credit_note';
           console.log(`✅ [Import ${importId}] Created credit note: ${document.creditNoteNumber} for company: ${matchedCompanyId}`);
         } else if (isStatement) {
-          // ----- Statement creation -----
-          // Phase 1: persist aging buckets in metadata.aging (per agreed product decision).
-          // Schema columns/filtering for aging buckets are deferred to a follow-up.
+          // ----- Statement creation via centralised helper -----
+          // Phase 1: aging buckets persist in metadata.aging.
+          // Dedupe: (companyId, periodEnd) - second-format pairings update the existing
+          // row in place rather than creating a duplicate.
           const totalBalanceValue = getParsedValue(parsedData, 'totalBalance') || parsedData.totalBalance;
           const currentAmountValue = getParsedValue(parsedData, 'currentAmount') || parsedData.currentAmount;
           const overdue1To30Value = getParsedValue(parsedData, 'overdue1To30') || parsedData.overdue1To30;
@@ -1285,60 +1311,40 @@ async function processInvoiceImport(job) {
           const overdue61To90Value = getParsedValue(parsedData, 'overdue61To90') || parsedData.overdue61To90;
           const overdue91PlusValue = getParsedValue(parsedData, 'overdue91Plus') || parsedData.overdue91Plus;
 
-          const closingBalance = parseAmount(totalBalanceValue);
-          const aging = {
-            currentAmount: parseAmount(currentAmountValue),
-            overdue1To30: parseAmount(overdue1To30Value),
-            overdue31To60: parseAmount(overdue31To60Value),
-            overdue61To90: parseAmount(overdue61To90Value),
-            overdue91Plus: parseAmount(overdue91PlusValue),
-            totalBalance: closingBalance
-          };
-
-          // documentStatus: 'ready' if no issues, 'review' if there were errors/alerts
           const statementDocumentStatus = (matchedCompanyId && fileStatus === 'parsed') ? 'ready' : 'review';
 
-          // Get settings for retention calculation
           const settingsForStatementRetention = await Settings.getSettings();
-          const statementDataForRetention = {
-            issueDate: issueDate,
-            createdAt: new Date(),
-            documentStatus: statementDocumentStatus
-          };
-          const statementRetentionDates = calculateDocumentRetentionDates(statementDataForRetention, settingsForStatementRetention);
-
-          // Synthesise a stable, unique statementNumber. The PDF does not contain an explicit
-          // statement number, so we combine company id + statement date + a short hash slice.
-          const statementDateIso = issueDate.toISOString().split('T')[0];
-          const generatedStatementNumber = `STMT-${matchedCompanyId}-${statementDateIso}-${fileHash.substring(0, 8)}`;
-
-          document = await Statement.create({
-            statementNumber: generatedStatementNumber,
-            companyId: matchedCompanyId,
-            // Phase 1: use statement date for both endpoints; period start derivation
-            // is deferred until we add explicit schema columns.
-            periodStart: issueDate,
-            periodEnd: issueDate,
-            openingBalance: 0,
-            closingBalance: closingBalance,
-            totalDebits: 0,
-            totalCredits: 0,
-            status: 'sent',
-            documentStatus: statementDocumentStatus,
-            fileUrl: actualFilePath,
-            retentionStartDate: statementRetentionDates.retentionStartDate,
-            retentionExpiryDate: statementRetentionDates.retentionExpiryDate,
-            metadata: {
+          const result = await findOrCreateStatement({
+            matchedCompanyId,
+            statementDate: issueDate,
+            parsedData: {
+              ...parsedData,
+              totalBalance: totalBalanceValue,
+              currentAmount: currentAmountValue,
+              overdue1To30: overdue1To30Value,
+              overdue31To60: overdue31To60Value,
+              overdue61To90: overdue61To90Value,
+              overdue91Plus: overdue91PlusValue
+            },
+            filePath: actualFilePath,
+            fileMeta: {
               source: 'manual_import',
               fileName: originalName || fileName,
-              parsedData: parsedData,
-              processingMethod: processingMethod,
-              fileHash: fileHash,
-              aging: aging
-            }
+              processingMethod,
+              fileHash
+            },
+            settings: settingsForStatementRetention,
+            createdById: userId || null,
+            documentStatus: statementDocumentStatus
           });
+          document = result.statement;
           documentType = 'statement';
-          console.log(`✅ [Import ${importId}] Created statement: ${document.statementNumber} for company: ${matchedCompanyId} (closingBalance=${closingBalance})`);
+          if (result.isNew) {
+            console.log(`✅ [Import ${importId}] Created statement: ${document.statementNumber} for company: ${matchedCompanyId} (slot=${result.fileSlot})`);
+          } else {
+            console.log(`🔁 [Import ${importId}] Updated existing statement ${document.statementNumber} (slot=${result.fileSlot}); not re-notifying.`);
+            statementSecondFormatPairing = true;
+          }
         }
       } catch (docError) {
         console.error(`❌ [Import ${importId}] Failed to create document:`, docError.message);
@@ -1695,7 +1701,11 @@ async function processInvoiceImport(job) {
       accountNumber: getParsedValue(parsedData, 'accountNumber') || parsedData.accountNumber,
       amount: getParsedValue(parsedData, 'amount') || parsedData.amount,
       processingTime,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      // True when this file paired with an existing Statement (e.g. XLS for a
+      // statement that already had its PDF). Downstream batch dispatch uses this
+      // to avoid sending a duplicate notification for the same logical document.
+      skipNotification: statementSecondFormatPairing
     };
     
     await importStore.addResult(importId, result);

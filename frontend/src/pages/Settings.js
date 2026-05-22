@@ -649,7 +649,8 @@ const Settings = () => {
         sendInvoiceEmail: enabled,
         sendInvoiceAttachment: enabled,
         sendStatementEmail: enabled,
-        sendStatementAttachment: enabled
+        sendStatementPdfAttachment: enabled,
+        sendStatementXlsAttachment: enabled
       });
       
       toast.success(`Email notifications ${action}d for ${response.data.updated} companies`);

@@ -69,8 +69,7 @@ const Layout = () => {
           <span className="nav-link-title">Credit Notes</span>
         </Link>
       </li>
-      {/* Statements - HIDDEN until client decides on scope */}
-      {/* {hasPermission('STATEMENTS_VIEW') && (
+      {hasPermission('STATEMENTS_VIEW') && (
         <li className={`nav-item ${location.pathname === '/statements' ? 'active' : ''}`}>
           <Link to="/statements" className="nav-link">
             <span className="nav-link-icon">
@@ -86,7 +85,7 @@ const Layout = () => {
             <span className="nav-link-title">Statements</span>
           </Link>
         </li>
-      )} */}
+      )}
       {/* Unallocated - GA, Admin, Manager */}
       {hasPermission('UNALLOCATED_VIEW') && (
         <li className={`nav-item ${location.pathname === '/unallocated' ? 'active' : ''}`}>

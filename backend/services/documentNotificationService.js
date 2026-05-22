@@ -44,7 +44,8 @@ async function getNotificationRecipients(companyId, notificationType) {
       required: false,
       attributes: ['id', 'name', 'email', 'role', 'isActive', 
         'sendInvoiceEmail', 'sendInvoiceAttachment', 
-        'sendStatementEmail', 'sendStatementAttachment', 
+        'sendStatementEmail',
+        'sendStatementPdfAttachment', 'sendStatementXlsAttachment',
         'sendEmailAsSummary']
     }]
   });
@@ -61,7 +62,8 @@ async function getNotificationRecipients(companyId, notificationType) {
     sendInvoiceEmail: company.sendInvoiceEmail,
     sendInvoiceAttachment: company.sendInvoiceAttachment,
     sendStatementEmail: company.sendStatementEmail,
-    sendStatementAttachment: company.sendStatementAttachment,
+    sendStatementPdfAttachment: company.sendStatementPdfAttachment,
+    sendStatementXlsAttachment: company.sendStatementXlsAttachment,
     sendEmailAsSummary: company.sendEmailAsSummary
   };
   
@@ -74,17 +76,26 @@ async function getNotificationRecipients(companyId, notificationType) {
     
     if (shouldNotify && !seenEmails.has(pc.email.toLowerCase())) {
       seenEmails.add(pc.email.toLowerCase());
-      recipients.push({
+      const recipient = {
         userId: pc.id,
         name: pc.name,
         email: pc.email,
         role: pc.role,
         isPrimaryContact: true,
-        sendAttachment: notificationType === 'invoice'
-          ? (companySettings.sendInvoiceAttachment || pc.sendInvoiceAttachment)
-          : (companySettings.sendStatementAttachment || pc.sendStatementAttachment),
         sendAsSummary: companySettings.sendEmailAsSummary || pc.sendEmailAsSummary
-      });
+      };
+      if (notificationType === 'statement') {
+        // Statements have two independent toggles (PDF and XLS); company-level
+        // toggles act as an OR over the user-level ones for backward compatibility
+        // with existing setups where only the company has the flag set.
+        recipient.sendPdfAttachment = !!(companySettings.sendStatementPdfAttachment || pc.sendStatementPdfAttachment);
+        recipient.sendXlsAttachment = !!(companySettings.sendStatementXlsAttachment || pc.sendStatementXlsAttachment);
+        // Legacy single flag preserved for any downstream code that still reads it.
+        recipient.sendAttachment = recipient.sendPdfAttachment || recipient.sendXlsAttachment;
+      } else {
+        recipient.sendAttachment = !!(companySettings.sendInvoiceAttachment || pc.sendInvoiceAttachment);
+      }
+      recipients.push(recipient);
     }
   }
   
@@ -144,17 +155,22 @@ async function getNotificationRecipients(companyId, notificationType) {
     
     if (!seenEmails.has(user.email.toLowerCase())) {
       seenEmails.add(user.email.toLowerCase());
-      recipients.push({
+      const recipient = {
         userId: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
         isPrimaryContact: false,
-        sendAttachment: notificationType === 'invoice'
-          ? user.sendInvoiceAttachment
-          : user.sendStatementAttachment,
         sendAsSummary: user.sendEmailAsSummary
-      });
+      };
+      if (notificationType === 'statement') {
+        recipient.sendPdfAttachment = !!user.sendStatementPdfAttachment;
+        recipient.sendXlsAttachment = !!user.sendStatementXlsAttachment;
+        recipient.sendAttachment = recipient.sendPdfAttachment || recipient.sendXlsAttachment;
+      } else {
+        recipient.sendAttachment = !!user.sendInvoiceAttachment;
+      }
+      recipients.push(recipient);
     }
   }
   
@@ -168,19 +184,28 @@ async function getNotificationRecipients(companyId, notificationType) {
     console.log(`[NotificationService] 🧪 TEST MODE: No recipients configured for test company, adding fallback test recipient`);
     
     // Use company-level settings if available, otherwise defaults
-    const company = await Company.findByPk(companyId, { attributes: ['id', 'name', 'sendInvoiceEmail', 'sendInvoiceAttachment', 'sendStatementEmail', 'sendStatementAttachment', 'sendEmailAsSummary'] });
-    
-    recipients.push({
+    const company = await Company.findByPk(companyId, {
+      attributes: ['id', 'name', 'sendInvoiceEmail', 'sendInvoiceAttachment',
+        'sendStatementEmail', 'sendStatementPdfAttachment', 'sendStatementXlsAttachment',
+        'sendEmailAsSummary']
+    });
+
+    const fallback = {
       userId: 'test-fallback',
       name: `Test Recipient (${company?.name || 'Unknown'})`,
       email: testMode.redirectEmail,
       role: 'test_recipient',
       isPrimaryContact: false,
-      sendAttachment: notificationType === 'invoice' 
-        ? (company?.sendInvoiceAttachment !== false)  // Default true
-        : (company?.sendStatementAttachment !== false),
-      sendAsSummary: company?.sendEmailAsSummary === true  // Default false (individual)
-    });
+      sendAsSummary: company?.sendEmailAsSummary === true
+    };
+    if (notificationType === 'statement') {
+      fallback.sendPdfAttachment = company?.sendStatementPdfAttachment !== false;
+      fallback.sendXlsAttachment = company?.sendStatementXlsAttachment !== false;
+      fallback.sendAttachment = fallback.sendPdfAttachment || fallback.sendXlsAttachment;
+    } else {
+      fallback.sendAttachment = company?.sendInvoiceAttachment !== false;
+    }
+    recipients.push(fallback);
   }
   
   return recipients;
@@ -223,9 +248,10 @@ async function queueDocumentNotifications(options) {
       model: User,
       as: 'primaryContact',
       required: false,
-      attributes: ['id', 'name', 'email', 'role', 'isActive', 
-        'sendInvoiceEmail', 'sendInvoiceAttachment', 
-        'sendStatementEmail', 'sendStatementAttachment', 
+      attributes: ['id', 'name', 'email', 'role', 'isActive',
+        'sendInvoiceEmail', 'sendInvoiceAttachment',
+        'sendStatementEmail',
+        'sendStatementPdfAttachment', 'sendStatementXlsAttachment',
         'sendEmailAsSummary']
     }]
   });
@@ -336,11 +362,14 @@ async function queueDocumentNotifications(options) {
     }
   }
   
-  // Queue individual emails (batch when possible for Office 365)
+  // Queue individual emails (batch when possible for Office 365).
+  // Statements bypass the batch path because their attachment plan (PDF vs XLS)
+  // is per-recipient, so a single email-with-attachments can't represent multiple
+  // recipients correctly.
   for (const [key, group] of individualEmailGroups) {
     try {
-      if (group.recipients.length > 1) {
-        // Batch recipients for same document (Office 365 optimization)
+      const isStatement = group.documentType === 'statement';
+      if (group.recipients.length > 1 && !isStatement) {
         const batchEmail = await queueBatchIndividualEmail({
           recipients: group.recipients,
           document: group.document,
@@ -354,19 +383,20 @@ async function queueDocumentNotifications(options) {
         });
         queuedEmails.push(batchEmail);
       } else {
-        // Single recipient - use existing individual email function
-        const emailResult = await queueIndividualEmail({
-          recipient: group.recipients[0],
-          document: group.document,
-          documentType: group.documentType,
-          companyName,
-          companyId,
-          portalName,
-          portalUrl,
-          triggeredByUserId,
-          triggeredByEmail
-        });
-        queuedEmails.push(emailResult);
+        for (const recipient of group.recipients) {
+          const emailResult = await queueIndividualEmail({
+            recipient,
+            document: group.document,
+            documentType: group.documentType,
+            companyName,
+            companyId,
+            portalName,
+            portalUrl,
+            triggeredByUserId,
+            triggeredByEmail
+          });
+          queuedEmails.push(emailResult);
+        }
       }
     } catch (error) {
       console.error(`[NotificationService] Error queuing email for ${key}:`, error.message);
@@ -642,6 +672,44 @@ async function queueIndividualEmail(options) {
   // Get retention period for disclaimer
   const retentionDays = settings?.documentRetentionPeriod || 30;
   
+  // Build attachments. For statements, attach PDF and/or XLS independently
+  // based on the recipient's per-format toggles. For invoices/credit notes the
+  // single sendAttachment toggle controls a single file (unchanged).
+  const fs = require('fs');
+  const path = require('path');
+  const attachments = [];
+
+  if (documentType === 'statement') {
+    if (recipient.sendPdfAttachment) {
+      const pdfPath = document.pdfFileUrl ||
+        (document.fileUrl && document.fileUrl.toLowerCase().endsWith('.pdf') ? document.fileUrl : null);
+      if (pdfPath && fs.existsSync(pdfPath)) {
+        attachments.push({ filename: path.basename(pdfPath), path: pdfPath });
+      } else if (pdfPath) {
+        console.warn(`[NotificationService] Recipient ${recipient.email} opted in for PDF but file is missing: ${pdfPath}`);
+      }
+    }
+    if (recipient.sendXlsAttachment) {
+      const xlsPath = document.xlsFileUrl ||
+        (document.fileUrl && (document.fileUrl.toLowerCase().endsWith('.xls') || document.fileUrl.toLowerCase().endsWith('.xlsx'))
+          ? document.fileUrl
+          : null);
+      if (xlsPath && fs.existsSync(xlsPath)) {
+        attachments.push({ filename: path.basename(xlsPath), path: xlsPath });
+      } else if (xlsPath) {
+        console.warn(`[NotificationService] Recipient ${recipient.email} opted in for XLS but file is missing: ${xlsPath}`);
+      }
+    }
+    console.log(`[NotificationService] Statement attachment plan for ${recipient.email}: pdf=${recipient.sendPdfAttachment ? 'yes' : 'no'}, xls=${recipient.sendXlsAttachment ? 'yes' : 'no'}, attached=${attachments.length}`);
+  } else if (recipient.sendAttachment && document.fileUrl) {
+    if (fs.existsSync(document.fileUrl)) {
+      attachments.push({
+        filename: document.originalName || path.basename(document.fileUrl),
+        path: document.fileUrl
+      });
+    }
+  }
+
   // Render using Tabler template
   const html = renderTemplate('document-notification', {
     userName: recipient.name,
@@ -651,25 +719,11 @@ async function queueIndividualEmail(options) {
     documentAmount: formattedAmount,
     documentUrl,
     supplierName: companyName,
-    hasAttachment: recipient.sendAttachment && document.fileUrl ? 'true' : '',
+    hasAttachment: attachments.length > 0 ? 'true' : '',
     retentionPeriod: retentionDays.toString()
   }, settings);
   
   const subject = `New ${documentTypeName} Available - ${companyName}`;
-  
-  // Prepare attachments if enabled
-  const attachments = [];
-  if (recipient.sendAttachment && document.fileUrl) {
-    const fs = require('fs');
-    const path = require('path');
-    
-    if (fs.existsSync(document.fileUrl)) {
-      attachments.push({
-        filename: document.originalName || path.basename(document.fileUrl),
-        path: document.fileUrl
-      });
-    }
-  }
   
   const result = await queueEmail({
     to: recipient.email,
@@ -685,7 +739,8 @@ async function queueIndividualEmail(options) {
       notificationType: 'individual',
       documentType,
       documentId: document.id,
-      documentNumber
+      documentNumber,
+      attachmentCount: attachments.length
     }
   });
   

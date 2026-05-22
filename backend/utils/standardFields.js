@@ -168,7 +168,12 @@ const STANDARD_FIELDS = {
     isMandatory: true,
     parsingOrder: 7,
     templateTypes: ['statement'],
-    aliases: ['total_balance', 'totalbalance', 'closing_balance', 'balance_due', 'amount_owed', 'total_owed']
+    // Aliases include printed-label variants seen on real statements; the resolver
+    // normalizes whitespace and dash glyphs, so we don't have to enumerate every spelling.
+    aliases: [
+      'total_balance', 'totalbalance', 'closing_balance', 'balance_due', 'amount_owed', 'total_owed',
+      'total balance', 'total balance gbp', 'total balance £', 'total outstanding', 'balance outstanding'
+    ]
   },
   currentAmount: {
     standardName: 'currentAmount',
@@ -188,8 +193,12 @@ const STANDARD_FIELDS = {
     isMandatory: false,
     parsingOrder: 14,
     templateTypes: ['statement'],
-    // Aliases use 1-3 underscore-separated parts so mapToStandardName can resolve them.
-    aliases: ['overdue_1to30', 'overdue30', 'overdue_30']
+    // Aliases use 1-3 underscore-separated parts so mapToStandardName can resolve them,
+    // plus printed-label variants (the resolver tightens whitespace around dashes).
+    aliases: [
+      'overdue_1to30', 'overdue30', 'overdue_30',
+      'overdue 1-30', '1-30 days', '1 to 30'
+    ]
   },
   overdue31To60: {
     standardName: 'overdue31To60',
@@ -199,7 +208,10 @@ const STANDARD_FIELDS = {
     isMandatory: false,
     parsingOrder: 15,
     templateTypes: ['statement'],
-    aliases: ['overdue_31to60', 'overdue60', 'overdue_60']
+    aliases: [
+      'overdue_31to60', 'overdue60', 'overdue_60',
+      'overdue 31-60', '31-60 days', '31 to 60'
+    ]
   },
   overdue61To90: {
     standardName: 'overdue61To90',
@@ -209,7 +221,10 @@ const STANDARD_FIELDS = {
     isMandatory: false,
     parsingOrder: 16,
     templateTypes: ['statement'],
-    aliases: ['overdue_61to90', 'overdue90', 'overdue_90']
+    aliases: [
+      'overdue_61to90', 'overdue90', 'overdue_90',
+      'overdue 61-90', '61-90 days', '61 to 90'
+    ]
   },
   overdue91Plus: {
     standardName: 'overdue91Plus',
@@ -219,9 +234,37 @@ const STANDARD_FIELDS = {
     isMandatory: false,
     parsingOrder: 17,
     templateTypes: ['statement'],
-    aliases: ['overdue_91plus', 'overdue91', 'overdue_91']
+    aliases: [
+      'overdue_91plus', 'overdue91', 'overdue_91',
+      'overdue 91+', 'overdue 91 plus', '91+ days', '91 plus days'
+    ]
   }
 };
+
+/**
+ * Normalize a field-name candidate for alias resolution.
+ * Backwards-compatible with prior callers (still strips trailing .: and trims),
+ * additionally:
+ *   - lowercases
+ *   - replaces NBSP-family Unicode spaces with normal spaces
+ *   - unifies dash glyphs (hyphen, en-dash, em-dash, minus) to '-'
+ *   - collapses runs of internal whitespace to a single space
+ *   - removes whitespace around dashes so "31 - 60" and "31-60" are equal
+ *
+ * The output of this function is what alias arrays must match against; existing
+ * snake_case lowercase aliases are unaffected by these rules.
+ */
+function normalizeFieldKey(fieldName) {
+  if (!fieldName) return '';
+  return String(fieldName)
+    .replace(/[\u00A0\u2007\u202F]/g, ' ')        // NBSP-family -> space
+    .replace(/[\u2010-\u2015\u2212]/g, '-')       // dash-family -> hyphen
+    .toLowerCase()
+    .replace(/[.:]+$/, '')                        // existing trailing-punct strip
+    .trim()
+    .replace(/\s+/g, ' ')                         // collapse internal whitespace
+    .replace(/\s*-\s*/g, '-');                    // tighten around dashes
+}
 
 /**
  * Get all mandatory fields for a specific template type
@@ -281,76 +324,95 @@ function getOptionalFields(templateType = 'invoice') {
 }
 
 /**
- * Get standard field by alias or name
+ * Get standard field by alias or name.
+ *
+ * @param {string} fieldName - the input field name (may be a printed label, alias, or standard name)
+ * @param {object} [options]
+ * @param {string|null} [options.templateType] - if provided, restrict resolution to fields whose
+ *   `templateTypes` includes this value (or fields with no `templateTypes` restriction). Defaults
+ *   to null which preserves prior global-lookup behaviour for existing callers.
+ *   Pass 'statement' from the statement-summary scan so generic tokens like 'current' don't pollute
+ *   invoice/credit-note resolution paths.
  */
-function getStandardField(fieldName) {
+function getStandardField(fieldName, { templateType = null } = {}) {
   if (!fieldName) return null;
-  
-  const normalized = fieldName.toLowerCase().replace(/[.:]+$/, '').trim();
-  
-  // Check direct match first
-  if (STANDARD_FIELDS[normalized]) {
+
+  const normalized = normalizeFieldKey(fieldName);
+  if (!normalized) return null;
+
+  const inScope = (field) =>
+    !templateType || !field.templateTypes || field.templateTypes.includes(templateType);
+
+  // Direct match by standard name (lowercased)
+  if (STANDARD_FIELDS[normalized] && inScope(STANDARD_FIELDS[normalized])) {
     return STANDARD_FIELDS[normalized];
   }
-  
-  // Check aliases (case-insensitive)
-  for (const [standardName, field] of Object.entries(STANDARD_FIELDS)) {
-    if (field.aliases.some(alias => alias.toLowerCase() === normalized)) {
+
+  // Match by alias - normalize each alias the same way so the comparison is symmetric
+  for (const field of Object.values(STANDARD_FIELDS)) {
+    if (!inScope(field)) continue;
+    if (field.aliases.some(alias => normalizeFieldKey(alias) === normalized)) {
       return field;
     }
   }
-  
-  // Also check if normalized matches standardName (case-insensitive)
+
+  // Case-insensitive match against standardName itself
   for (const [standardName, field] of Object.entries(STANDARD_FIELDS)) {
+    if (!inScope(field)) continue;
     if (standardName.toLowerCase() === normalized) {
       return field;
     }
   }
-  
+
   return null;
 }
 
 /**
  * Map a field name to its standard name
  * Handles template-prefixed names (e.g., "makita_invoice_template_document_type" → "documentType")
+ *
+ * Accepts the same `{ templateType }` option as getStandardField; defaults to null for
+ * backwards compatibility with existing callers.
  */
-function mapToStandardName(fieldName) {
+function mapToStandardName(fieldName, options = {}) {
   if (!fieldName) return null;
-  
+
   // If already a standard field name (camelCase), return it
   if (STANDARD_FIELDS[fieldName]) {
-    return fieldName;
+    const field = STANDARD_FIELDS[fieldName];
+    if (!options.templateType || !field.templateTypes || field.templateTypes.includes(options.templateType)) {
+      return fieldName;
+    }
   }
-  
-  // Normalize: remove trailing periods/colons and convert to lowercase
-  const normalized = fieldName.replace(/[.:]+$/, '').toLowerCase().trim();
-  
-  // Check if it's already a standard name (case-insensitive)
-  for (const [standardName] of Object.keys(STANDARD_FIELDS)) {
+
+  const normalized = normalizeFieldKey(fieldName);
+
+  // Check if it's already a standard name (case-insensitive, scoped)
+  for (const [standardName, field] of Object.entries(STANDARD_FIELDS)) {
+    if (options.templateType && field.templateTypes && !field.templateTypes.includes(options.templateType)) continue;
     if (standardName.toLowerCase() === normalized) {
       return standardName;
     }
   }
-  
+
   // Extract base field name (remove template prefix if present)
   // Template format: {template_code}_{field_name} or just {field_name}
-  let baseFieldName = normalized;
-  
-  // Try to extract the field name after the last underscore (common pattern)
-  const parts = normalized.split('_');
+  // Use underscore-form for splitting (replace any spaces) since our aliases use both shapes.
+  const underscoreNormalized = normalized.replace(/\s+/g, '_');
+  const parts = underscoreNormalized.split('_');
   if (parts.length > 1) {
     // Try last 2-3 parts (e.g., "document_type", "invoice_number", "date_tax_point")
     for (let i = Math.min(3, parts.length); i >= 1; i--) {
       const candidate = parts.slice(-i).join('_');
-      const field = getStandardField(candidate);
+      const field = getStandardField(candidate, options);
       if (field) {
         return field.standardName;
       }
     }
   }
-  
+
   // Check aliases
-  const field = getStandardField(normalized);
+  const field = getStandardField(normalized, options);
   return field ? field.standardName : null;
 }
 
@@ -413,6 +475,7 @@ function getFieldDisplayName(standardName) {
 
 module.exports = {
   STANDARD_FIELDS,
+  normalizeFieldKey,
   getMandatoryFields,
   getCrucialFields,
   getRequiredFields,

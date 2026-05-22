@@ -24,6 +24,7 @@
     "pm2:logs:scheduler": "pm2 logs invoice-portal-scheduler",
     "pm2:monit": "pm2 monit",
     "test:db": "node scripts/test-connection.js",
+    "test:routing": "node scripts/test-statement-routing.js",
     "create:admin": "node scripts/create-admin-user.js",
     "check": "node scripts/check-setup.js"
   },

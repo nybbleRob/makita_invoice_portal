@@ -1,6 +1,7 @@
 const { downloadFile, calculateFileHash, listFiles, moveFile } = require('../utils/ftp');
 const { File, Settings, User, Template, Company, Invoice, CreditNote, Statement } = require('../models');
 const { extractInvoiceData, extractTextFromPDF } = require('../utils/pdfExtractor');
+const { findCorpCompanyByAccountNumber, findOrCreateStatement } = require('../utils/statementImport');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -390,18 +391,29 @@ async function processFileImport(job) {
       // This is a CORE feature requirement
       let matchedCompanyId = null;
       let document = null;
+      // Set true when an existing Statement was paired (e.g. PDF+XLS for the same period)
+      // so downstream notification dispatch can skip the duplicate email.
+      let statementSecondFormatPairing = false;
       
       if (parsedData.accountNumber) {
-        // Try to find company by referenceNo (account number)
-        const company = await Company.findOne({
-          where: {
-            referenceNo: parsedData.accountNumber.toString().trim()
-          }
-        });
-        
+        // For statements, only match CORP companies - branches and subsidiaries
+        // never receive statements (the user's hard requirement). For invoices and
+        // credit notes keep the original behaviour: any company-type matches.
+        const isStatementImport = fileType === 'statement' || parsedData.documentType?.toLowerCase() === 'statement';
+        let company;
+        if (isStatementImport) {
+          company = await findCorpCompanyByAccountNumber(parsedData.accountNumber);
+        } else {
+          company = await Company.findOne({
+            where: {
+              referenceNo: parsedData.accountNumber.toString().trim()
+            }
+          });
+        }
+
         if (company) {
           matchedCompanyId = company.id;
-          console.log(`✅ Matched company: ${company.name} (Account: ${company.referenceNo})`);
+          console.log(`✅ Matched company: ${company.name} (Account: ${company.referenceNo}, Type: ${company.type || 'n/a'})`);
           
           // Create invoice/credit note/statement based on document type
           // Only create for INVOICE or CREDIT_NOTE document types
@@ -456,57 +468,45 @@ async function processFileImport(job) {
               console.error(`⚠️  Failed to create credit note:`, creditNoteError.message);
             }
           } else if (fileType === 'statement' || parsedData.documentType?.toLowerCase() === 'statement') {
-            // Statement creation (Phase 1: aging buckets stored in metadata.aging)
+            // Statement creation goes through the centralised helper so dedupe
+            // (companyId, periodEnd) and dual file slotting are handled in one place.
             try {
               const statementDate = parsedData.statementDate
                 ? new Date(parsedData.statementDate)
                 : (parsedData.date ? new Date(parsedData.date) : new Date());
-              const closingBalance = parseFloat(
-                String(parsedData.totalBalance || parsedData.amount || 0).replace(/[£$€,\s]/g, '')
-              ) || 0;
-              const fileIdSlice = (file.id || '').toString().substring(0, 8);
-              const statementDateIso = isNaN(statementDate.getTime())
-                ? new Date().toISOString().split('T')[0]
-                : statementDate.toISOString().split('T')[0];
-              const generatedStatementNumber = `STMT-${matchedCompanyId}-${statementDateIso}-${fileIdSlice}`;
 
-              const aging = {
-                currentAmount: parseFloat(String(parsedData.currentAmount || 0).replace(/[£$€,\s]/g, '')) || 0,
-                overdue1To30: parseFloat(String(parsedData.overdue1To30 || 0).replace(/[£$€,\s]/g, '')) || 0,
-                overdue31To60: parseFloat(String(parsedData.overdue31To60 || 0).replace(/[£$€,\s]/g, '')) || 0,
-                overdue61To90: parseFloat(String(parsedData.overdue61To90 || 0).replace(/[£$€,\s]/g, '')) || 0,
-                overdue91Plus: parseFloat(String(parsedData.overdue91Plus || 0).replace(/[£$€,\s]/g, '')) || 0,
-                totalBalance: closingBalance
-              };
-
-              document = await Statement.create({
-                statementNumber: generatedStatementNumber,
-                companyId: matchedCompanyId,
-                periodStart: statementDate,
-                periodEnd: statementDate,
-                openingBalance: 0,
-                closingBalance: closingBalance,
-                totalDebits: 0,
-                totalCredits: 0,
-                status: 'sent',
-                fileUrl: file.filePath,
-                metadata: {
+              const result = await findOrCreateStatement({
+                matchedCompanyId,
+                statementDate,
+                parsedData,
+                filePath: file.filePath,
+                fileMeta: {
                   source: 'ftp_import',
                   fileId: file.id,
-                  fileName: fileName,
-                  parsedData: parsedData,
-                  processingMethod: processingMethod,
-                  aging: aging
-                }
+                  fileName,
+                  processingMethod
+                },
+                settings
               });
+              document = result.statement;
 
-              console.log(`✅ Created statement: ${document.statementNumber} for company: ${company.name} (closingBalance=${closingBalance})`);
+              if (result.isNew) {
+                console.log(`✅ Created statement: ${document.statementNumber} for company: ${company.name} (closingBalance=${document.closingBalance}, slot=${result.fileSlot})`);
+              } else {
+                console.log(`🔁 Updated existing statement ${document.statementNumber} for company: ${company.name} (slot=${result.fileSlot}); not re-notifying.`);
+                // Suppress notification on second-format pairing.
+                statementSecondFormatPairing = true;
+              }
             } catch (statementError) {
-              console.error(`⚠️  Failed to create statement:`, statementError.message);
+              console.error(`⚠️  Failed to create/update statement:`, statementError.message);
             }
           }
         } else {
-          console.log(`⚠️  No company found with account number: ${parsedData.accountNumber}`);
+          if (isStatementImport) {
+            console.log(`⚠️  No CORP company found with account number: ${parsedData.accountNumber} - statement will not be created (statements only route to corporate accounts).`);
+          } else {
+            console.log(`⚠️  No company found with account number: ${parsedData.accountNumber}`);
+          }
           console.log(`   File will be marked as unallocated`);
         }
       } else {
@@ -589,46 +589,30 @@ async function processFileImport(job) {
               const statementDate = parsedData.statementDate
                 ? new Date(parsedData.statementDate)
                 : (parsedData.date ? new Date(parsedData.date) : new Date());
-              const closingBalance = parseFloat(
-                String(parsedData.totalBalance || parsedData.amount || 0).replace(/[£$€,\s]/g, '')
-              ) || 0;
-              const fileIdSlice = (file.id || '').toString().substring(0, 8);
-              const statementDateIso = isNaN(statementDate.getTime())
-                ? new Date().toISOString().split('T')[0]
-                : statementDate.toISOString().split('T')[0];
-              const generatedStatementNumber = `STMT-${matchedCompanyId}-${statementDateIso}-${fileIdSlice}`;
 
-              document = await Statement.create({
-                statementNumber: generatedStatementNumber,
-                companyId: matchedCompanyId,
-                periodStart: statementDate,
-                periodEnd: statementDate,
-                openingBalance: 0,
-                closingBalance: closingBalance,
-                totalDebits: 0,
-                totalCredits: 0,
-                status: 'sent',
-                fileUrl: file.filePath,
-                metadata: {
+              const result = await findOrCreateStatement({
+                matchedCompanyId,
+                statementDate,
+                parsedData,
+                filePath: file.filePath,
+                fileMeta: {
                   source: 'ftp_import',
                   fileId: file.id,
-                  fileName: fileName,
-                  parsedData: parsedData,
-                  processingMethod: processingMethod,
+                  fileName,
+                  processingMethod,
                   testModeAllocation: true,
-                  originalAccountNumber: parsedData.accountNumber || null,
-                  aging: {
-                    currentAmount: parseFloat(String(parsedData.currentAmount || 0).replace(/[£$€,\s]/g, '')) || 0,
-                    overdue1To30: parseFloat(String(parsedData.overdue1To30 || 0).replace(/[£$€,\s]/g, '')) || 0,
-                    overdue31To60: parseFloat(String(parsedData.overdue31To60 || 0).replace(/[£$€,\s]/g, '')) || 0,
-                    overdue61To90: parseFloat(String(parsedData.overdue61To90 || 0).replace(/[£$€,\s]/g, '')) || 0,
-                    overdue91Plus: parseFloat(String(parsedData.overdue91Plus || 0).replace(/[£$€,\s]/g, '')) || 0,
-                    totalBalance: closingBalance
-                  }
-                }
+                  originalAccountNumber: parsedData.accountNumber || null
+                },
+                settings
               });
+              document = result.statement;
 
-              console.log(`🧪 TEST MODE: Created statement: ${document.statementNumber} (test-allocated)`);
+              if (result.isNew) {
+                console.log(`🧪 TEST MODE: Created statement: ${document.statementNumber} (test-allocated, slot=${result.fileSlot})`);
+              } else {
+                console.log(`🧪 TEST MODE: Updated existing test-allocated statement (slot=${result.fileSlot}); not re-notifying.`);
+                statementSecondFormatPairing = true;
+              }
             } catch (statementError) {
               console.error(`⚠️  Failed to create test-allocated statement:`, statementError.message);
             }
@@ -738,7 +722,11 @@ async function processFileImport(job) {
               : (fileType === 'invoice' || parsedData.documentType?.toLowerCase() === 'invoice'
                   ? 'invoice'
                   : 'credit_note'))
-          : null
+          : null,
+        // When true, this file paired with an existing Statement (second format
+        // arrival, e.g. XLS for a statement that already had PDF). The batch
+        // notification dispatcher will skip queueing a duplicate email for it.
+        skipNotification: statementSecondFormatPairing
       };
     } else {
       // Parsing failed

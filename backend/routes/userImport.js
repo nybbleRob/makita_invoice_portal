@@ -123,7 +123,10 @@ async function processRowForPreview(row, rowNum, existingUsersMap, existingCompa
   const sendInvoiceEmailStr = getRowValue(row, ['Send Invoice Email', 'SendInvoiceEmail', 'Invoice Email', 'Send Upload Email']);
   const sendInvoiceAttachmentStr = getRowValue(row, ['With Attachment', 'WithAttachment', 'Invoice Attachment', 'Send Attachment']);
   const sendStatementEmailStr = getRowValue(row, ['Send Statement Email', 'SendStatementEmail', 'Statement Email']);
-  const sendStatementAttachmentStr = getRowValue(row, ['Statement Attachment', 'StatementAttachment']);
+  const sendStatementPdfAttachmentStr = getRowValue(row, ['Send Statement PDF Attachment', 'SendStatementPdfAttachment', 'Statement PDF Attachment']);
+  const sendStatementXlsAttachmentStr = getRowValue(row, ['Send Statement XLS Attachment', 'SendStatementXlsAttachment', 'Statement XLS Attachment', 'Send Statement Excel Attachment']);
+  // Legacy single-toggle column still accepted; falls through to both PDF + XLS columns when neither is provided.
+  const legacyStatementAttachmentStr = getRowValue(row, ['Statement Attachment', 'StatementAttachment', 'Send Statement Attachment', 'SendStatementAttachment']);
   const sendSummaryStr = getRowValue(row, ['Send Summary', 'SendSummary', 'Summary Email', 'Send Email As Summary']);
 
   // Validate required fields
@@ -184,7 +187,15 @@ async function processRowForPreview(row, rowNum, existingUsersMap, existingCompa
   const sendInvoiceEmail = parseBoolean(sendInvoiceEmailStr);
   const sendInvoiceAttachment = parseBoolean(sendInvoiceAttachmentStr);
   const sendStatementEmail = parseBoolean(sendStatementEmailStr);
-  const sendStatementAttachment = parseBoolean(sendStatementAttachmentStr);
+  const legacyStatementAttachment = legacyStatementAttachmentStr !== ''
+    ? parseBoolean(legacyStatementAttachmentStr)
+    : null;
+  const sendStatementPdfAttachment = sendStatementPdfAttachmentStr !== ''
+    ? parseBoolean(sendStatementPdfAttachmentStr)
+    : (legacyStatementAttachment === true);
+  const sendStatementXlsAttachment = sendStatementXlsAttachmentStr !== ''
+    ? parseBoolean(sendStatementXlsAttachmentStr)
+    : (legacyStatementAttachment === true);
   const sendEmailAsSummary = parseBoolean(sendSummaryStr);
 
   // Check if user already exists
@@ -252,7 +263,8 @@ async function processRowForPreview(row, rowNum, existingUsersMap, existingCompa
     sendInvoiceEmail,
     sendInvoiceAttachment,
     sendStatementEmail,
-    sendStatementAttachment,
+    sendStatementPdfAttachment,
+    sendStatementXlsAttachment,
     sendEmailAsSummary
   };
 
@@ -389,7 +401,8 @@ router.post('/', auth, requirePermission('USERS_IMPORT'), upload.single('file'),
             sendInvoiceEmail: data.sendInvoiceEmail,
             sendInvoiceAttachment: data.sendInvoiceAttachment,
             sendStatementEmail: data.sendStatementEmail,
-            sendStatementAttachment: data.sendStatementAttachment,
+            sendStatementPdfAttachment: data.sendStatementPdfAttachment,
+            sendStatementXlsAttachment: data.sendStatementXlsAttachment,
             sendEmailAsSummary: data.sendEmailAsSummary,
             addedById: req.user.userId
           }, { transaction });
@@ -405,7 +418,8 @@ router.post('/', auth, requirePermission('USERS_IMPORT'), upload.single('file'),
             sendInvoiceEmail: data.sendInvoiceEmail,
             sendInvoiceAttachment: data.sendInvoiceAttachment,
             sendStatementEmail: data.sendStatementEmail,
-            sendStatementAttachment: data.sendStatementAttachment,
+            sendStatementPdfAttachment: data.sendStatementPdfAttachment,
+            sendStatementXlsAttachment: data.sendStatementXlsAttachment,
             sendEmailAsSummary: data.sendEmailAsSummary
           }, { transaction });
 
@@ -481,10 +495,10 @@ router.post('/', auth, requirePermission('USERS_IMPORT'), upload.single('file'),
  * Download sample import template
  */
 router.get('/template', auth, requirePermission('USERS_IMPORT'), (req, res) => {
-  const csvContent = `Name,Email,Role,All Companies,Company Codes,Send Invoice Email,With Attachment,Send Statement Email,Statement Attachment,Send Summary
-John Doe,john@example.com,notification_contact,false,"1001,1002",true,false,true,false,false
-Jane Smith,jane@example.com,external_user,true,,true,true,true,true,true
-Bob Wilson,bob@example.com,staff,false,1003,true,false,false,false,false`;
+  const csvContent = `Name,Email,Role,All Companies,Company Codes,Send Invoice Email,With Attachment,Send Statement Email,Send Statement PDF Attachment,Send Statement XLS Attachment,Send Summary
+John Doe,john@example.com,notification_contact,false,"1001,1002",true,false,true,true,false,false
+Jane Smith,jane@example.com,external_user,true,,true,true,true,true,true,true
+Bob Wilson,bob@example.com,staff,false,1003,true,false,false,false,false,false`;
 
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename=user_import_template.csv');

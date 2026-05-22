@@ -29,7 +29,7 @@ import InvoiceEdit from './pages/InvoiceEdit';
 import CreditNotes from './pages/CreditNotes';
 import CreditNoteView from './pages/CreditNoteView';
 import CreditNoteEdit from './pages/CreditNoteEdit';
-// import Statements from './pages/Statements'; // Unused - route is commented out
+import Statements from './pages/Statements';
 import Unallocated from './pages/Unallocated';
 import UnallocatedView from './pages/UnallocatedView';
 import ActivityLogs from './pages/ActivityLogs';
@@ -206,8 +206,8 @@ function AppRoutes() {
         <Route path="credit-notes/:id/view" element={<CreditNoteView />} />
         <Route path="credit-notes/:id/edit" element={<PermissionRoute permission="CREDIT_NOTES_EDIT"><CreditNoteEdit /></PermissionRoute>} />
         
-        {/* Statements - HIDDEN until client decides on scope */}
-        {/* <Route path="statements" element={<PermissionRoute permission="STATEMENTS_VIEW"><Statements /></PermissionRoute>} /> */}
+        {/* Statements - permission-gated; visible to roles in STATEMENTS_VIEW */}
+        <Route path="statements" element={<PermissionRoute permission="STATEMENTS_VIEW"><Statements /></PermissionRoute>} />
         
         {/* Unallocated - GA, Admin, Manager */}
         <Route path="unallocated" element={<PermissionRoute permission="UNALLOCATED_VIEW"><Unallocated /></PermissionRoute>} />

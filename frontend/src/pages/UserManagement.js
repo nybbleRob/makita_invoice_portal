@@ -68,7 +68,8 @@ const UserManagement = () => {
     sendInvoiceEmail: false,
     sendInvoiceAttachment: false,
     sendStatementEmail: false,
-    sendStatementAttachment: false,
+    sendStatementPdfAttachment: false,
+    sendStatementXlsAttachment: false,
     sendEmailAsSummary: false,
     sendImportSummaryReport: false,
     companyIds: []
@@ -378,7 +379,11 @@ const UserManagement = () => {
     }
     if (name === 'sendStatementEmail' && !checked) {
       setFormData(prev => {
-        const updated = { ...prev, sendStatementAttachment: false };
+        const updated = {
+          ...prev,
+          sendStatementPdfAttachment: false,
+          sendStatementXlsAttachment: false
+        };
         // Also disable summary if both invoice and statement emails are disabled
         if (!prev.sendInvoiceEmail) {
           updated.sendEmailAsSummary = false;
@@ -478,7 +483,8 @@ const UserManagement = () => {
         sendInvoiceEmail: selectedUser.sendInvoiceEmail || false,
         sendInvoiceAttachment: selectedUser.sendInvoiceAttachment || false,
         sendStatementEmail: selectedUser.sendStatementEmail || false,
-        sendStatementAttachment: selectedUser.sendStatementAttachment || false,
+        sendStatementPdfAttachment: selectedUser.sendStatementPdfAttachment || false,
+        sendStatementXlsAttachment: selectedUser.sendStatementXlsAttachment || false,
         sendEmailAsSummary: selectedUser.sendEmailAsSummary || false,
         sendImportSummaryReport: selectedUser.sendImportSummaryReport || false
       }));
@@ -505,7 +511,7 @@ const UserManagement = () => {
         toast.error('Cannot send invoice attachments without enabling invoice emails');
         return;
       }
-      if (formData.sendStatementAttachment && !formData.sendStatementEmail) {
+      if ((formData.sendStatementPdfAttachment || formData.sendStatementXlsAttachment) && !formData.sendStatementEmail) {
         toast.error('Cannot send statement attachments without enabling statement emails');
         return;
       }
@@ -546,7 +552,8 @@ const UserManagement = () => {
       sendInvoiceEmail: false,
       sendInvoiceAttachment: false,
       sendStatementEmail: false,
-      sendStatementAttachment: false,
+      sendStatementPdfAttachment: false,
+      sendStatementXlsAttachment: false,
       sendEmailAsSummary: false,
       sendImportSummaryReport: false,
       companyIds: []
@@ -573,7 +580,7 @@ const UserManagement = () => {
         toast.error('Cannot send invoice attachments without enabling invoice emails');
         return;
       }
-      if (formData.sendStatementAttachment && !formData.sendStatementEmail) {
+      if ((formData.sendStatementPdfAttachment || formData.sendStatementXlsAttachment) && !formData.sendStatementEmail) {
         toast.error('Cannot send statement attachments without enabling statement emails');
         return;
       }
@@ -869,7 +876,8 @@ const UserManagement = () => {
       sendInvoiceEmail: user.sendInvoiceEmail || false,
       sendInvoiceAttachment: user.sendInvoiceAttachment || false,
       sendStatementEmail: user.sendStatementEmail || false,
-      sendStatementAttachment: user.sendStatementAttachment || false,
+      sendStatementPdfAttachment: user.sendStatementPdfAttachment || false,
+      sendStatementXlsAttachment: user.sendStatementXlsAttachment || false,
       sendEmailAsSummary: user.sendEmailAsSummary || false,
       sendImportSummaryReport: user.sendImportSummaryReport || false,
       companyIds: []
@@ -2119,18 +2127,38 @@ const UserManagement = () => {
                               </label>
                             </div>
                             <div className="col-6">
-                              <label 
-                                className="row g-0 p-2 border" 
+                              <label
+                                className="row g-0 p-2 border"
                                 style={{ cursor: formData.sendStatementEmail ? 'pointer' : 'default', opacity: formData.sendStatementEmail ? 1 : 0.5 }}
                               >
-                                <span className="col small">With Attachment</span>
+                                <span className="col small">PDF Attachment</span>
                                 <span className="col-auto">
                                   <label className="form-check form-check-single form-switch mb-0">
                                     <input
                                       type="checkbox"
                                       className="form-check-input"
-                                      name="sendStatementAttachment"
-                                      checked={formData.sendStatementAttachment || false}
+                                      name="sendStatementPdfAttachment"
+                                      checked={formData.sendStatementPdfAttachment || false}
+                                      onChange={handleInputChange}
+                                      disabled={!formData.sendStatementEmail}
+                                    />
+                                  </label>
+                                </span>
+                              </label>
+                            </div>
+                            <div className="col-6 offset-6">
+                              <label
+                                className="row g-0 p-2 border"
+                                style={{ cursor: formData.sendStatementEmail ? 'pointer' : 'default', opacity: formData.sendStatementEmail ? 1 : 0.5 }}
+                              >
+                                <span className="col small">XLS Attachment</span>
+                                <span className="col-auto">
+                                  <label className="form-check form-check-single form-switch mb-0">
+                                    <input
+                                      type="checkbox"
+                                      className="form-check-input"
+                                      name="sendStatementXlsAttachment"
+                                      checked={formData.sendStatementXlsAttachment || false}
                                       onChange={handleInputChange}
                                       disabled={!formData.sendStatementEmail}
                                     />

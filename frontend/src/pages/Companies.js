@@ -81,7 +81,8 @@ const Companies = () => {
     sendInvoiceEmail: false,
     sendInvoiceAttachment: false,
     sendStatementEmail: false,
-    sendStatementAttachment: false,
+    sendStatementPdfAttachment: false,
+    sendStatementXlsAttachment: false,
     sendEmailAsSummary: false,
     parentId: null,
     isActive: true,
@@ -585,11 +586,12 @@ const Companies = () => {
     try {
       await Promise.all(
         selectedCompanyIds.map((companyId) => 
-          api.put(`/api/companies/${companyId}`, { 
+          api.put(`/api/companies/${companyId}`, {
             sendInvoiceEmail: enabled,
             sendInvoiceAttachment: enabled,
             sendStatementEmail: enabled,
-            sendStatementAttachment: enabled
+            sendStatementPdfAttachment: enabled,
+            sendStatementXlsAttachment: enabled
           })
         )
       );
@@ -662,7 +664,8 @@ const Companies = () => {
     sendInvoiceEmail: false,
     sendInvoiceAttachment: false,
     sendStatementEmail: false,
-    sendStatementAttachment: false,
+    sendStatementPdfAttachment: false,
+    sendStatementXlsAttachment: false,
     sendEmailAsSummary: false,
     parentId: null,
     isActive: true,
@@ -698,7 +701,8 @@ const Companies = () => {
       sendInvoiceEmail: company.sendInvoiceEmail || false,
       sendInvoiceAttachment: company.sendInvoiceAttachment || false,
       sendStatementEmail: company.sendStatementEmail || false,
-      sendStatementAttachment: company.sendStatementAttachment || false,
+      sendStatementPdfAttachment: company.sendStatementPdfAttachment || false,
+      sendStatementXlsAttachment: company.sendStatementXlsAttachment || false,
       sendEmailAsSummary: company.sendEmailAsSummary || false,
       parentId: company.parentId || null,
       isActive: company.isActive !== undefined ? company.isActive : true,
@@ -744,7 +748,8 @@ const Companies = () => {
         sendInvoiceEmail: companyFormData.sendInvoiceEmail || false,
         sendInvoiceAttachment: companyFormData.sendInvoiceAttachment || false,
         sendStatementEmail: companyFormData.sendStatementEmail || false,
-        sendStatementAttachment: companyFormData.sendStatementAttachment || false,
+        sendStatementPdfAttachment: companyFormData.sendStatementPdfAttachment || false,
+        sendStatementXlsAttachment: companyFormData.sendStatementXlsAttachment || false,
         sendEmailAsSummary: companyFormData.sendEmailAsSummary || false,
         isActive: editingCompany ? companyFormData.isActive : true,
         address: companyFormData.address

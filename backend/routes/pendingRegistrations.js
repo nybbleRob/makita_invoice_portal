@@ -218,10 +218,20 @@ router.post('/:id/approve', async (req, res) => {
       sendInvoiceEmail = false,
       sendInvoiceAttachment = false,
       sendStatementEmail = false,
-      sendStatementAttachment = false,
+      sendStatementAttachment,
+      sendStatementPdfAttachment: bodyPdfAttach,
+      sendStatementXlsAttachment: bodyXlsAttach,
       sendEmailAsSummary = false,
       sendImportSummaryReport = false
     } = req.body;
+
+    // Legacy single-toggle still supported; fans out to both PDF + XLS toggles.
+    const sendStatementPdfAttachment = bodyPdfAttach !== undefined
+      ? bodyPdfAttach
+      : (sendStatementAttachment !== undefined ? sendStatementAttachment : false);
+    const sendStatementXlsAttachment = bodyXlsAttach !== undefined
+      ? bodyXlsAttach
+      : (sendStatementAttachment !== undefined ? sendStatementAttachment : false);
     
     const registration = await PendingRegistration.findByPk(req.params.id);
     if (!registration) {
@@ -285,7 +295,8 @@ router.post('/:id/approve', async (req, res) => {
       sendInvoiceEmail: sendInvoiceEmail || false,
       sendInvoiceAttachment: sendInvoiceAttachment || false,
       sendStatementEmail: sendStatementEmail || false,
-      sendStatementAttachment: sendStatementAttachment || false,
+      sendStatementPdfAttachment: sendStatementPdfAttachment || false,
+      sendStatementXlsAttachment: sendStatementXlsAttachment || false,
       sendEmailAsSummary: sendEmailAsSummary || false,
       sendImportSummaryReport: sendImportSummaryReport || false
     });

@@ -19,13 +19,44 @@ const ExcelTemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
   
   const templateCode = getTemplateCode();
   
-  // Required fields - these are the ONLY fields needed
-  const REQUIRED_FIELDS = [
-    { fieldName: 'account_no', label: 'Account No', mapsTo: 'accountNumber', required: true },
-    { fieldName: 'invoice_number', label: 'Invoice No', mapsTo: 'invoiceNumber', required: true },
-    { fieldName: 'document_type', label: 'Document Type', mapsTo: 'documentType', required: true },
-    { fieldName: 'invoice_total', label: 'Invoice Total', mapsTo: 'amount', required: true },
-    { fieldName: 'vat_amount', label: 'VAT Amount', mapsTo: 'vatAmount', required: true }
+  // Required fields by template type. Statement templates only ask for the header
+  // block (account, document type, statement date) - the aging/total summary row is
+  // auto-discovered by the parser at import time because its row position floats with
+  // the variable-length invoice list above it.
+  const REQUIRED_FIELDS_BY_TYPE = {
+    invoice: [
+      { fieldName: 'account_no', label: 'Account No', mapsTo: 'accountNumber', required: true },
+      { fieldName: 'invoice_number', label: 'Invoice No', mapsTo: 'invoiceNumber', required: true },
+      { fieldName: 'document_type', label: 'Document Type', mapsTo: 'documentType', required: true },
+      { fieldName: 'invoice_total', label: 'Invoice Total', mapsTo: 'amount', required: true },
+      { fieldName: 'vat_amount', label: 'VAT Amount', mapsTo: 'vatAmount', required: true }
+    ],
+    credit_note: [
+      { fieldName: 'account_no', label: 'Account No', mapsTo: 'accountNumber', required: true },
+      { fieldName: 'credit_number', label: 'Credit No', mapsTo: 'creditNumber', required: true },
+      { fieldName: 'document_type', label: 'Document Type', mapsTo: 'documentType', required: true },
+      { fieldName: 'invoice_total', label: 'Total', mapsTo: 'amount', required: true },
+      { fieldName: 'vat_amount', label: 'VAT Amount', mapsTo: 'vatAmount', required: true }
+    ],
+    statement: [
+      { fieldName: 'account_no', label: 'Account No', mapsTo: 'accountNumber', required: true },
+      { fieldName: 'document_type', label: 'Document Type', mapsTo: 'documentType', required: true },
+      { fieldName: 'statement_date', label: 'Statement Date', mapsTo: 'statementDate', required: true }
+    ]
+  };
+
+  const REQUIRED_FIELDS = REQUIRED_FIELDS_BY_TYPE[templateType] || REQUIRED_FIELDS_BY_TYPE.invoice;
+
+  // Statement-only: these are extracted automatically from the summary row at the
+  // bottom of the table by the parser, so they don't need a fixed-cell mapping.
+  // The panel below the field mapper makes this visible to the user.
+  const AUTO_DETECTED_STATEMENT_FIELDS = [
+    { label: 'Total Balance', mapsTo: 'totalBalance' },
+    { label: 'Current', mapsTo: 'currentAmount' },
+    { label: 'Overdue 1-30', mapsTo: 'overdue1To30' },
+    { label: 'Overdue 31-60', mapsTo: 'overdue31To60' },
+    { label: 'Overdue 61-90', mapsTo: 'overdue61To90' },
+    { label: 'Overdue 91+', mapsTo: 'overdue91Plus' }
   ];
   
   // Get field ID with template code prefix
@@ -638,6 +669,21 @@ const ExcelTemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
                 </table>
               </div>
               
+              {templateType === 'statement' && (
+                <div className="alert alert-info mt-3 mb-0" style={{ fontSize: '0.875rem' }}>
+                  <div className="fw-bold mb-1">Auto-detected from statement footer</div>
+                  <div className="text-muted mb-2" style={{ fontSize: '0.8125rem' }}>
+                    These values are located by label at import time, so you don't need
+                    to map them - they work even when the row position changes between statements.
+                  </div>
+                  <div className="d-flex flex-wrap gap-1">
+                    {AUTO_DETECTED_STATEMENT_FIELDS.map(f => (
+                      <span key={f.mapsTo} className="badge bg-info text-white">{f.label}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="mt-3">
                 <button
                   className="btn btn-outline-primary btn-sm w-100 mb-2"

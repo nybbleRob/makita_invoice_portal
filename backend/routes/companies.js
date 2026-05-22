@@ -667,9 +667,19 @@ router.post('/', requirePermission('COMPANIES_CREATE'), async (req, res) => {
       sendInvoiceAttachment,
       sendStatementEmail,
       sendStatementAttachment,
+      sendStatementPdfAttachment: bodyPdfAttach,
+      sendStatementXlsAttachment: bodyXlsAttach,
       sendEmailAsSummary,
       metadata
     } = req.body;
+
+    // Legacy single-toggle fans out to both PDF + XLS for backwards compatibility.
+    const sendStatementPdfAttachment = bodyPdfAttach !== undefined
+      ? bodyPdfAttach
+      : (sendStatementAttachment !== undefined ? sendStatementAttachment : undefined);
+    const sendStatementXlsAttachment = bodyXlsAttach !== undefined
+      ? bodyXlsAttach
+      : (sendStatementAttachment !== undefined ? sendStatementAttachment : undefined);
     
     // Validation
     if (!name) {
@@ -734,7 +744,8 @@ router.post('/', requirePermission('COMPANIES_CREATE'), async (req, res) => {
       sendInvoiceEmail: sendInvoiceEmail !== undefined ? sendInvoiceEmail : false,
       sendInvoiceAttachment: sendInvoiceAttachment !== undefined ? sendInvoiceAttachment : false,
       sendStatementEmail: sendStatementEmail !== undefined ? sendStatementEmail : false,
-      sendStatementAttachment: sendStatementAttachment !== undefined ? sendStatementAttachment : false,
+      sendStatementPdfAttachment: sendStatementPdfAttachment !== undefined ? sendStatementPdfAttachment : false,
+      sendStatementXlsAttachment: sendStatementXlsAttachment !== undefined ? sendStatementXlsAttachment : false,
       sendEmailAsSummary: sendEmailAsSummary !== undefined ? sendEmailAsSummary : false,
       phone: phone || null,
       address: address || {},
@@ -803,8 +814,19 @@ router.put('/bulk-update-all', auth, globalAdmin, async (req, res) => {
       'sendInvoiceEmail',
       'sendInvoiceAttachment',
       'sendStatementEmail',
-      'sendStatementAttachment'
+      'sendStatementPdfAttachment',
+      'sendStatementXlsAttachment'
     ];
+
+    // Accept legacy `sendStatementAttachment` and fan out to both new toggles.
+    if (updateData.sendStatementAttachment !== undefined) {
+      if (updateData.sendStatementPdfAttachment === undefined) {
+        updateData.sendStatementPdfAttachment = updateData.sendStatementAttachment;
+      }
+      if (updateData.sendStatementXlsAttachment === undefined) {
+        updateData.sendStatementXlsAttachment = updateData.sendStatementAttachment;
+      }
+    }
     
     // Filter to only allowed fields
     const filteredUpdate = {};
@@ -904,6 +926,8 @@ router.put('/:id', requirePermission('COMPANIES_EDIT'), async (req, res) => {
       sendInvoiceAttachment,
       sendStatementEmail,
       sendStatementAttachment,
+      sendStatementPdfAttachment: bodyPdfAttach,
+      sendStatementXlsAttachment: bodyXlsAttach,
       sendEmailAsSummary,
       phone,
       address,
@@ -914,6 +938,14 @@ router.put('/:id', requirePermission('COMPANIES_EDIT'), async (req, res) => {
       edi,
       metadata
     } = req.body;
+
+    // Legacy single-toggle fans out to both PDF + XLS for backwards compatibility.
+    const sendStatementPdfAttachment = bodyPdfAttach !== undefined
+      ? bodyPdfAttach
+      : (sendStatementAttachment !== undefined ? sendStatementAttachment : undefined);
+    const sendStatementXlsAttachment = bodyXlsAttach !== undefined
+      ? bodyXlsAttach
+      : (sendStatementAttachment !== undefined ? sendStatementAttachment : undefined);
     
     // Verify primaryContact exists if provided
     if (primaryContactId !== undefined && primaryContactId !== null) {
@@ -978,7 +1010,8 @@ router.put('/:id', requirePermission('COMPANIES_EDIT'), async (req, res) => {
     if (sendInvoiceEmail !== undefined) company.sendInvoiceEmail = sendInvoiceEmail;
     if (sendInvoiceAttachment !== undefined) company.sendInvoiceAttachment = sendInvoiceAttachment;
     if (sendStatementEmail !== undefined) company.sendStatementEmail = sendStatementEmail;
-    if (sendStatementAttachment !== undefined) company.sendStatementAttachment = sendStatementAttachment;
+    if (sendStatementPdfAttachment !== undefined) company.sendStatementPdfAttachment = sendStatementPdfAttachment;
+    if (sendStatementXlsAttachment !== undefined) company.sendStatementXlsAttachment = sendStatementXlsAttachment;
     if (sendEmailAsSummary !== undefined) company.sendEmailAsSummary = sendEmailAsSummary;
     if (phone !== undefined) company.phone = phone;
     if (address !== undefined) company.address = address;
@@ -1291,7 +1324,8 @@ router.get('/:id/relationships', auth, async (req, res) => {
         sendInvoiceEmail: company.sendInvoiceEmail,
         sendInvoiceAttachment: company.sendInvoiceAttachment,
         sendStatementEmail: company.sendStatementEmail,
-        sendStatementAttachment: company.sendStatementAttachment,
+        sendStatementPdfAttachment: company.sendStatementPdfAttachment,
+        sendStatementXlsAttachment: company.sendStatementXlsAttachment,
         sendEmailAsSummary: company.sendEmailAsSummary,
         metadata: company.metadata
       },
@@ -1599,7 +1633,8 @@ async function processRowForPreview(row, rowNum, existingCompaniesMap, csvCompan
       sendInvoiceEmail: edi ? false : undefined,
       sendInvoiceAttachment: edi ? false : undefined,
       sendStatementEmail: edi ? false : undefined,
-      sendStatementAttachment: edi ? false : undefined,
+      sendStatementPdfAttachment: edi ? false : undefined,
+      sendStatementXlsAttachment: edi ? false : undefined,
       sendEmailAsSummary: edi ? false : undefined,
       metadata: {
         receivesStatements: statements === 'Y' || statements === 'y' || statements === 'Yes' || statements === '1',
@@ -2147,7 +2182,8 @@ router.post('/import', auth, upload.single('file'), async (req, res) => {
           companyData.sendInvoiceEmail = false;
           companyData.sendInvoiceAttachment = false;
           companyData.sendStatementEmail = false;
-          companyData.sendStatementAttachment = false;
+          companyData.sendStatementPdfAttachment = false;
+          companyData.sendStatementXlsAttachment = false;
           companyData.sendEmailAsSummary = false;
         }
 
@@ -2287,7 +2323,8 @@ router.post('/import', auth, upload.single('file'), async (req, res) => {
                   sendInvoiceEmail: false,
                   sendInvoiceAttachment: false,
                   sendStatementEmail: false,
-                  sendStatementAttachment: false,
+                  sendStatementPdfAttachment: false,
+                  sendStatementXlsAttachment: false,
                   sendEmailAsSummary: false,
                   allCompanies: false
                 });
@@ -2375,7 +2412,8 @@ router.post('/import', auth, upload.single('file'), async (req, res) => {
                     sendInvoiceEmail: false,
                     sendInvoiceAttachment: false,
                     sendStatementEmail: false,
-                    sendStatementAttachment: false,
+                    sendStatementPdfAttachment: false,
+                    sendStatementXlsAttachment: false,
                     sendEmailAsSummary: false,
                     allCompanies: false
                   });
@@ -2642,9 +2680,19 @@ router.post('/:id/notification-contact', auth, async (req, res) => {
       sendInvoiceEmail = true,
       sendInvoiceAttachment = false,
       sendStatementEmail = true,
-      sendStatementAttachment = false,
+      sendStatementAttachment,
+      sendStatementPdfAttachment: bodyPdfAttach,
+      sendStatementXlsAttachment: bodyXlsAttach,
       sendEmailAsSummary = false
     } = req.body;
+
+    // Legacy single-toggle fans out to both PDF + XLS for backwards compatibility.
+    const sendStatementPdfAttachment = bodyPdfAttach !== undefined
+      ? bodyPdfAttach
+      : (sendStatementAttachment !== undefined ? sendStatementAttachment : false);
+    const sendStatementXlsAttachment = bodyXlsAttach !== undefined
+      ? bodyXlsAttach
+      : (sendStatementAttachment !== undefined ? sendStatementAttachment : false);
     
     // Validation - email is required, name is optional
     if (!email) {
@@ -2674,7 +2722,8 @@ router.post('/:id/notification-contact', auth, async (req, res) => {
         sendInvoiceEmail,
         sendInvoiceAttachment,
         sendStatementEmail,
-        sendStatementAttachment,
+        sendStatementPdfAttachment,
+        sendStatementXlsAttachment,
         sendEmailAsSummary
       });
       
@@ -2684,7 +2733,8 @@ router.post('/:id/notification-contact', auth, async (req, res) => {
         company.sendInvoiceEmail = sendInvoiceEmail;
         company.sendInvoiceAttachment = sendInvoiceAttachment;
         company.sendStatementEmail = sendStatementEmail;
-        company.sendStatementAttachment = sendStatementAttachment;
+        company.sendStatementPdfAttachment = sendStatementPdfAttachment;
+        company.sendStatementXlsAttachment = sendStatementXlsAttachment;
         company.sendEmailAsSummary = sendEmailAsSummary;
         await company.save();
       }
@@ -2699,7 +2749,8 @@ router.post('/:id/notification-contact', auth, async (req, res) => {
           sendInvoiceEmail,
           sendInvoiceAttachment,
           sendStatementEmail,
-          sendStatementAttachment,
+          sendStatementPdfAttachment,
+          sendStatementXlsAttachment,
           sendEmailAsSummary,
           isNew: false
         },
@@ -2721,7 +2772,8 @@ router.post('/:id/notification-contact', auth, async (req, res) => {
       sendInvoiceEmail,
       sendInvoiceAttachment,
       sendStatementEmail,
-      sendStatementAttachment,
+      sendStatementPdfAttachment,
+      sendStatementXlsAttachment,
       sendEmailAsSummary,
       allCompanies: false
     });
@@ -2732,7 +2784,8 @@ router.post('/:id/notification-contact', auth, async (req, res) => {
       company.sendInvoiceEmail = sendInvoiceEmail;
       company.sendInvoiceAttachment = sendInvoiceAttachment;
       company.sendStatementEmail = sendStatementEmail;
-      company.sendStatementAttachment = sendStatementAttachment;
+      company.sendStatementPdfAttachment = sendStatementPdfAttachment;
+      company.sendStatementXlsAttachment = sendStatementXlsAttachment;
       company.sendEmailAsSummary = sendEmailAsSummary;
       await company.save();
     }
@@ -2758,7 +2811,7 @@ router.post('/:id/notification-contact', auth, async (req, res) => {
         companyId: company.id,
         companyName: company.name,
         setAsPrimary: setAsPrimary,
-        notificationSettings: { sendInvoiceEmail, sendInvoiceAttachment, sendStatementEmail, sendStatementAttachment, sendEmailAsSummary }
+        notificationSettings: { sendInvoiceEmail, sendInvoiceAttachment, sendStatementEmail, sendStatementPdfAttachment, sendStatementXlsAttachment, sendEmailAsSummary }
       },
       companyId: company.id,
       companyName: company.name,
@@ -2776,7 +2829,8 @@ router.post('/:id/notification-contact', auth, async (req, res) => {
         sendInvoiceEmail,
         sendInvoiceAttachment,
         sendStatementEmail,
-        sendStatementAttachment,
+        sendStatementPdfAttachment,
+        sendStatementXlsAttachment,
         sendEmailAsSummary,
         isNew: true
       },
@@ -2802,7 +2856,8 @@ router.get('/:id/assigned-users', auth, async (req, res) => {
         required: false,
         attributes: ['id', 'name', 'email', 'role', 'isActive', 
           'sendInvoiceEmail', 'sendInvoiceAttachment', 
-          'sendStatementEmail', 'sendStatementAttachment', 
+          'sendStatementEmail',
+          'sendStatementPdfAttachment', 'sendStatementXlsAttachment',
           'sendEmailAsSummary']
       }]
     });
@@ -2837,7 +2892,8 @@ router.get('/:id/assigned-users', auth, async (req, res) => {
       where: { isActive: true },
       attributes: ['id', 'name', 'email', 'role', 'isActive',
         'sendInvoiceEmail', 'sendInvoiceAttachment',
-        'sendStatementEmail', 'sendStatementAttachment',
+        'sendStatementEmail',
+        'sendStatementPdfAttachment', 'sendStatementXlsAttachment',
         'sendEmailAsSummary']
     });
     
@@ -2855,7 +2911,8 @@ router.get('/:id/assigned-users', auth, async (req, res) => {
         sendInvoiceEmail: userData.sendInvoiceEmail || false,
         sendInvoiceAttachment: userData.sendInvoiceAttachment || false,
         sendStatementEmail: userData.sendStatementEmail || false,
-        sendStatementAttachment: userData.sendStatementAttachment || false,
+        sendStatementPdfAttachment: userData.sendStatementPdfAttachment || false,
+        sendStatementXlsAttachment: userData.sendStatementXlsAttachment || false,
         sendEmailAsSummary: userData.sendEmailAsSummary || false
       };
     });

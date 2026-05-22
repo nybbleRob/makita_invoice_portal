@@ -10,8 +10,7 @@ module.exports = (sequelize) => {
     statementNumber: {
       type: DataTypes.STRING,
       allowNull: false,
-      unique: true,
-      comment: 'Unique statement number/identifier'
+      comment: 'Statement number/identifier (uniqueness now enforced by composite (companyId, periodEnd))'
     },
     companyId: {
       type: DataTypes.UUID,
@@ -70,7 +69,17 @@ module.exports = (sequelize) => {
     fileUrl: {
       type: DataTypes.STRING,
       allowNull: true,
-      comment: 'URL to statement PDF/document'
+      comment: 'Legacy single-file URL. Mirrors whichever format arrived first; new code should read pdfFileUrl/xlsFileUrl.'
+    },
+    pdfFileUrl: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Path to the PDF rendition of this statement'
+    },
+    xlsFileUrl: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Path to the XLS/XLSX rendition of this statement'
     },
     metadata: {
       type: DataTypes.JSONB,
@@ -146,14 +155,18 @@ module.exports = (sequelize) => {
         fields: ['companyId']
       },
       {
-        fields: ['statementNumber'],
-        unique: true
+        fields: ['statementNumber']
       },
       {
         fields: ['periodStart', 'periodEnd']
       },
       {
         fields: ['status']
+      },
+      {
+        name: 'statements_company_period_end_unique',
+        fields: ['companyId', 'periodEnd'],
+        unique: true
       }
     ]
   });

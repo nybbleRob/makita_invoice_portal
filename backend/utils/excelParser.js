@@ -5,6 +5,7 @@
 
 const XLSX = require('xlsx');
 const XLSX_CALC = require('xlsx-calc');
+const { getStandardField, normalizeFieldKey } = require('./standardFields');
 
 /**
  * Convert column letter to number (A=1, B=2, ..., Z=26, AA=27, etc.)
@@ -28,6 +29,120 @@ function numberToColumn(num) {
     num = Math.floor(num / 26);
   }
   return result;
+}
+
+/**
+ * Coerce a raw cell value (number, string, formula result) into a clean 2dp decimal.
+ *
+ * Handles:
+ *  - currency symbols and commas/whitespace ("£1,234.56" -> 1234.56)
+ *  - accounting-style negatives in parentheses ("(3,260.40)" -> -3260.40)
+ *  - sub-half-penny floating-point noise (e.g. -2.1e-12 -> 0)
+ *  - non-finite or unparsable inputs -> 0
+ *
+ * Always returns a Number rounded to 2dp.
+ */
+function cleanNumeric(raw) {
+  if (raw === null || raw === undefined || raw === '') return 0;
+
+  let s = typeof raw === 'number' ? String(raw) : String(raw).trim();
+  if (!s) return 0;
+
+  // Accounting-style negative: "(3,260.40)" -> -3260.40
+  let negate = false;
+  const parens = s.match(/^\((.+)\)$/);
+  if (parens) {
+    negate = true;
+    s = parens[1];
+  }
+
+  // Strip currency glyphs and grouping separators; keep digits, minus, dot, scientific.
+  const cleaned = s.replace(/[£$€¥₹,\s]/g, '');
+  const n = parseFloat(cleaned);
+  if (!Number.isFinite(n)) return 0;
+
+  // Squash floating-point noise that wouldn't round to a non-zero penny.
+  if (Math.abs(n) < 0.005) return 0;
+
+  return Math.round((negate ? -n : n) * 100) / 100;
+}
+
+/**
+ * Auto-discover the statement summary row by scanning every cell, normalizing each
+ * text value, and resolving it to a statement-only standard field via getStandardField.
+ *
+ * A row qualifies as the summary row only if at least 3 of the 6 aging/total labels
+ * resolve there (confidence threshold), so a stray cell containing "Current" elsewhere
+ * on the sheet won't trigger a false match.
+ *
+ * Returns { labelRow, labelColumns: { fieldName -> colIndex } } or null if no row qualifies.
+ */
+function findStatementSummaryRow(worksheet) {
+  if (!worksheet || !worksheet['!ref']) return null;
+
+  const range = XLSX.utils.decode_range(worksheet['!ref']);
+  const targets = new Set([
+    'currentAmount', 'overdue1To30', 'overdue31To60',
+    'overdue61To90', 'overdue91Plus', 'totalBalance'
+  ]);
+
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    const labelColumns = {};
+
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+      const cell = worksheet[cellAddress];
+      if (!cell) continue;
+
+      // Only consider text cells - skip numbers (avoids matching numeric content).
+      const rawText = (cell.t === 's' || cell.t === 'str')
+        ? String(cell.v != null ? cell.v : '')
+        : (typeof cell.v === 'string' ? cell.v : null);
+      if (!rawText) continue;
+
+      // Strip £/$/€/colons before resolving so labels like "Total Balance £" match.
+      const stripped = rawText.replace(/[£$€:]/g, '').trim();
+      if (!stripped) continue;
+
+      const normalized = normalizeFieldKey(stripped);
+      if (!normalized) continue;
+
+      const field = getStandardField(stripped, { templateType: 'statement' });
+      if (field && targets.has(field.standardName) && labelColumns[field.standardName] === undefined) {
+        labelColumns[field.standardName] = C;
+      }
+    }
+
+    if (Object.keys(labelColumns).length >= 3) {
+      return { labelRow: R, labelColumns };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Read the statement summary values from the row immediately under the discovered labels.
+ * Returns an object keyed by the same standard field names (currentAmount etc.) with
+ * cleanNumeric-normalized numeric values. Missing labels are simply absent from the result.
+ */
+function extractStatementSummaryValues(worksheet, summary) {
+  if (!summary || !summary.labelColumns) return {};
+
+  const out = {};
+  const valueRow = summary.labelRow + 1;
+  for (const [stdName, col] of Object.entries(summary.labelColumns)) {
+    const cellAddress = XLSX.utils.encode_cell({ r: valueRow, c: col });
+    const cell = worksheet[cellAddress];
+    if (!cell) {
+      out[stdName] = 0;
+      continue;
+    }
+    // Prefer cell.v (raw value) for numerics; cell.w (formatted) for strings.
+    const raw = cell.v !== undefined && cell.v !== null ? cell.v : cell.w;
+    out[stdName] = cleanNumeric(raw);
+  }
+  return out;
 }
 
 /**
@@ -377,6 +492,31 @@ async function extractFieldsFromExcel(excelFile, template) {
     }
   }
 
+  // Statement-only auto-discovery for the floating summary row.
+  // The aging/total values sit immediately after the variable-length invoice list,
+  // so their row index changes from one statement to the next. We locate the row
+  // by label (alias-resolved, normalized for whitespace/dash glyphs) and read the
+  // values from the row directly underneath, by column position. Auto-discovered
+  // values take precedence over any (likely-stale) fixed-cell mapping for these
+  // fields, so users don't have to update old templates by hand.
+  if (template.templateType === 'statement') {
+    const lastSheet = workbook.Sheets[sheetNames[lastSheetIndex]];
+    const summary = findStatementSummaryRow(lastSheet);
+
+    if (summary) {
+      const values = extractStatementSummaryValues(lastSheet, summary);
+      const found = Object.keys(values);
+      if (found.length > 0) {
+        console.log(`📊 Auto-discovered statement summary at row ${summary.labelRow + 1}: ${found.join(', ')}`);
+        for (const [stdName, num] of Object.entries(values)) {
+          extracted[stdName] = num;
+        }
+      }
+    } else {
+      console.warn('⚠️  Could not auto-discover statement summary row (no row had >=3 aging/total labels)');
+    }
+  }
+
   return extracted;
 }
 
@@ -539,6 +679,9 @@ module.exports = {
   extractFieldsFromExcel,
   getExcelPreview,
   columnToNumber,
-  numberToColumn
+  numberToColumn,
+  cleanNumeric,
+  findStatementSummaryRow,
+  extractStatementSummaryValues
 };
 

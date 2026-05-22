@@ -78,10 +78,15 @@ module.exports = (sequelize) => {
       defaultValue: false,
       comment: 'Send statement upload notifications to primary contact'
     },
-    sendStatementAttachment: {
+    sendStatementPdfAttachment: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
-      comment: 'Include PDF attachment in statement notifications'
+      comment: 'Attach the PDF rendition to statement notifications'
+    },
+    sendStatementXlsAttachment: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      comment: 'Attach the XLS/XLSX rendition to statement notifications'
     },
     sendEmailAsSummary: {
       type: DataTypes.BOOLEAN,

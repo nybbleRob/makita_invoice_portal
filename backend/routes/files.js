@@ -6,6 +6,7 @@ const auth = require('../middleware/auth');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const { findOrCreateStatement } = require('../utils/statementImport');
 const router = express.Router();
 
 /**
@@ -398,18 +399,23 @@ router.post('/test-import', auth, globalAdmin, async (req, res) => {
     const fileStats = fs.statSync(dummyFilePath);
     const fileHash = crypto.createHash('sha256').update(fs.readFileSync(dummyFilePath)).digest('hex');
 
-    // Try to match company by account number if provided
+    // Try to match company by account number if provided.
+    // Statements only ever route to CORP companies; invoices/credit notes match any type.
     let matchedCompanyId = companyId;
     if (!matchedCompanyId && mockParsedData.accountNumber) {
-      const company = await Company.findOne({
-        where: {
-          referenceNo: mockParsedData.accountNumber.toString()
-        }
-      });
-      
+      const whereClause = {
+        referenceNo: mockParsedData.accountNumber.toString()
+      };
+      if (fileType === 'statement') {
+        whereClause.type = 'CORP';
+      }
+      const company = await Company.findOne({ where: whereClause });
+
       if (company) {
         matchedCompanyId = company.id;
-        console.log(`✅ Matched company: ${company.name} (${company.referenceNo})`);
+        console.log(`✅ Matched company: ${company.name} (${company.referenceNo}, type: ${company.type || 'n/a'})`);
+      } else if (fileType === 'statement') {
+        console.log(`⚠️  No CORP company found with account number: ${mockParsedData.accountNumber} - statements only route to corporate accounts.`);
       } else {
         console.log(`⚠️  No company found with account number: ${mockParsedData.accountNumber}`);
       }
@@ -484,27 +490,22 @@ router.post('/test-import', auth, globalAdmin, async (req, res) => {
             }
           });
         } else if (fileType === 'statement') {
-          // Statement requires periodStart, periodEnd, openingBalance, closingBalance, etc.
-          const periodStart = issueDate;
-          const periodEnd = new Date(issueDate);
-          periodEnd.setMonth(periodEnd.getMonth() + 1); // Default to 1 month period
-          
-          document = await Statement.create({
-            companyId: matchedCompanyId,
-            statementNumber: mockParsedData.invoiceNumber || mockParsedData.statementNumber || `STMT-${Date.now()}`,
-            periodStart: periodStart,
-            periodEnd: periodEnd,
-            openingBalance: 0,
-            closingBalance: mockParsedData.amount || 0,
-            totalDebits: mockParsedData.amount || 0,
-            totalCredits: 0,
-            status: 'draft', // Valid status: 'draft', 'sent', 'acknowledged', 'disputed'
-            metadata: {
+          // Test import: route through the centralised helper so dedupe and
+          // dual-file slotting behave identically to the production import paths.
+          const result = await findOrCreateStatement({
+            matchedCompanyId,
+            statementDate: issueDate,
+            parsedData: {
+              ...mockParsedData,
+              totalBalance: mockParsedData.totalBalance != null ? mockParsedData.totalBalance : mockParsedData.amount
+            },
+            filePath: dummyFilePath,
+            fileMeta: {
               source: 'test_import',
-              fileId: file.id,
-              parsedData: mockParsedData
+              fileId: file.id
             }
           });
+          document = result.statement;
         }
         
         if (document) {

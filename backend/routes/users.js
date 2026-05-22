@@ -273,7 +273,8 @@ router.get('/export', canManageUsers, async (req, res) => {
         send_invoice_email: user.sendInvoiceEmail ? 'TRUE' : 'FALSE',
         send_invoice_attachment: user.sendInvoiceAttachment ? 'TRUE' : 'FALSE',
         send_statement_email: user.sendStatementEmail ? 'TRUE' : 'FALSE',
-        send_statement_attachment: user.sendStatementAttachment ? 'TRUE' : 'FALSE',
+        send_statement_pdf_attachment: user.sendStatementPdfAttachment ? 'TRUE' : 'FALSE',
+        send_statement_xls_attachment: user.sendStatementXlsAttachment ? 'TRUE' : 'FALSE',
         send_email_as_summary: user.sendEmailAsSummary ? 'TRUE' : 'FALSE',
         send_import_summary_report: user.sendImportSummaryReport ? 'TRUE' : 'FALSE'
       };
@@ -592,23 +593,34 @@ router.post('/', canManageUsers, async (req, res) => {
       }
     }
     
-    // Extract email preferences and company assignments
+    // Extract email preferences and company assignments.
+    // Accept both the new split toggles and the legacy single toggle on input;
+    // legacy toggles fan out to both PDF + XLS so older API consumers keep working.
     const {
       allCompanies,
       sendInvoiceEmail,
       sendInvoiceAttachment,
       sendStatementEmail,
       sendStatementAttachment,
+      sendStatementPdfAttachment: bodyPdfAttach,
+      sendStatementXlsAttachment: bodyXlsAttach,
       sendEmailAsSummary,
       sendImportSummaryReport,
       companyIds
     } = req.body;
-    
+
+    const sendStatementPdfAttachment = bodyPdfAttach !== undefined
+      ? bodyPdfAttach
+      : (sendStatementAttachment !== undefined ? sendStatementAttachment : undefined);
+    const sendStatementXlsAttachment = bodyXlsAttach !== undefined
+      ? bodyXlsAttach
+      : (sendStatementAttachment !== undefined ? sendStatementAttachment : undefined);
+
     // Validate email preferences
     if (sendInvoiceAttachment && !sendInvoiceEmail) {
       return res.status(400).json({ message: 'Cannot send invoice attachments without enabling invoice emails' });
     }
-    if (sendStatementAttachment && !sendStatementEmail) {
+    if ((sendStatementPdfAttachment || sendStatementXlsAttachment) && !sendStatementEmail) {
       return res.status(400).json({ message: 'Cannot send statement attachments without enabling statement emails' });
     }
     if (sendEmailAsSummary && !sendInvoiceEmail && !sendStatementEmail) {
@@ -676,7 +688,8 @@ router.post('/', canManageUsers, async (req, res) => {
         sendInvoiceEmail: Boolean(sendInvoiceEmail),
         sendInvoiceAttachment: Boolean(sendInvoiceAttachment),
         sendStatementEmail: Boolean(sendStatementEmail),
-        sendStatementAttachment: Boolean(sendStatementAttachment),
+        sendStatementPdfAttachment: Boolean(sendStatementPdfAttachment),
+        sendStatementXlsAttachment: Boolean(sendStatementXlsAttachment),
         sendEmailAsSummary: Boolean(sendEmailAsSummary),
         sendImportSummaryReport: Boolean(sendImportSummaryReport)
       }, { transaction });
@@ -1042,24 +1055,37 @@ router.put('/:id', canManageUsers, async (req, res) => {
       }
     }
     
-    // Extract email preferences and company assignments
+    // Extract email preferences and company assignments.
+    // Legacy `sendStatementAttachment` is still accepted; it fans out to both PDF and XLS.
     const {
       allCompanies,
       sendInvoiceEmail,
       sendInvoiceAttachment,
       sendStatementEmail,
       sendStatementAttachment,
+      sendStatementPdfAttachment: bodyPdfAttach,
+      sendStatementXlsAttachment: bodyXlsAttach,
       sendEmailAsSummary,
       sendImportSummaryReport,
       companyIds
     } = req.body;
-    
+
+    const sendStatementPdfAttachment = bodyPdfAttach !== undefined
+      ? bodyPdfAttach
+      : (sendStatementAttachment !== undefined ? sendStatementAttachment : undefined);
+    const sendStatementXlsAttachment = bodyXlsAttach !== undefined
+      ? bodyXlsAttach
+      : (sendStatementAttachment !== undefined ? sendStatementAttachment : undefined);
+
     // Validate email preferences
     if (sendInvoiceAttachment !== undefined && sendInvoiceAttachment && 
         (sendInvoiceEmail === false || (sendInvoiceEmail === undefined && !user.sendInvoiceEmail))) {
       return res.status(400).json({ message: 'Cannot send invoice attachments without enabling invoice emails' });
     }
-    if (sendStatementAttachment !== undefined && sendStatementAttachment && 
+    const wantsStatementAttachment =
+      (sendStatementPdfAttachment !== undefined && sendStatementPdfAttachment) ||
+      (sendStatementXlsAttachment !== undefined && sendStatementXlsAttachment);
+    if (wantsStatementAttachment &&
         (sendStatementEmail === false || (sendStatementEmail === undefined && !user.sendStatementEmail))) {
       return res.status(400).json({ message: 'Cannot send statement attachments without enabling statement emails' });
     }
@@ -1113,7 +1139,8 @@ router.put('/:id', canManageUsers, async (req, res) => {
     if (sendInvoiceEmail !== undefined) user.sendInvoiceEmail = sendInvoiceEmail;
     if (sendInvoiceAttachment !== undefined) user.sendInvoiceAttachment = sendInvoiceAttachment;
     if (sendStatementEmail !== undefined) user.sendStatementEmail = sendStatementEmail;
-    if (sendStatementAttachment !== undefined) user.sendStatementAttachment = sendStatementAttachment;
+    if (sendStatementPdfAttachment !== undefined) user.sendStatementPdfAttachment = sendStatementPdfAttachment;
+    if (sendStatementXlsAttachment !== undefined) user.sendStatementXlsAttachment = sendStatementXlsAttachment;
     if (sendEmailAsSummary !== undefined) user.sendEmailAsSummary = sendEmailAsSummary;
     if (sendImportSummaryReport !== undefined) user.sendImportSummaryReport = sendImportSummaryReport;
     
@@ -1765,7 +1792,10 @@ function hasUserDataChanged(existingUser, newData, newEmail, newCompanyIds = nul
   if (existingUser.sendStatementEmail !== newData.sendStatementEmail) {
     return true;
   }
-  if (existingUser.sendStatementAttachment !== newData.sendStatementAttachment) {
+  if (existingUser.sendStatementPdfAttachment !== newData.sendStatementPdfAttachment) {
+    return true;
+  }
+  if (existingUser.sendStatementXlsAttachment !== newData.sendStatementXlsAttachment) {
     return true;
   }
   if (existingUser.sendEmailAsSummary !== newData.sendEmailAsSummary) {
@@ -1824,7 +1854,21 @@ async function processUserRowForPreview(row, rowNum, existingUsersMap, existingU
     const sendInvoiceEmail = parseBooleanValue(row['send_invoice_email'] || row['sendInvoiceEmail'] || 'FALSE');
     const sendInvoiceAttachment = parseBooleanValue(row['send_invoice_attachment'] || row['sendInvoiceAttachment'] || 'FALSE');
     const sendStatementEmail = parseBooleanValue(row['send_statement_email'] || row['sendStatementEmail'] || 'FALSE');
-    const sendStatementAttachment = parseBooleanValue(row['send_statement_attachment'] || row['sendStatementAttachment'] || 'FALSE');
+    // Legacy single-toggle column still accepted; falls through to both PDF + XLS columns when present.
+    const legacyStatementAttachmentRaw = row['send_statement_attachment'] || row['sendStatementAttachment'];
+    const legacyStatementAttachment = legacyStatementAttachmentRaw !== undefined
+      ? parseBooleanValue(legacyStatementAttachmentRaw)
+      : null;
+    const sendStatementPdfAttachment = parseBooleanValue(
+      row['send_statement_pdf_attachment'] ||
+      row['sendStatementPdfAttachment'] ||
+      (legacyStatementAttachment !== null ? (legacyStatementAttachment ? 'TRUE' : 'FALSE') : 'FALSE')
+    );
+    const sendStatementXlsAttachment = parseBooleanValue(
+      row['send_statement_xls_attachment'] ||
+      row['sendStatementXlsAttachment'] ||
+      (legacyStatementAttachment !== null ? (legacyStatementAttachment ? 'TRUE' : 'FALSE') : 'FALSE')
+    );
     const sendEmailAsSummary = parseBooleanValue(row['send_email_as_summary'] || row['sendEmailAsSummary'] || 'FALSE');
     const sendImportSummaryReport = parseBooleanValue(row['send_import_summary_report'] || row['sendImportSummaryReport'] || 'FALSE');
 
@@ -1869,7 +1913,7 @@ async function processUserRowForPreview(row, rowNum, existingUsersMap, existingU
     if (sendInvoiceAttachment && !sendInvoiceEmail) {
       result.warnings.push('Invoice attachment enabled without invoice email - will be ignored');
     }
-    if (sendStatementAttachment && !sendStatementEmail) {
+    if ((sendStatementPdfAttachment || sendStatementXlsAttachment) && !sendStatementEmail) {
       result.warnings.push('Statement attachment enabled without statement email - will be ignored');
     }
     if (sendEmailAsSummary && !sendInvoiceEmail && !sendStatementEmail) {
@@ -1929,7 +1973,8 @@ async function processUserRowForPreview(row, rowNum, existingUsersMap, existingU
       sendInvoiceEmail: sendInvoiceEmail,
       sendInvoiceAttachment: sendInvoiceEmail ? sendInvoiceAttachment : false,
       sendStatementEmail: sendStatementEmail,
-      sendStatementAttachment: sendStatementEmail ? sendStatementAttachment : false,
+      sendStatementPdfAttachment: sendStatementEmail ? sendStatementPdfAttachment : false,
+      sendStatementXlsAttachment: sendStatementEmail ? sendStatementXlsAttachment : false,
       sendEmailAsSummary: (sendInvoiceEmail || sendStatementEmail) ? sendEmailAsSummary : false,
       sendImportSummaryReport: sendImportSummaryReport
     };
@@ -2044,7 +2089,8 @@ router.post('/import/preview', canManageUsers, upload.single('file'), async (req
     const existingUsers = await User.findAll({
       attributes: ['id', 'name', 'email', 'role', 'isActive', 'allCompanies', 
         'sendInvoiceEmail', 'sendInvoiceAttachment', 'sendStatementEmail', 
-        'sendStatementAttachment', 'sendEmailAsSummary', 'sendImportSummaryReport'],
+        'sendStatementPdfAttachment', 'sendStatementXlsAttachment',
+        'sendEmailAsSummary', 'sendImportSummaryReport'],
       include: [{
         model: Company,
         as: 'companies',
@@ -2191,7 +2237,8 @@ router.post('/import', canManageUsers, upload.single('file'), async (req, res) =
     const existingUsers = await User.findAll({
       attributes: ['id', 'name', 'email', 'role', 'isActive', 'allCompanies',
         'sendInvoiceEmail', 'sendInvoiceAttachment', 'sendStatementEmail',
-        'sendStatementAttachment', 'sendEmailAsSummary', 'sendImportSummaryReport']
+        'sendStatementPdfAttachment', 'sendStatementXlsAttachment',
+        'sendEmailAsSummary', 'sendImportSummaryReport']
     });
 
     const existingUsersMap = new Map();
@@ -2258,7 +2305,21 @@ router.post('/import', canManageUsers, upload.single('file'), async (req, res) =
         const sendInvoiceEmail = parseBooleanValue(row['send_invoice_email'] || row['sendInvoiceEmail'] || 'FALSE');
         const sendInvoiceAttachment = parseBooleanValue(row['send_invoice_attachment'] || row['sendInvoiceAttachment'] || 'FALSE');
         const sendStatementEmail = parseBooleanValue(row['send_statement_email'] || row['sendStatementEmail'] || 'FALSE');
-        const sendStatementAttachment = parseBooleanValue(row['send_statement_attachment'] || row['sendStatementAttachment'] || 'FALSE');
+        // Legacy single-toggle column still accepted; falls through to both PDF + XLS columns when present.
+        const legacyStatementAttachmentRaw = row['send_statement_attachment'] || row['sendStatementAttachment'];
+        const legacyStatementAttachment = legacyStatementAttachmentRaw !== undefined
+          ? parseBooleanValue(legacyStatementAttachmentRaw)
+          : null;
+        const sendStatementPdfAttachment = parseBooleanValue(
+          row['send_statement_pdf_attachment'] ||
+          row['sendStatementPdfAttachment'] ||
+          (legacyStatementAttachment !== null ? (legacyStatementAttachment ? 'TRUE' : 'FALSE') : 'FALSE')
+        );
+        const sendStatementXlsAttachment = parseBooleanValue(
+          row['send_statement_xls_attachment'] ||
+          row['sendStatementXlsAttachment'] ||
+          (legacyStatementAttachment !== null ? (legacyStatementAttachment ? 'TRUE' : 'FALSE') : 'FALSE')
+        );
         const sendEmailAsSummary = parseBooleanValue(row['send_email_as_summary'] || row['sendEmailAsSummary'] || 'FALSE');
         const sendImportSummaryReport = parseBooleanValue(row['send_import_summary_report'] || row['sendImportSummaryReport'] || 'FALSE');
 
@@ -2357,7 +2418,8 @@ router.post('/import', canManageUsers, upload.single('file'), async (req, res) =
             sendInvoiceEmail: sendInvoiceEmail,
             sendInvoiceAttachment: sendInvoiceEmail ? sendInvoiceAttachment : false,
             sendStatementEmail: sendStatementEmail,
-            sendStatementAttachment: sendStatementEmail ? sendStatementAttachment : false,
+            sendStatementPdfAttachment: sendStatementEmail ? sendStatementPdfAttachment : false,
+            sendStatementXlsAttachment: sendStatementEmail ? sendStatementXlsAttachment : false,
             sendEmailAsSummary: (sendInvoiceEmail || sendStatementEmail) ? sendEmailAsSummary : false,
             sendImportSummaryReport: sendImportSummaryReport
           };
@@ -2384,7 +2446,8 @@ router.post('/import', canManageUsers, upload.single('file'), async (req, res) =
           existingUser.sendInvoiceEmail = sendInvoiceEmail;
           existingUser.sendInvoiceAttachment = sendInvoiceEmail ? sendInvoiceAttachment : false;
           existingUser.sendStatementEmail = sendStatementEmail;
-          existingUser.sendStatementAttachment = sendStatementEmail ? sendStatementAttachment : false;
+          existingUser.sendStatementPdfAttachment = sendStatementEmail ? sendStatementPdfAttachment : false;
+          existingUser.sendStatementXlsAttachment = sendStatementEmail ? sendStatementXlsAttachment : false;
           existingUser.sendEmailAsSummary = (sendInvoiceEmail || sendStatementEmail) ? sendEmailAsSummary : false;
           existingUser.sendImportSummaryReport = sendImportSummaryReport;
 
@@ -2499,7 +2562,8 @@ router.post('/import', canManageUsers, upload.single('file'), async (req, res) =
             sendInvoiceEmail: sendInvoiceEmail,
             sendInvoiceAttachment: sendInvoiceEmail ? sendInvoiceAttachment : false,
             sendStatementEmail: sendStatementEmail,
-            sendStatementAttachment: sendStatementEmail ? sendStatementAttachment : false,
+            sendStatementPdfAttachment: sendStatementEmail ? sendStatementPdfAttachment : false,
+            sendStatementXlsAttachment: sendStatementEmail ? sendStatementXlsAttachment : false,
             sendEmailAsSummary: (sendInvoiceEmail || sendStatementEmail) ? sendEmailAsSummary : false,
             sendImportSummaryReport: sendImportSummaryReport
           });
