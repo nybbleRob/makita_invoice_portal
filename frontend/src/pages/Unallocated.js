@@ -16,6 +16,10 @@ const Unallocated = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearchQuery, setActiveSearchQuery] = useState('');
   const [reasonFilter, setReasonFilter] = useState('all');
+  // Filter the unallocated list down to a specific document type.
+  // Drives both the backend query (?documentType=...) and the column set rendered
+  // below, so a statement that fell through doesn't get presented as an invoice.
+  const [documentTypeFilter, setDocumentTypeFilter] = useState('all');
   const searchInputRef = useRef(null);
   const [accountNumberFilter, setAccountNumberFilter] = useState('');
   const [invoiceNumberFilter, setInvoiceNumberFilter] = useState('');
@@ -54,7 +58,7 @@ const Unallocated = () => {
     fetchDocuments();
     // Clear selections when page changes or filters change
     setSelectedFiles(new Set());
-  }, [pagination.page, activeSearchQuery, reasonFilter, debouncedAccountNumber, debouncedInvoiceNumber, debouncedDate]);
+  }, [pagination.page, activeSearchQuery, reasonFilter, documentTypeFilter, debouncedAccountNumber, debouncedInvoiceNumber, debouncedDate]);
 
   // Hydrate state from URL on mount and when browser back/forward changes the URL.
   useEffect(() => {
@@ -65,6 +69,7 @@ const Unallocated = () => {
     const accountNumber = searchParams.get('accountNumber') || '';
     const invoiceNumber = searchParams.get('invoiceNumber') || '';
     const date = searchParams.get('date') || '';
+    const docType = searchParams.get('documentType') || 'all';
 
     setPagination(prev => (prev.page !== page ? { ...prev, page } : prev));
     setSearchQuery(prev => (prev !== search ? search : prev));
@@ -73,6 +78,7 @@ const Unallocated = () => {
     setAccountNumberFilter(prev => (prev !== accountNumber ? accountNumber : prev));
     setInvoiceNumberFilter(prev => (prev !== invoiceNumber ? invoiceNumber : prev));
     setDateFilter(prev => (prev !== date ? date : prev));
+    setDocumentTypeFilter(prev => (prev !== docType ? docType : prev));
   }, [searchParams]);
 
   // Sync state to URL when filters/pagination change (so Back from view restores filters).
@@ -84,13 +90,14 @@ const Unallocated = () => {
     next.set('page', String(pagination.page));
     if (activeSearchQuery && activeSearchQuery.trim()) next.set('search', activeSearchQuery.trim());
     if (reasonFilter !== 'all') next.set('failureReason', reasonFilter);
+    if (documentTypeFilter !== 'all') next.set('documentType', documentTypeFilter);
     if (accountNumberFilter && accountNumberFilter.trim()) next.set('accountNumber', accountNumberFilter.trim());
     if (invoiceNumberFilter && invoiceNumberFilter.trim()) next.set('invoiceNumber', invoiceNumberFilter.trim());
     if (dateFilter && dateFilter.trim()) next.set('date', dateFilter.trim());
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true });
     }
-  }, [pagination.page, activeSearchQuery, reasonFilter, accountNumberFilter, invoiceNumberFilter, dateFilter]);
+  }, [pagination.page, activeSearchQuery, reasonFilter, documentTypeFilter, accountNumberFilter, invoiceNumberFilter, dateFilter]);
 
   // Persist current list query for Back from view (fallback when location.state is lost)
   const returnQueryRef = useRef(searchParams.toString());
@@ -143,6 +150,7 @@ const Unallocated = () => {
         ...(searchParam && { search: searchParam }),
         ...(documentNumbersParam && { documentNumbers: documentNumbersParam }),
         ...(reasonFilter !== 'all' && { failureReason: reasonFilter }),
+        ...(documentTypeFilter !== 'all' && { documentType: documentTypeFilter }),
         ...(debouncedAccountNumber && { accountNumber: debouncedAccountNumber }),
         ...(debouncedInvoiceNumber && { invoiceNumber: debouncedInvoiceNumber }),
         ...(debouncedDate && { date: debouncedDate })
@@ -505,12 +513,13 @@ const Unallocated = () => {
     setAllocationResults(null);
   };
 
-  const hasActiveFilters = activeSearchQuery || reasonFilter !== 'all';
+  const hasActiveFilters = activeSearchQuery || reasonFilter !== 'all' || documentTypeFilter !== 'all';
 
   const handleResetFilters = () => {
     setSearchQuery('');
     setActiveSearchQuery('');
     setReasonFilter('all');
+    setDocumentTypeFilter('all');
     setSelectedFiles(new Set());
     setPagination(prev => ({ ...prev, page: 1 }));
   };
@@ -654,6 +663,22 @@ const Unallocated = () => {
                       <option value="duplicate">Duplicate</option>
                       <option value="other">Other</option>
                     </select>
+                    {/* Document type filter - drives both the query and the column set */}
+                    <select
+                      className="form-select form-select-sm w-auto"
+                      value={documentTypeFilter}
+                      onChange={(e) => {
+                        setDocumentTypeFilter(e.target.value);
+                        setPagination(prev => ({ ...prev, page: 1 }));
+                      }}
+                      title="Filter by document type"
+                    >
+                      <option value="all">All Types</option>
+                      <option value="invoice">Invoices</option>
+                      <option value="credit_note">Credit Notes</option>
+                      <option value="statement">Statements</option>
+                      <option value="unknown">Unknown</option>
+                    </select>
                     {/* Reset - only when something is filtered */}
                     {hasActiveFilters && (
                       <button
@@ -718,6 +743,21 @@ const Unallocated = () => {
               </div>
             </div>
             <div className="table-responsive">
+              {(() => {
+                // Header set is driven by the active document-type filter so a
+                // statement that fell through doesn't get presented under
+                // invoice-shaped columns. 'all' keeps the existing invoice-style
+                // columns to avoid disturbing the common case.
+                const viewType = documentTypeFilter;
+                const isStatementView = viewType === 'statement';
+                const isUnknownView = viewType === 'unknown';
+                const docNoLabel = viewType === 'credit_note' ? 'Credit Note No.' : 'Invoice No.';
+                // Total column count = checkbox + Type + variable data cols + Status + Retention + Actions
+                //   default/invoice/credit_note: 1 + 1 + 7 + 3 = 12
+                //   statement:                   1 + 1 + 8 + 3 = 13
+                //   unknown:                     1 + 1 + 4 + 3 = 9
+                const totalColCount = isStatementView ? 13 : (isUnknownView ? 9 : 12);
+                return (
               <table className="table table-vcenter table-selectable">
                 <thead>
                   <tr>
@@ -732,13 +772,35 @@ const Unallocated = () => {
                       />
                     </th>
                     <th>Type</th>
-                    <th>Invoice No.</th>
-                    <th>Date/Tax Point</th>
-                    <th>Account No.</th>
-                    <th>Invoice To</th>
-                    <th>Delivery Address</th>
-                    <th>PO Number</th>
-                    <th>Amount</th>
+                    {isStatementView ? (
+                      <>
+                        <th>Statement Date</th>
+                        <th>Account No.</th>
+                        <th>Total Balance</th>
+                        <th>Current</th>
+                        <th>1-30</th>
+                        <th>31-60</th>
+                        <th>61-90</th>
+                        <th>91+</th>
+                      </>
+                    ) : isUnknownView ? (
+                      <>
+                        <th>Document No.</th>
+                        <th>Date</th>
+                        <th>Account No.</th>
+                        <th>Amount</th>
+                      </>
+                    ) : (
+                      <>
+                        <th>{docNoLabel}</th>
+                        <th>Date/Tax Point</th>
+                        <th>Account No.</th>
+                        <th>Invoice To</th>
+                        <th>Delivery Address</th>
+                        <th>PO Number</th>
+                        <th>Amount</th>
+                      </>
+                    )}
                     <th>Status</th>
                     <th>Retention</th>
                     <th>Actions</th>
@@ -748,27 +810,16 @@ const Unallocated = () => {
                   {loading ? (
                     [...Array(10)].map((_, i) => (
                       <tr key={`skeleton-${i}`}>
-                        <td><span className="placeholder" style={{ width: '16px', height: '16px', borderRadius: '3px' }}></span></td>
-                        <td><span className="placeholder col-7"></span></td>
-                        <td><span className="placeholder col-8"></span></td>
-                        <td><span className="placeholder col-6"></span></td>
-                        <td><span className="placeholder col-6"></span></td>
-                        <td><span className="placeholder col-8"></span></td>
-                        <td><span className="placeholder col-9"></span></td>
-                        <td><span className="placeholder col-5"></span></td>
-                        <td><span className="placeholder col-4"></span></td>
-                        <td><span className="placeholder col-6" style={{ borderRadius: '4px' }}></span></td>
-                        <td><span className="placeholder col-5"></span></td>
-                        <td>
-                          <div className="btn-list">
-                            <span className="placeholder btn btn-sm disabled" style={{ width: '50px' }}></span>
-                          </div>
-                        </td>
+                        {[...Array(totalColCount)].map((__, j) => (
+                          <td key={j}>
+                            <span className="placeholder col-7"></span>
+                          </td>
+                        ))}
                       </tr>
                     ))
                   ) : documents.length === 0 ? (
                     <tr>
-                      <td colSpan="13" className="text-center py-3 text-muted">
+                      <td colSpan={totalColCount} className="text-center py-3 text-muted">
                         No unallocated documents found
                       </td>
                     </tr>
@@ -776,17 +827,37 @@ const Unallocated = () => {
                     documents.map((doc) => {
                       const parsed = doc.parsedData || {};
                       const metadataParsed = parsed.metadata?.parsedData || {};
-                      const documentType = parsed.documentType || parsed.document_type || 'invoice';
+                      // Trust the parser's canonical documentType. If it's missing
+                      // (older parses, or pre-fix Excel rows) fall back to 'unknown'
+                      // rather than silently calling everything an invoice — that's
+                      // what produced statements showing up as Invoices on this page.
+                      const rawDocType = (parsed.documentType || parsed.document_type || '').toString().toLowerCase();
+                      const documentType = ['invoice', 'credit_note', 'statement'].includes(rawDocType) ? rawDocType : 'unknown';
                       const accountNumber = parsed.accountNumber || parsed.customerNumber || parsed.account_no || parsed.accountNo || '-';
                       const invoiceNumber = parsed.invoiceNumber || parsed.documentNumber || parsed.invoice_number || parsed.invoiceNo || parsed.creditNumber || parsed.credit_number || '-';
                       const invoiceTo = parsed.invoiceTo || parsed.invoice_to || parsed.bill_to || metadataParsed.invoiceTo || metadataParsed.invoice_to || '-';
                       const deliveryAddress = parsed.deliveryAddress || parsed.delivery_address || parsed.ship_to || parsed.shipping_address || metadataParsed.deliveryAddress || metadataParsed.delivery_address || '-';
                       const poNumber = parsed.customerPO || parsed.poNumber || parsed.purchaseOrder || parsed.customer_po || parsed.po_number || metadataParsed.customerPO || metadataParsed.poNumber || '-';
                       const amount = parsed.totalAmount || parsed.amount || parsed.invoiceTotal || parsed.total || metadataParsed.totalAmount || metadataParsed.amount || '-';
+                      // Statement-specific fields, used by the statement view below.
+                      const statementDateRaw = parsed.statementDate || parsed.statement_date || metadataParsed.statementDate || metadataParsed.statement_date || '';
+                      const totalBalance = parsed.totalBalance ?? metadataParsed.totalBalance;
+                      const currentAmount = parsed.currentAmount ?? metadataParsed.currentAmount;
+                      const overdue1To30 = parsed.overdue1To30 ?? metadataParsed.overdue1To30;
+                      const overdue31To60 = parsed.overdue31To60 ?? metadataParsed.overdue31To60;
+                      const overdue61To90 = parsed.overdue61To90 ?? metadataParsed.overdue61To90;
+                      const overdue91Plus = parsed.overdue91Plus ?? metadataParsed.overdue91Plus;
+                      const formatMoney = (n) => {
+                        if (n === undefined || n === null || n === '') return '-';
+                        const num = typeof n === 'string' ? parseFloat(n.replace(/[£,\s]/g, '')) : Number(n);
+                        if (!Number.isFinite(num)) return '-';
+                        return `£${num.toFixed(2)}`;
+                      };
                       
                       // Extract date from multiple possible field names and formats
                       const invoiceDate = parsed.invoiceDate || parsed.date || parsed.taxPoint || parsed.tax_point || 
                                          parsed.taxPointDate || parsed.tax_point_date || parsed.invoice_date ||
+                                         statementDateRaw ||
                                          metadataParsed.invoiceDate || metadataParsed.date || metadataParsed.taxPoint || metadataParsed.tax_point ||
                                          metadataParsed.taxPointDate || metadataParsed.tax_point_date || metadataParsed.invoice_date || '';
                       
@@ -881,26 +952,46 @@ const Unallocated = () => {
                           </td>
                           <td>
                             <span className={`badge ${
-                              documentType === 'credit_note' ? 'bg-info-lt' : 
-                              documentType === 'statement' ? 'bg-secondary-lt' : 
+                              documentType === 'credit_note' ? 'bg-info-lt' :
+                              documentType === 'statement' ? 'bg-secondary-lt' :
+                              documentType === 'unknown' ? 'bg-muted-lt text-muted' :
                               'bg-primary-lt'
                             }`}>
-                              {documentType === 'credit_note' ? 'Credit Note' : 
-                               documentType === 'statement' ? 'Statement' : 
+                              {documentType === 'credit_note' ? 'Credit Note' :
+                               documentType === 'statement' ? 'Statement' :
+                               documentType === 'unknown' ? 'Unknown' :
                                'Invoice'}
                             </span>
                           </td>
-                          <td>
-                            {invoiceNumber !== '-' ? <strong>{invoiceNumber}</strong> : '-'}
-                          </td>
-                          <td>{formattedDate}</td>
-                          <td>
-                            <strong>{accountNumber}</strong>
-                          </td>
-                          <TruncatedCell value={invoiceTo} maxWidth="200px" maxLength={30} />
-                          <TruncatedCell value={deliveryAddress} maxWidth="200px" maxLength={40} />
-                          <TruncatedCell value={poNumber} maxWidth="150px" maxLength={20} />
-                          <td>{formattedAmount}</td>
+                          {isStatementView ? (
+                            <>
+                              <td>{formattedDate}</td>
+                              <td><strong>{accountNumber}</strong></td>
+                              <td><strong>{formatMoney(totalBalance)}</strong></td>
+                              <td>{formatMoney(currentAmount)}</td>
+                              <td>{formatMoney(overdue1To30)}</td>
+                              <td>{formatMoney(overdue31To60)}</td>
+                              <td>{formatMoney(overdue61To90)}</td>
+                              <td>{formatMoney(overdue91Plus)}</td>
+                            </>
+                          ) : isUnknownView ? (
+                            <>
+                              <td>{invoiceNumber !== '-' ? <strong>{invoiceNumber}</strong> : '-'}</td>
+                              <td>{formattedDate}</td>
+                              <td><strong>{accountNumber}</strong></td>
+                              <td>{formattedAmount}</td>
+                            </>
+                          ) : (
+                            <>
+                              <td>{invoiceNumber !== '-' ? <strong>{invoiceNumber}</strong> : '-'}</td>
+                              <td>{formattedDate}</td>
+                              <td><strong>{accountNumber}</strong></td>
+                              <TruncatedCell value={invoiceTo} maxWidth="200px" maxLength={30} />
+                              <TruncatedCell value={deliveryAddress} maxWidth="200px" maxLength={40} />
+                              <TruncatedCell value={poNumber} maxWidth="150px" maxLength={20} />
+                              <td>{formattedAmount}</td>
+                            </>
+                          )}
                           <td>
                             <div>
                               {getReasonBadge(doc.failureReason, doc.status, doc.metadata)}
@@ -938,6 +1029,8 @@ const Unallocated = () => {
                   )}
                 </tbody>
               </table>
+                );
+              })()}
             </div>
               
               {/* Pagination Controls */}

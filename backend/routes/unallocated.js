@@ -132,7 +132,7 @@ router.get('/', async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const { page = 1, limit = 50, search = '', documentNumbers, failureReason, accountNumber, invoiceNumber, date } = req.query;
+    const { page = 1, limit = 50, search = '', documentNumbers, failureReason, accountNumber, invoiceNumber, date, documentType } = req.query;
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const offset = (pageNum - 1) * limitNum;
@@ -206,6 +206,31 @@ router.get('/', async (req, res) => {
           ]}
         )
       );
+    }
+
+    // Filter by canonical documentType. The Excel/PDF parsers normalize this to
+    // one of: 'invoice' | 'credit_note' | 'statement'. The 'unknown' bucket
+    // captures rows from older parses that didn't write documentType into
+    // parsedData at all (these used to silently render as invoices in the UI).
+    if (documentType && documentType !== 'all') {
+      const trimmed = String(documentType).trim().toLowerCase();
+      if (trimmed === 'unknown') {
+        where[Op.and] = where[Op.and] || [];
+        where[Op.and].push(
+          sequelize.where(
+            sequelize.cast(sequelize.col('File.parsedData'), 'text'),
+            { [Op.notILike]: '%"documentType":%' }
+          )
+        );
+      } else if (['invoice', 'credit_note', 'statement'].includes(trimmed)) {
+        where[Op.and] = where[Op.and] || [];
+        where[Op.and].push(
+          sequelize.where(
+            sequelize.cast(sequelize.col('File.parsedData'), 'text'),
+            { [Op.iLike]: `%"documentType":"${trimmed}"%` }
+          )
+        );
+      }
     }
 
     // Handle comma-separated document numbers (exact match) - takes priority over regular search

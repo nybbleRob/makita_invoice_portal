@@ -5,7 +5,7 @@
 
 const XLSX = require('xlsx');
 const XLSX_CALC = require('xlsx-calc');
-const { getStandardField, normalizeFieldKey } = require('./standardFields');
+const { getStandardField, normalizeFieldKey, mapToStandardName, STANDARD_FIELDS } = require('./standardFields');
 
 /**
  * Convert column letter to number (A=1, B=2, ..., Z=26, AA=27, etc.)
@@ -474,22 +474,59 @@ async function extractFieldsFromExcel(excelFile, template) {
     }
   }
 
-  // Don't add documentType if we already have a prefixed version
-  // Only determine document type if not explicitly set via template mapping
-  const hasDocumentTypeField = Object.keys(extracted).some(key => 
-    key.includes('document_type') || key.includes('documentType')
-  );
-  
-  if (!hasDocumentTypeField) {
-    // Only set documentType if no template field mapped it
-    const docTypeUpper = extracted.fullText.toUpperCase();
-    if (docTypeUpper.includes('CREDIT') || docTypeUpper.includes('CN')) {
-      extracted.documentType = 'credit_note';
-    } else if (docTypeUpper.includes('STATEMENT')) {
-      extracted.documentType = 'statement';
-    } else {
-      extracted.documentType = 'invoice';
+  // Mirror every extracted prefixed field under its canonical standard name
+  // (e.g. makita_excel_statement_template_account_no -> accountNumber) and
+  // build fieldLabels, so downstream consumers (parsedDataHelper.getParsedValue,
+  // import jobs, the Unallocated UI) can read by canonical name without knowing
+  // about the template-code prefix. The PDF flow does this in
+  // SupplierTemplate.extractFieldsFromCoordinates; the Excel flow used to skip it,
+  // which is why statements landed in Unallocated typed as "invoice" with no fields.
+  extracted.fieldLabels = extracted.fieldLabels || {};
+  const templateCodePrefix = template.code ? `${template.code}_` : '';
+  const mapOpts = template.templateType ? { templateType: template.templateType } : {};
+  for (const prefixedFieldName of Object.keys(template.excelCells || {})) {
+    const value = extracted[prefixedFieldName];
+    if (value === undefined || value === null || value === '') continue;
+
+    const baseName = templateCodePrefix && prefixedFieldName.startsWith(templateCodePrefix)
+      ? prefixedFieldName.substring(templateCodePrefix.length)
+      : prefixedFieldName;
+
+    const standardName = mapToStandardName(baseName, mapOpts);
+    if (!standardName) continue;
+
+    // Don't clobber values already populated by other passes (auto-discovered
+    // statement summary numbers in particular take precedence over any fixed
+    // cell mapping for the same field).
+    if (extracted[standardName] === undefined || extracted[standardName] === '') {
+      extracted[standardName] = value;
     }
+
+    const fieldDef = STANDARD_FIELDS[standardName];
+    if (fieldDef) {
+      extracted.fieldLabels[standardName] = fieldDef.displayName;
+    }
+  }
+
+  // Normalize documentType to canonical lowercase form. The previous check
+  // ("any key contains document_type") matched the prefixed template field and
+  // suppressed normalization entirely, so statements stayed as "STATEMENT" or
+  // were left undefined.
+  let rawDocType = extracted.documentType;
+  if (typeof rawDocType !== 'string' || !rawDocType.trim()) {
+    rawDocType = '';
+  }
+
+  const haystack = (rawDocType || extracted.fullText || '').toUpperCase();
+  let normalizedDocType = 'invoice';
+  if (haystack.includes('CREDIT') || haystack.includes('CN')) {
+    normalizedDocType = 'credit_note';
+  } else if (haystack.includes('STATEMENT')) {
+    normalizedDocType = 'statement';
+  }
+  extracted.documentType = normalizedDocType;
+  if (STANDARD_FIELDS.documentType) {
+    extracted.fieldLabels.documentType = STANDARD_FIELDS.documentType.displayName;
   }
 
   // Statement-only auto-discovery for the floating summary row.
@@ -510,6 +547,10 @@ async function extractFieldsFromExcel(excelFile, template) {
         console.log(`📊 Auto-discovered statement summary at row ${summary.labelRow + 1}: ${found.join(', ')}`);
         for (const [stdName, num] of Object.entries(values)) {
           extracted[stdName] = num;
+          const fieldDef = STANDARD_FIELDS[stdName];
+          if (fieldDef) {
+            extracted.fieldLabels[stdName] = fieldDef.displayName;
+          }
         }
       }
     } else {
