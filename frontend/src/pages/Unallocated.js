@@ -795,9 +795,11 @@ const Unallocated = () => {
                         <th>Amount</th>
                       </>
                     ) : (
-                      // 'all' and 'unknown' share a neutral column set
+                      // 'all' and 'unknown' share a neutral column set.
+                      // Header lists the per-type doc-number variants so users
+                      // know what the column means across mixed rows.
                       <>
-                        <th>Document No.</th>
+                        <th>INV / CRN / STMT No.</th>
                         <th>Date</th>
                         <th>Account No.</th>
                         <th>Amount</th>

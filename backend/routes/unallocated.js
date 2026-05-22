@@ -208,26 +208,25 @@ router.get('/', async (req, res) => {
       );
     }
 
-    // Filter by canonical documentType. The Excel/PDF parsers normalize this to
-    // one of: 'invoice' | 'credit_note' | 'statement'. The 'unknown' bucket
-    // captures rows from older parses that didn't write documentType into
-    // parsedData at all (these used to silently render as invoices in the UI).
+    // Filter by canonical documentType. The Excel/PDF parsers normalize this
+    // to one of: 'invoice' | 'credit_note' | 'statement'. We use the JSONB
+    // ->> operator to extract the value as text rather than casting the whole
+    // column to text + ILIKE (which is brittle: Postgres' jsonb::text inserts
+    // a space after the colon on some versions, breaking literal substring
+    // matches). The 'unknown' bucket captures legacy rows whose parsedData
+    // never had a canonical documentType written.
     if (documentType && documentType !== 'all') {
       const trimmed = String(documentType).trim().toLowerCase();
+      where[Op.and] = where[Op.and] || [];
       if (trimmed === 'unknown') {
-        where[Op.and] = where[Op.and] || [];
         where[Op.and].push(
-          sequelize.where(
-            sequelize.cast(sequelize.col('File.parsedData'), 'text'),
-            { [Op.notILike]: '%"documentType":%' }
-          )
+          sequelize.literal(`"File"."parsedData"->>'documentType' IS NULL`)
         );
       } else if (['invoice', 'credit_note', 'statement'].includes(trimmed)) {
-        where[Op.and] = where[Op.and] || [];
         where[Op.and].push(
           sequelize.where(
-            sequelize.cast(sequelize.col('File.parsedData'), 'text'),
-            { [Op.iLike]: `%"documentType":"${trimmed}"%` }
+            sequelize.fn('LOWER', sequelize.literal(`"File"."parsedData"->>'documentType'`)),
+            trimmed
           )
         );
       }

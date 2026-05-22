@@ -211,7 +211,7 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
     } catch (error) {
       // Ignore cancellation errors
       if (error.name === 'RenderingCancelledException' || error.message?.includes('cancelled')) {
-        console.log('Render cancelled (this is normal when changing zoom/page)');
+        // Expected when zoom/page changes mid-render; silently ignore.
         return;
       }
       console.error('Error rendering PDF:', error);
@@ -339,8 +339,6 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
     const clampedX = Math.max(0, Math.min(x, canvasRect.width));
     const clampedY = Math.max(0, Math.min(y, canvasRect.height));
     
-    console.log('Mouse down:', { x, y, clampedX, clampedY, canvasRect });
-    
     setStartPos({ x: clampedX, y: clampedY });
     setDrawingBox({ x: clampedX, y: clampedY, width: 0, height: 0 });
   };
@@ -368,9 +366,7 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
       width: Math.abs(clampedX - startPos.x),
       height: Math.abs(clampedY - startPos.y)
     };
-    
-    console.log('🖱️ Mouse move:', { x, y, clampedX, clampedY, newBox });
-    
+
     setDrawingBox(newBox);
   };
   
@@ -429,44 +425,9 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
           bottom: Math.max(0, Math.min(1, bottom))
         };
         
-        // Also get PDF page dimensions for reference (in points)
-        const pdfPageSize = pdfPage.view;
-        const pdfPageWidth = pdfPageSize[2] - pdfPageSize[0];
-        const pdfPageHeight = pdfPageSize[3] - pdfPageSize[1];
-        
-        // Convert normalized to PDF points for extraction
-        // PDF coordinates use bottom-left origin, so we need to flip Y
-        const pdfX = normalizedCoords.left * pdfPageWidth;
-        const pdfWidth_coord = (normalizedCoords.right - normalizedCoords.left) * pdfPageWidth;
-        const pdfHeight_coord = (normalizedCoords.bottom - normalizedCoords.top) * pdfPageHeight;
-        const pdfY = pdfPageHeight - (normalizedCoords.bottom * pdfPageHeight); // Flip Y: bottom-left origin
-        
-        console.log('\n========== NORMALIZED COORDINATE CONVERSION ==========');
-        console.log('Screen coordinates (CSS pixels):');
-        console.log('  x:', drawingBox.x, 'px');
-        console.log('  y:', drawingBox.y, 'px');
-        console.log('  width:', drawingBox.width, 'px');
-        console.log('  height:', drawingBox.height, 'px');
-        console.log('  viewWidth:', viewWidth, 'px');
-        console.log('  viewHeight:', viewHeight, 'px');
-        
-        console.log('\nNormalized coordinates (0-1, zoom/resolution independent):');
-        console.log('  left:', normalizedCoords.left.toFixed(4));
-        console.log('  top:', normalizedCoords.top.toFixed(4));
-        console.log('  right:', normalizedCoords.right.toFixed(4));
-        console.log('  bottom:', normalizedCoords.bottom.toFixed(4));
-        
-        console.log('\nPDF coordinates (points, for extraction):');
-        console.log('  x:', pdfX.toFixed(2), 'pt');
-        console.log('  y:', pdfY.toFixed(2), 'pt (bottom-left origin)');
-        console.log('  width:', pdfWidth_coord.toFixed(2), 'pt');
-        console.log('  height:', pdfHeight_coord.toFixed(2), 'pt');
-        console.log('  PDF page size:', pdfPageWidth, '×', pdfPageHeight, 'pt');
-        console.log('======================================================\n');
-        
         // Extract text from this specific region
         const formData = new FormData();
-        
+
         // If we have a file, use it; otherwise use template ID
         if (pdfFile) {
           formData.append('pdf', pdfFile);
@@ -475,7 +436,7 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
         } else {
           throw new Error('No PDF available. Please upload a PDF first.');
         }
-        
+
         // Send ONLY normalized coordinates (0-1 system) - bulletproof approach!
         // The backend will convert text item coordinates to normalized and compare
         formData.append('left', normalizedCoords.left);
@@ -483,32 +444,16 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
         formData.append('right', normalizedCoords.right);
         formData.append('bottom', normalizedCoords.bottom);
         formData.append('page', currentPage);
-        
-        console.log('\nSending request to backend:');
-        console.log('  URL: /api/templates/extract-region-text');
-        console.log('  Normalized coordinates (0-1):', normalizedCoords);
-        console.log('  Has PDF file:', !!pdfFile);
-        console.log('  Template ID:', template?.id);
-        
+
         const response = await api.post('/api/templates/extract-region-text', formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
-        
-        console.log('Backend response received');
-        
+
         const extractedText = response.data.text || '';
         const itemCount = response.data.itemCount || 0;
-        
-        console.log('\n========== EXTRACTION RESULT ==========');
-        console.log('Extracted text:', extractedText || '(empty)');
-        console.log('Text length:', extractedText.length);
-        console.log('Item count:', itemCount);
-        console.log('Full response:', JSON.stringify(response.data, null, 2));
-        console.log('==========================================\n');
-        
+
         if (!extractedText.trim()) {
-          toast.warning(`No text found in this region (checked ${itemCount} items). Try a different area or check console for details.`);
-          console.warn('No text extracted. Check backend terminal for coordinate details.');
+          toast.warning(`No text found in this region (checked ${itemCount} items). Try a different area.`);
         } else {
           toast.success(`Found ${itemCount} text item(s): "${extractedText.substring(0, 50)}${extractedText.length > 50 ? '...' : ''}"`);
         }
@@ -696,9 +641,6 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
     }
     
     try {
-      // Debug: Log what we're sending
-      console.log('Saving PDF template with coordinates:', coordinates);
-      
       const baseEndpoint = '/api/templates';
       
       if (template?.id) {
