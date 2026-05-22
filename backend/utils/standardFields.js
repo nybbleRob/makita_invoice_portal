@@ -160,6 +160,16 @@ const STANDARD_FIELDS = {
     templateTypes: ['statement'],
     aliases: ['statement_date', 'statementdate', 'period_end', 'period_end_date']
   },
+  customerAddress: {
+    standardName: 'customerAddress',
+    displayName: 'Customer Address',
+    description: 'Customer / account billing address printed on the statement header',
+    isCrucial: false,
+    isMandatory: false,
+    parsingOrder: 11,
+    templateTypes: ['statement'],
+    aliases: ['customer_address', 'customeraddress', 'account_address', 'billing_address', 'address']
+  },
   totalBalance: {
     standardName: 'totalBalance',
     displayName: 'Total Balance',

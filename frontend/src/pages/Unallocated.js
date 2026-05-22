@@ -746,17 +746,18 @@ const Unallocated = () => {
               {(() => {
                 // Header set is driven by the active document-type filter so a
                 // statement that fell through doesn't get presented under
-                // invoice-shaped columns. 'all' keeps the existing invoice-style
-                // columns to avoid disturbing the common case.
+                // invoice-shaped columns. 'all' uses a neutral column set that
+                // works for any document type (Type, Doc No, Date, Account,
+                // Amount). Specific filters get richer, type-tailored columns.
                 const viewType = documentTypeFilter;
                 const isStatementView = viewType === 'statement';
-                const isUnknownView = viewType === 'unknown';
+                const isInvoiceLikeView = viewType === 'invoice' || viewType === 'credit_note';
                 const docNoLabel = viewType === 'credit_note' ? 'Credit Note No.' : 'Invoice No.';
                 // Total column count = checkbox + Type + variable data cols + Status + Retention + Actions
-                //   default/invoice/credit_note: 1 + 1 + 7 + 3 = 12
-                //   statement:                   1 + 1 + 8 + 3 = 13
-                //   unknown:                     1 + 1 + 4 + 3 = 9
-                const totalColCount = isStatementView ? 13 : (isUnknownView ? 9 : 12);
+                //   all/unknown:           1 + 1 + 4 + 3 = 9
+                //   invoice/credit_note:   1 + 1 + 7 + 3 = 12
+                //   statement:             1 + 1 + 8 + 3 = 13
+                const totalColCount = isStatementView ? 13 : (isInvoiceLikeView ? 12 : 9);
                 return (
               <table className="table table-vcenter table-selectable">
                 <thead>
@@ -783,14 +784,7 @@ const Unallocated = () => {
                         <th>61-90</th>
                         <th>91+</th>
                       </>
-                    ) : isUnknownView ? (
-                      <>
-                        <th>Document No.</th>
-                        <th>Date</th>
-                        <th>Account No.</th>
-                        <th>Amount</th>
-                      </>
-                    ) : (
+                    ) : isInvoiceLikeView ? (
                       <>
                         <th>{docNoLabel}</th>
                         <th>Date/Tax Point</th>
@@ -798,6 +792,14 @@ const Unallocated = () => {
                         <th>Invoice To</th>
                         <th>Delivery Address</th>
                         <th>PO Number</th>
+                        <th>Amount</th>
+                      </>
+                    ) : (
+                      // 'all' and 'unknown' share a neutral column set
+                      <>
+                        <th>Document No.</th>
+                        <th>Date</th>
+                        <th>Account No.</th>
                         <th>Amount</th>
                       </>
                     )}
@@ -974,14 +976,7 @@ const Unallocated = () => {
                               <td>{formatMoney(overdue61To90)}</td>
                               <td>{formatMoney(overdue91Plus)}</td>
                             </>
-                          ) : isUnknownView ? (
-                            <>
-                              <td>{invoiceNumber !== '-' ? <strong>{invoiceNumber}</strong> : '-'}</td>
-                              <td>{formattedDate}</td>
-                              <td><strong>{accountNumber}</strong></td>
-                              <td>{formattedAmount}</td>
-                            </>
-                          ) : (
+                          ) : isInvoiceLikeView ? (
                             <>
                               <td>{invoiceNumber !== '-' ? <strong>{invoiceNumber}</strong> : '-'}</td>
                               <td>{formattedDate}</td>
@@ -991,7 +986,26 @@ const Unallocated = () => {
                               <TruncatedCell value={poNumber} maxWidth="150px" maxLength={20} />
                               <td>{formattedAmount}</td>
                             </>
-                          )}
+                          ) : (() => {
+                            // 'all' / 'unknown' neutral view: pick the per-row best
+                            // value for Amount (totalBalance for statements, totalAmount
+                            // for invoices/credits). Statement rows in mixed view show '-'
+                            // for Document No. since statements don't carry one.
+                            const neutralAmount = documentType === 'statement'
+                              ? formatMoney(totalBalance)
+                              : formattedAmount;
+                            const neutralDocNo = documentType === 'statement'
+                              ? '-'
+                              : (invoiceNumber !== '-' ? <strong>{invoiceNumber}</strong> : '-');
+                            return (
+                              <>
+                                <td>{neutralDocNo}</td>
+                                <td>{formattedDate}</td>
+                                <td><strong>{accountNumber}</strong></td>
+                                <td>{neutralAmount}</td>
+                              </>
+                            );
+                          })()}
                           <td>
                             <div>
                               {getReasonBadge(doc.failureReason, doc.status, doc.metadata)}
