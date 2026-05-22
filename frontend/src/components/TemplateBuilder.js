@@ -424,7 +424,19 @@ const TemplateBuilder = forwardRef(({ template, onSave, onCancel }, ref) => {
           right: Math.max(0, Math.min(1, right)),
           bottom: Math.max(0, Math.min(1, bottom))
         };
-        
+
+        // Legacy PDF-point coordinates kept on the saved field/region for
+        // backwards compatibility with older renderers that read x/y/width/
+        // height when `normalized` is missing. PDF uses bottom-left origin so
+        // Y is flipped from the top-left normalized space.
+        const pdfPageSize = pdfPage.view;
+        const pdfPageWidth = pdfPageSize[2] - pdfPageSize[0];
+        const pdfPageHeight = pdfPageSize[3] - pdfPageSize[1];
+        const pdfX = normalizedCoords.left * pdfPageWidth;
+        const pdfWidth_coord = (normalizedCoords.right - normalizedCoords.left) * pdfPageWidth;
+        const pdfHeight_coord = (normalizedCoords.bottom - normalizedCoords.top) * pdfPageHeight;
+        const pdfY = pdfPageHeight - (normalizedCoords.bottom * pdfPageHeight);
+
         // Extract text from this specific region
         const formData = new FormData();
 
