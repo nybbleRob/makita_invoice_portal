@@ -799,7 +799,7 @@ const Unallocated = () => {
                       // Header lists the per-type doc-number variants so users
                       // know what the column means across mixed rows.
                       <>
-                        <th>INV / CRN / STMT No.</th>
+                        <th>INV / CRN No.</th>
                         <th>Date</th>
                         <th>Account No.</th>
                         <th>Amount</th>
