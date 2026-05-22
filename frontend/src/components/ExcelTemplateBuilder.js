@@ -47,6 +47,12 @@ const ExcelTemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
 
   const REQUIRED_FIELDS = REQUIRED_FIELDS_BY_TYPE[templateType] || REQUIRED_FIELDS_BY_TYPE.invoice;
 
+  // Statements: the three header fields plus the auto-discovered footer cover
+  // everything the parser needs, so we hide the custom-field workflow for them
+  // to keep the builder focused. The feature stays available for invoice and
+  // credit_note templates where users do attach custom columns (PO numbers etc).
+  const supportsCustomFields = templateType !== 'statement';
+
   // Statement-only: these are extracted automatically from the summary row at the
   // bottom of the table by the parser, so they don't need a fixed-cell mapping.
   // The panel below the field mapper makes this visible to the user.
@@ -384,8 +390,6 @@ const ExcelTemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
       
       const results = response.data.results || response.data;
       setTestResults({
-        confidenceScore: results.confidence || 95,
-        parserUsed: results.processingMethod || 'excel_template',
         extractedFields: results.extractedFields || results.parsedData || {},
         fullText: results.fullText || ''
       });
@@ -565,7 +569,7 @@ const ExcelTemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
                       <th>Field</th>
                       <th>Maps To</th>
                       <th>Cell Reference</th>
-                      {templateData.cells.some(c => c.isCustom) && (
+                      {supportsCustomFields && templateData.cells.some(c => c.isCustom) && (
                         <>
                           <th>Add Column</th>
                           <th>Filter Data</th>
@@ -610,7 +614,7 @@ const ExcelTemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
                               />
                             </div>
                           </td>
-                          {templateData.cells.some(c => c.isCustom) && (
+                          {supportsCustomFields && templateData.cells.some(c => c.isCustom) && (
                             <>
                               <td>
                                 {cell.isCustom ? (
@@ -689,12 +693,14 @@ const ExcelTemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
               )}
 
               <div className="mt-3">
-                <button
-                  className="btn btn-outline-primary btn-sm w-100 mb-2"
-                  onClick={() => setShowAddFieldModal(true)}
-                >
-                  + Add Custom Field
-                </button>
+                {supportsCustomFields && (
+                  <button
+                    className="btn btn-outline-primary btn-sm w-100 mb-2"
+                    onClick={() => setShowAddFieldModal(true)}
+                  >
+                    + Add Custom Field
+                  </button>
+                )}
                 <button
                   className="btn btn-success w-100"
                   onClick={handleTestExtraction}
@@ -726,11 +732,6 @@ const ExcelTemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
               )}
               {testResults && (
                 <div>
-                  <div className="mb-3">
-                    <strong>Confidence Score:</strong> {testResults.confidenceScore}%
-                    <br />
-                    <strong>Parser Used:</strong> {testResults.parserUsed}
-                  </div>
                   <div className="table-responsive">
                     <table className="table table-sm table-bordered">
                       <thead>
