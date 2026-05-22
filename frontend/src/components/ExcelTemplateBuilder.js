@@ -363,10 +363,14 @@ const ExcelTemplateBuilder = ({ template, supplierId, onSave, onCancel }) => {
         }
       });
       
-      // Create test template
+      // Create test template. templateType is included so the backend parser's
+      // statement-only auto-discovery (footer aging/total fields) runs during
+      // the test as well as at real import time.
       const testTemplate = {
         excelCells,
-        fileType: 'excel'
+        fileType: 'excel',
+        templateType: templateData.templateType,
+        name: templateData.name || 'Test Template'
       };
       
       // Upload file and test

@@ -185,13 +185,16 @@ router.post('/test-parse', globalAdmin, upload.single('file'), async (req, res) 
         try {
           const templateData = typeof req.body.template === 'string' ? JSON.parse(req.body.template) : req.body.template;
           if (templateData.excelCells && Object.keys(templateData.excelCells).length > 0) {
-            // Use provided template for testing
+            // Use provided template for testing. templateType is forwarded so the
+            // parser's statement-only auto-discovery path runs when the user is
+            // building/testing a statement template.
             template = {
               excelCells: templateData.excelCells,
               fileType: 'excel',
-              name: 'Test Template'
+              templateType: templateData.templateType || null,
+              name: templateData.name || 'Test Template'
             };
-            console.log(`📊 Using test template from request body`);
+            console.log(`📊 Using test template from request body (type: ${template.templateType || 'unspecified'})`);
           }
         } catch (e) {
           console.warn('Error parsing template from request body:', e);

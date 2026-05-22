@@ -17,6 +17,26 @@ const { ensureStorageDirs, getStorageDir } = require('../config/storage');
 ensureStorageDirs();
 const templatesDir = getStorageDir('templates');
 
+/**
+ * Required Excel field names per templateType.
+ *
+ * - Statement templates only need the three header fields - the aging/total
+ *   summary row is auto-discovered by the parser at import time because its
+ *   row position floats with the variable-length invoice list above it.
+ * - Invoice / credit_note templates fall back to the existing flat list at
+ *   settings.mandatoryFields.excel (pre-existing behaviour preserved so we
+ *   don't break templates created before statements were a separate type).
+ */
+const STATEMENT_REQUIRED_FIELDS = ['account_no', 'document_type', 'statement_date'];
+const LEGACY_DEFAULT_REQUIRED_FIELDS = ['account_no', 'invoice_number', 'document_type', 'invoice_total', 'vat_amount'];
+
+function resolveRequiredExcelFields(templateType, settings) {
+  if (templateType === 'statement') {
+    return STATEMENT_REQUIRED_FIELDS;
+  }
+  return settings?.mandatoryFields?.excel || LEGACY_DEFAULT_REQUIRED_FIELDS;
+}
+
 // Configure multer for Excel and PDF uploads
 const upload = multer({
   dest: templatesDir,
@@ -352,18 +372,12 @@ router.post('/', globalAdmin, upload.single('sampleExcel'), async (req, res) => 
       console.log('📊 Excel cells received:', Object.keys(excelCellsObj));
       console.log('📊 Excel cells data:', JSON.stringify(excelCellsObj, null, 2));
       
-      // Get mandatory fields from Settings (or use defaults)
+      // Get mandatory fields per templateType. Statements use a fixed triplet
+      // because the aging/total summary row is auto-discovered at import time;
+      // invoice/credit_note honour any admin override on settings.mandatoryFields.
       const settings = await Settings.getSettings();
-      const mandatoryFields = settings.mandatoryFields?.excel || [
-        'account_no',
-        'invoice_number',
-        'document_type',
-        'invoice_total',
-        'vat_amount'
-      ];
-      
-      // Required fields that must be present for Excel templates
-      const requiredFields = mandatoryFields;
+      const requiredFields = resolveRequiredExcelFields(templateType, settings);
+      console.log(`📋 Required fields for ${templateType} template: ${requiredFields.join(', ')}`);
       
       // Validate all required fields are present with template code prefix
       const missingFields = [];
@@ -689,15 +703,12 @@ router.put('/:id', globalAdmin, upload.single('samplePdf'), async (req, res) => 
       
       // All fields should already have template code prefix from frontend
       const prefixedExcelCells = excelCellsObj;
-      
-      // Required fields that must be present for Excel templates
-      const requiredFields = [
-        'account_no',
-        'invoice_number',
-        'document_type',
-        'invoice_total',
-        'vat_amount'
-      ];
+
+      // Required fields per templateType (statements get the fixed triplet,
+      // others honour the admin override on settings.mandatoryFields.excel).
+      const settings = await Settings.getSettings();
+      const requiredFields = resolveRequiredExcelFields(currentTemplateType, settings);
+      console.log(`📋 Required fields for ${currentTemplateType} template: ${requiredFields.join(', ')}`);
       
       // Validate all required fields are present
       const missingFields = [];
