@@ -817,31 +817,27 @@ const Statements = () => {
                   </div>
                   <ul className="pagination m-0">
                     <li className={`page-item ${pagination.page === 1 || loading ? 'disabled' : ''}`}>
-                      <a className="page-link" href="#" onClick={(e) => {
-                        e.preventDefault();
+                      <button type="button" className="page-link" onClick={() => {
                         if (pagination.page > 1 && !loading) setPagination(prev => ({ ...prev, page: 1 }));
-                      }}>«</a>
+                      }}>«</button>
                     </li>
                     <li className={`page-item ${pagination.page === 1 || loading ? 'disabled' : ''}`}>
-                      <a className="page-link" href="#" onClick={(e) => {
-                        e.preventDefault();
+                      <button type="button" className="page-link" onClick={() => {
                         if (pagination.page > 1 && !loading) setPagination(prev => ({ ...prev, page: prev.page - 1 }));
-                      }}>‹</a>
+                      }}>‹</button>
                     </li>
                     <li className="page-item active">
                       <span className="page-link">{pagination.page} of {pagination.pages}</span>
                     </li>
                     <li className={`page-item ${pagination.page >= pagination.pages || loading ? 'disabled' : ''}`}>
-                      <a className="page-link" href="#" onClick={(e) => {
-                        e.preventDefault();
+                      <button type="button" className="page-link" onClick={() => {
                         if (pagination.page < pagination.pages && !loading) setPagination(prev => ({ ...prev, page: prev.page + 1 }));
-                      }}>›</a>
+                      }}>›</button>
                     </li>
                     <li className={`page-item ${pagination.page >= pagination.pages || loading ? 'disabled' : ''}`}>
-                      <a className="page-link" href="#" onClick={(e) => {
-                        e.preventDefault();
+                      <button type="button" className="page-link" onClick={() => {
                         if (pagination.page < pagination.pages && !loading) setPagination(prev => ({ ...prev, page: pagination.pages }));
-                      }}>»</a>
+                      }}>»</button>
                     </li>
                   </ul>
                 </div>

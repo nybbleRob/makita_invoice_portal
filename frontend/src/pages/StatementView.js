@@ -5,6 +5,8 @@ import * as XLSX from 'xlsx';
 import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { usePermissions } from '../context/PermissionContext';
+import { useSettings } from '../context/SettingsContext';
+import DocumentRetentionTimer from '../components/DocumentRetentionTimer';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL || ''}/pdf.worker.js`;
 
@@ -13,14 +15,15 @@ const StatementView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { hasPermission } = usePermissions();
+  const { settings } = useSettings();
 
   const canDownload = hasPermission('STATEMENTS_DOWNLOAD');
-  const canEdit = hasPermission('STATEMENTS_EDIT');
 
   const [statement, setStatement] = useState(null);
   const [loading, setLoading] = useState(true);
   const [previewType, setPreviewType] = useState('pdf');
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const [pdfPages, setPdfPages] = useState([]);
   const [xlsSheets, setXlsSheets] = useState([]);
@@ -78,8 +81,63 @@ const StatementView = () => {
     return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(amount || 0);
   };
 
-  const handleDownload = async (format) => {
+  const sheetToPreviewHtml = (worksheet) => {
+    const rows = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+      defval: '',
+      blankrows: false
+    });
+    const firstRow = rows[0] || [];
+    const firstCell = (firstRow[0] || '').toString().trim().toUpperCase();
+    const restEmpty = firstRow.slice(1).every((cell) => (cell || '').toString().trim() === '');
+    const options = { editable: false };
+    // Drop the decorative first row: "STATEMENT" + empty cells.
+    if (firstCell === 'STATEMENT' && restEmpty) options.range = 1;
+    return XLSX.utils.sheet_to_html(worksheet, options);
+  };
+
+  const getDocumentStatus = () => {
+    if (!statement) return 'ready_new';
+    if (statement.documentStatus === 'downloaded') return 'downloaded';
+    if (statement.documentStatus === 'viewed') return 'viewed';
+    if (statement.documentStatus === 'queried') return 'queried';
+    if (statement.documentStatus === 'review') return 'review';
+    if (statement.documentStatus === 'ready' && !statement.viewedAt) return 'ready_new';
+    if (statement.downloadedAt) return 'downloaded';
+    if (statement.viewedAt) return 'viewed';
+    return 'ready_new';
+  };
+
+  const getDocumentStatusBadgeClass = (status) => {
+    const classes = {
+      ready_new: 'bg-success-lt',
+      new: 'bg-success-lt',
+      ready: 'bg-success-lt',
+      viewed: 'bg-orange-lt',
+      downloaded: 'bg-primary-lt',
+      review: 'bg-warning-lt',
+      queried: 'bg-info-lt'
+    };
+    return classes[status] || 'bg-success-lt';
+  };
+
+  const getDocumentStatusLabel = (status) => {
+    const labels = {
+      ready_new: 'Ready (New)',
+      new: 'Ready (New)',
+      ready: 'Ready (New)',
+      viewed: 'Viewed',
+      downloaded: 'Downloaded',
+      review: 'Review',
+      queried: 'Queried'
+    };
+    return labels[status] || 'Ready (New)';
+  };
+
+  const handleDownload = async () => {
+    const format = hasPdf ? 'pdf' : 'xls';
     try {
+      setDownloading(true);
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/api/statements/${id}/download?format=${format}`, {
         method: 'GET',
@@ -108,6 +166,8 @@ const StatementView = () => {
     } catch (error) {
       console.error('Error downloading statement:', error);
       toast.error(`Error downloading statement: ${error.message}`);
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -168,7 +228,7 @@ const StatementView = () => {
           const sheetNames = workbook.SheetNames || [];
           const sheets = sheetNames.map((name) => ({
             name,
-            html: XLSX.utils.sheet_to_html(workbook.Sheets[name], { editable: false })
+            html: sheetToPreviewHtml(workbook.Sheets[name])
           }));
           setXlsSheets(sheets);
           setActiveXlsSheet(sheets[0]?.name || '');
@@ -186,11 +246,12 @@ const StatementView = () => {
   useEffect(() => {
     if (previewType !== 'pdf' || pdfPages.length === 0 || !canvasContainerRef.current || isRenderingRef.current) return;
     isRenderingRef.current = true;
+    const container = canvasContainerRef.current;
     const renderPages = async () => {
-      if (!canvasContainerRef.current) return;
-      canvasContainerRef.current.innerHTML = '';
+      if (!container) return;
+      container.innerHTML = '';
       for (const page of pdfPages) {
-        if (!canvasContainerRef.current) break;
+        if (!container) break;
         const viewport = page.getViewport({ scale: 1.4 });
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
@@ -202,14 +263,14 @@ const StatementView = () => {
         canvas.style.marginBottom = '20px';
         canvas.style.border = '1px solid #ddd';
         await page.render({ canvasContext: context, viewport }).promise;
-        if (canvasContainerRef.current) canvasContainerRef.current.appendChild(canvas);
+        if (container) container.appendChild(canvas);
       }
       isRenderingRef.current = false;
     };
     renderPages();
     return () => {
       isRenderingRef.current = false;
-      if (canvasContainerRef.current) canvasContainerRef.current.innerHTML = '';
+      if (container) container.innerHTML = '';
     };
   }, [pdfPages, previewType]);
 
@@ -231,30 +292,26 @@ const StatementView = () => {
 
   if (!statement) return null;
 
+  const docStatus = getDocumentStatus();
+
   return (
     <div className="page">
       <div className="page-header">
         <div className="container-xl">
           <div className="row g-2 align-items-center">
             <div className="col">
-              <h2 className="page-title">Statement {statement.statementNumber || statement.id}</h2>
+              <h2 className="page-title">Statement Details</h2>
+              <div className="text-muted mt-1">Statement for {statement.company?.name || statement.id}</div>
             </div>
-            <div className="col-auto d-flex gap-2">
-              {canDownload && hasPdf && (
-                <button className="btn btn-sm btn-success" onClick={() => handleDownload('pdf')}>Download PDF</button>
-              )}
-              {canDownload && hasXls && (
-                <button className="btn btn-sm btn-success" onClick={() => handleDownload('xls')}>Download XLS</button>
-              )}
-              {canEdit && (
-                <button
-                  className="btn btn-sm btn-info"
-                  onClick={() => navigate(`/statements/${statement.id}/edit?returnQuery=${encodeURIComponent(returnQuery)}`, { state: { returnQuery } })}
-                >
-                  Edit
+            <div className="col-auto ms-auto">
+              <button className="btn btn-secondary me-2" onClick={() => navigate(`/statements?${returnQuery}`)}>
+                Back to Statements
+              </button>
+              {canDownload && (hasPdf || hasXls) && (
+                <button className="btn btn-primary" onClick={handleDownload} disabled={downloading}>
+                  {downloading ? 'Downloading...' : 'Download Statement'}
                 </button>
               )}
-              <button className="btn btn-sm btn-secondary" onClick={() => navigate(`/statements?${returnQuery}`)}>Back</button>
             </div>
           </div>
         </div>
@@ -267,22 +324,19 @@ const StatementView = () => {
               <div className="card">
                 <div className="card-header d-flex justify-content-between align-items-center">
                   <h3 className="card-title mb-0">{previewType === 'xls' ? 'XLS Preview' : 'PDF Preview'}</h3>
-                  <div className="btn-list">
-                    {hasPdf && (
-                      <button className={`btn btn-sm ${previewType === 'pdf' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setPreviewType('pdf')}>PDF</button>
-                    )}
-                    {hasXls && (
-                      <button className={`btn btn-sm ${previewType === 'xls' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setPreviewType('xls')}>XLS</button>
-                    )}
-                  </div>
+                  {hasPdf && previewType !== 'pdf' && (
+                    <button className="btn btn-sm btn-outline-primary" onClick={() => setPreviewType('pdf')}>PDF</button>
+                  )}
                 </div>
-                <div className="card-body">
+                <div className="card-body p-0">
                   {loadingPreview ? (
                     <div className="text-center py-5">
                       <div className="spinner-border" role="status"><span className="visually-hidden">Loading...</span></div>
                     </div>
                   ) : previewType === 'pdf' ? (
-                    <div ref={canvasContainerRef} style={{ maxHeight: '80vh', overflowY: 'auto' }} />
+                    <div style={{ padding: '20px', maxHeight: 'calc(100vh - 250px)', overflowY: 'auto', userSelect: 'none' }}>
+                      <div ref={canvasContainerRef} />
+                    </div>
                   ) : (
                     <>
                       {xlsSheets.length > 1 && (
@@ -314,20 +368,95 @@ const StatementView = () => {
 
             <div className="col-lg-4">
               <div className="card">
-                <div className="card-header"><h3 className="card-title mb-0">Details</h3></div>
+                <div className="card-header d-flex justify-content-between align-items-center">
+                  <h3 className="card-title">Statement Information</h3>
+                  {settings?.documentRetentionPeriod && (
+                    <DocumentRetentionTimer
+                      expiryDate={statement.retentionExpiryDate}
+                      startDate={statement.retentionStartDate}
+                      retentionPeriod={settings?.documentRetentionPeriod}
+                    />
+                  )}
+                </div>
                 <div className="card-body">
-                  <div className="mb-2"><strong>Company:</strong> {statement.company?.name || '-'}</div>
-                  <div className="mb-2"><strong>Account No.:</strong> {statement.company?.referenceNo || '-'}</div>
-                  <div className="mb-2"><strong>Period:</strong> {formatPeriod(statement.periodStart, statement.periodEnd)}</div>
-                  <div className="mb-2"><strong>Opening:</strong> {formatCurrency(statement.openingBalance)}</div>
-                  <div className="mb-2"><strong>Closing:</strong> {formatCurrency(statement.closingBalance)}</div>
-                  <div className="mb-2"><strong>Total Debits:</strong> {formatCurrency(statement.totalDebits)}</div>
-                  <div className="mb-2"><strong>Total Credits:</strong> {formatCurrency(statement.totalCredits)}</div>
-                  <div className="mb-2">
-                    <strong>Status:</strong>{' '}
-                    <span className={`badge ${statusBadgeClass(statement.status)}`}>{statement.status}</span>
+                  <div className="list-group list-group-flush">
+                    <div className="list-group-item px-0 py-2">
+                      <div className="d-flex flex-row align-items-center justify-content-between">
+                        <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>Document Type</div>
+                        <div className="text-end" style={{ flex: 1 }}>
+                          <span className="badge bg-primary-lt">Statement</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="list-group-item px-0 py-2">
+                      <div className="d-flex flex-row align-items-center justify-content-between">
+                        <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>Company</div>
+                        <div className="fw-semibold text-end" style={{ flex: 1 }}>{statement.company?.name || '-'}</div>
+                      </div>
+                    </div>
+                    <div className="list-group-item px-0 py-2">
+                      <div className="d-flex flex-row align-items-center justify-content-between">
+                        <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>Account / Customer Number</div>
+                        <div className="fw-semibold text-end" style={{ flex: 1 }}>{statement.company?.referenceNo || '-'}</div>
+                      </div>
+                    </div>
+                    <div className="list-group-item px-0 py-2">
+                      <div className="d-flex flex-row align-items-center justify-content-between">
+                        <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>Period</div>
+                        <div className="text-end" style={{ flex: 1 }}>{formatPeriod(statement.periodStart, statement.periodEnd)}</div>
+                      </div>
+                    </div>
+                    <div className="list-group-item px-0 py-2">
+                      <div className="d-flex flex-row align-items-center justify-content-between">
+                        <div className="text-danger small" style={{ minWidth: '140px', flexShrink: 0 }}>Opening Balance</div>
+                        <div className="text-danger text-end" style={{ flex: 1 }}>{formatCurrency(statement.openingBalance)}</div>
+                      </div>
+                    </div>
+                    <div className="list-group-item px-0 py-2">
+                      <div className="d-flex flex-row align-items-center justify-content-between">
+                        <div className="text-danger small" style={{ minWidth: '140px', flexShrink: 0 }}>Closing Balance</div>
+                        <div className="fw-semibold text-danger text-end" style={{ flex: 1 }}>{formatCurrency(statement.closingBalance)}</div>
+                      </div>
+                    </div>
+                    <div className="list-group-item px-0 py-2">
+                      <div className="d-flex flex-row align-items-center justify-content-between">
+                        <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>Total Debits</div>
+                        <div className="text-end" style={{ flex: 1 }}>{formatCurrency(statement.totalDebits)}</div>
+                      </div>
+                    </div>
+                    <div className="list-group-item px-0 py-2">
+                      <div className="d-flex flex-row align-items-center justify-content-between">
+                        <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>Total Credits</div>
+                        <div className="text-end" style={{ flex: 1 }}>{formatCurrency(statement.totalCredits)}</div>
+                      </div>
+                    </div>
+                    <div className="list-group-item px-0 py-2">
+                      <div className="d-flex flex-row align-items-center justify-content-between">
+                        <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>Files</div>
+                        <div className="text-end" style={{ flex: 1 }}>
+                          {hasPdf && <span className="badge bg-red-lt me-1">PDF</span>}
+                          {hasXls && <span className="badge bg-green-lt">XLS</span>}
+                          {!hasPdf && !hasXls && <span className="text-muted">-</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="list-group-item px-0 py-2">
+                      <div className="d-flex flex-row align-items-center justify-content-between">
+                        <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>Workflow Status</div>
+                        <div className="text-end" style={{ flex: 1 }}>
+                          <span className={`badge ${statusBadgeClass(statement.status)}`}>{statement.status}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="list-group-item px-0 py-2">
+                      <div className="d-flex flex-row align-items-center justify-content-between">
+                        <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>Document Status</div>
+                        <div className="text-end" style={{ flex: 1 }}>
+                          <span className={`badge ${getDocumentStatusBadgeClass(docStatus)}`}>{getDocumentStatusLabel(docStatus)}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="mb-0"><strong>Files:</strong> {hasPdf ? 'PDF ' : ''}{hasXls ? 'XLS' : '' || '-'}</div>
                 </div>
               </div>
             </div>
