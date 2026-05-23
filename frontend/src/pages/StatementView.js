@@ -478,14 +478,6 @@ const StatementView = () => {
           line-height: 1.25;
           white-space: nowrap;
         }
-        .excel-preview-surface tr:first-child td,
-        .excel-preview-surface tr:first-child th {
-          position: sticky;
-          top: 0;
-          z-index: 2;
-          background: #edf2f7;
-          font-weight: 600;
-        }
       `}</style>
     </div>
   );
