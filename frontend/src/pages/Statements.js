@@ -57,7 +57,7 @@ const Statements = () => {
     closingBalance: '',
     totalDebits: '',
     totalCredits: '',
-    status: 'draft',
+    documentStatus: 'ready',
     notes: '',
     editReason: ''
   });
@@ -206,18 +206,49 @@ const Statements = () => {
   };
 
   const formatPeriod = (start, end) => {
-    if (!start || !end) return formatDate(end);
-    return `${formatDate(start)} - ${formatDate(end)}`;
+    if (!start && !end) return '-';
+    if (!start || !end) return formatDate(end || start);
+    const s = formatDate(start);
+    const e = formatDate(end);
+    return s === e ? e : `${s} - ${e}`;
   };
 
-  const getStatusBadgeClass = (status) => {
+  const getDocumentStatus = (statement) => {
+    if (!statement) return 'ready_new';
+    if (statement.documentStatus === 'downloaded') return 'downloaded';
+    if (statement.documentStatus === 'viewed') return 'viewed';
+    if (statement.documentStatus === 'queried') return 'queried';
+    if (statement.documentStatus === 'review') return 'review';
+    if (statement.documentStatus === 'ready' && !statement.viewedAt) return 'ready_new';
+    if (statement.downloadedAt) return 'downloaded';
+    if (statement.viewedAt) return 'viewed';
+    return 'ready_new';
+  };
+
+  const getDocumentStatusBadgeClass = (status) => {
     const classes = {
-      draft: 'bg-secondary-lt',
-      sent: 'bg-info-lt',
-      acknowledged: 'bg-success-lt',
-      disputed: 'bg-warning-lt'
+      ready_new: 'bg-success-lt',
+      new: 'bg-success-lt',
+      ready: 'bg-success-lt',
+      viewed: 'bg-orange-lt',
+      downloaded: 'bg-primary-lt',
+      review: 'bg-warning-lt',
+      queried: 'bg-info-lt'
     };
-    return classes[status] || 'bg-secondary-lt';
+    return classes[status] || 'bg-success-lt';
+  };
+
+  const getDocumentStatusLabel = (status) => {
+    const labels = {
+      ready_new: 'Ready (New)',
+      new: 'Ready (New)',
+      ready: 'Ready (New)',
+      viewed: 'Viewed',
+      downloaded: 'Downloaded',
+      review: 'Review',
+      queried: 'Queried'
+    };
+    return labels[status] || 'Ready (New)';
   };
 
   const hasActiveFilters = activeSearchQuery || statusFilter !== 'all' || sortBy !== 'periodEnd' || sortOrder !== 'DESC' || selectedCompanyIds.length > 0 || retentionFilter !== 'all';
@@ -309,7 +340,7 @@ const Statements = () => {
         closingBalance: editForm.closingBalance === '' ? null : Number(editForm.closingBalance),
         totalDebits: editForm.totalDebits === '' ? null : Number(editForm.totalDebits),
         totalCredits: editForm.totalCredits === '' ? null : Number(editForm.totalCredits),
-        status: editForm.status,
+        documentStatus: editForm.documentStatus,
         notes: editForm.notes || null,
         editReason: editForm.editReason.trim()
       };
@@ -570,10 +601,11 @@ const Statements = () => {
                       }}
                     >
                       <option value="all">All Status</option>
-                      <option value="draft">Draft</option>
-                      <option value="sent">Sent</option>
-                      <option value="acknowledged">Acknowledged</option>
-                      <option value="disputed">Disputed</option>
+                      <option value="ready_new">Ready (New)</option>
+                      <option value="viewed">Viewed</option>
+                      <option value="downloaded">Downloaded</option>
+                      <option value="review">Review</option>
+                      <option value="queried">Queried</option>
                     </select>
 
                     <select
@@ -716,6 +748,7 @@ const Statements = () => {
                         (statement.fileUrl && /\.pdf$/i.test(statement.fileUrl)));
                       const hasXls = !!(statement.xlsFileUrl ||
                         (statement.fileUrl && /\.(xls|xlsx)$/i.test(statement.fileUrl)));
+                      const docStatus = getDocumentStatus(statement);
                       return (
                         <tr key={statement.id}>
                           {canDelete && (
@@ -742,8 +775,8 @@ const Statements = () => {
                             </div>
                           </td>
                           <td>
-                            <span className={`badge ${getStatusBadgeClass(statement.status)}`}>
-                              {statement.status}
+                            <span className={`badge ${getDocumentStatusBadgeClass(docStatus)}`}>
+                              {getDocumentStatusLabel(docStatus)}
                             </span>
                           </td>
                           {settings?.documentRetentionPeriod && (
@@ -1142,17 +1175,19 @@ const Statements = () => {
                     />
                   </div>
                   <div className="col-md-6">
-                    <label className="form-label">Status</label>
+                    <label className="form-label">Document Status</label>
                     <select
                       className="form-select"
-                      value={editForm.status}
-                      onChange={(e) => setEditForm(p => ({ ...p, status: e.target.value }))}
+                      value={editForm.documentStatus}
+                      onChange={(e) => setEditForm(p => ({ ...p, documentStatus: e.target.value }))}
                     >
-                      <option value="draft">Draft</option>
-                      <option value="sent">Sent</option>
-                      <option value="acknowledged">Acknowledged</option>
-                      <option value="disputed">Disputed</option>
+                      <option value="ready">Ready (New)</option>
+                      <option value="review">Review</option>
+                      <option value="viewed">Viewed</option>
+                      <option value="downloaded">Downloaded</option>
+                      <option value="queried">Queried</option>
                     </select>
+                    <small className="form-hint">Only Global Administrators and Administrators can change document status</small>
                   </div>
                   <div className="col-12">
                     <label className="form-label">Notes</label>

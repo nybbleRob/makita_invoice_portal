@@ -27,7 +27,7 @@ const StatementEdit = () => {
     closingBalance: '',
     totalDebits: '',
     totalCredits: '',
-    status: 'draft',
+    documentStatus: 'ready',
     notes: '',
     editReason: ''
   });
@@ -67,10 +67,10 @@ const StatementEdit = () => {
     const firstRow = rows[0] || [];
     const firstCell = (firstRow[0] || '').toString().trim().toUpperCase();
     const restEmpty = firstRow.slice(1).every((cell) => (cell || '').toString().trim() === '');
-    const options = { editable: false };
-    // Drop the decorative first row: "STATEMENT" + empty cells.
-    if (firstCell === 'STATEMENT' && restEmpty) options.range = 1;
-    return XLSX.utils.sheet_to_html(worksheet, options);
+    const cleanedRows = (firstCell === 'STATEMENT' && restEmpty) ? rows.slice(1) : rows;
+    const normalizedRows = cleanedRows.length > 0 ? cleanedRows : [['']];
+    const cleanedSheet = XLSX.utils.aoa_to_sheet(normalizedRows);
+    return XLSX.utils.sheet_to_html(cleanedSheet, { editable: false });
   };
 
   useEffect(() => {
@@ -92,7 +92,7 @@ const StatementEdit = () => {
           closingBalance: data.closingBalance != null ? String(data.closingBalance) : '',
           totalDebits: data.totalDebits != null ? String(data.totalDebits) : '',
           totalCredits: data.totalCredits != null ? String(data.totalCredits) : '',
-          status: data.status || 'draft',
+          documentStatus: data.documentStatus || 'ready',
           notes: data.notes || '',
           editReason: ''
         });
@@ -201,7 +201,7 @@ const StatementEdit = () => {
         closingBalance: form.closingBalance === '' ? null : Number(form.closingBalance),
         totalDebits: form.totalDebits === '' ? null : Number(form.totalDebits),
         totalCredits: form.totalCredits === '' ? null : Number(form.totalCredits),
-        status: form.status,
+        documentStatus: form.documentStatus,
         notes: form.notes || null,
         editReason: form.editReason.trim()
       });
@@ -343,13 +343,15 @@ const StatementEdit = () => {
                   </div>
 
                   <div className="mb-3">
-                    <label className="form-label">Statement Status</label>
-                    <select className="form-select" value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
-                      <option value="draft">Draft</option>
-                      <option value="sent">Sent</option>
-                      <option value="acknowledged">Acknowledged</option>
-                      <option value="disputed">Disputed</option>
+                    <label className="form-label">Document Status</label>
+                    <select className="form-select" value={form.documentStatus} onChange={(e) => setForm((p) => ({ ...p, documentStatus: e.target.value }))}>
+                      <option value="ready">Ready (New)</option>
+                      <option value="review">Review</option>
+                      <option value="viewed">Viewed</option>
+                      <option value="downloaded">Downloaded</option>
+                      <option value="queried">Queried</option>
                     </select>
+                    <small className="form-hint">Only Global Administrators and Administrators can change document status</small>
                   </div>
 
                   <div className="mb-3">

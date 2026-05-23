@@ -258,10 +258,24 @@ const UnallocatedView = () => {
         throw new Error('No worksheets found in this XLS file');
       }
 
-      const parsedSheets = sheetNames.map((sheetName) => ({
-        name: sheetName,
-        html: XLSX.utils.sheet_to_html(workbook.Sheets[sheetName], { editable: false })
-      }));
+      const parsedSheets = sheetNames.map((sheetName) => {
+        const worksheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(worksheet, {
+          header: 1,
+          defval: '',
+          blankrows: false
+        });
+        const firstRow = rows[0] || [];
+        const firstCell = (firstRow[0] || '').toString().trim().toUpperCase();
+        const restEmpty = firstRow.slice(1).every((cell) => (cell || '').toString().trim() === '');
+        const cleanedRows = (firstCell === 'STATEMENT' && restEmpty) ? rows.slice(1) : rows;
+        const normalizedRows = cleanedRows.length > 0 ? cleanedRows : [['']];
+        const cleanedSheet = XLSX.utils.aoa_to_sheet(normalizedRows);
+        return {
+          name: sheetName,
+          html: XLSX.utils.sheet_to_html(cleanedSheet, { editable: false })
+        };
+      });
 
       setXlsSheets(parsedSheets);
       setActiveXlsSheet(parsedSheets[0].name);

@@ -18,6 +18,7 @@ const StatementView = () => {
   const { settings } = useSettings();
 
   const canDownload = hasPermission('STATEMENTS_DOWNLOAD');
+  const canEdit = hasPermission('STATEMENTS_EDIT');
 
   const [statement, setStatement] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -57,24 +58,17 @@ const StatementView = () => {
     return !!(statement?.xlsFileUrl || (statement?.fileUrl && /\.(xls|xlsx)$/i.test(statement.fileUrl)));
   }, [statement]);
 
-  const statusBadgeClass = (status) => {
-    const map = {
-      draft: 'bg-secondary-lt',
-      sent: 'bg-info-lt',
-      acknowledged: 'bg-success-lt',
-      disputed: 'bg-warning-lt'
-    };
-    return map[status] || 'bg-secondary-lt';
-  };
-
   const formatDate = (date) => {
     if (!date) return '-';
     return new Date(date).toLocaleDateString('en-GB');
   };
 
   const formatPeriod = (start, end) => {
-    if (!start || !end) return formatDate(end);
-    return `${formatDate(start)} - ${formatDate(end)}`;
+    if (!start && !end) return '-';
+    if (!start || !end) return formatDate(end || start);
+    const s = formatDate(start);
+    const e = formatDate(end);
+    return s === e ? e : `${s} - ${e}`;
   };
 
   const formatCurrency = (amount) => {
@@ -90,10 +84,10 @@ const StatementView = () => {
     const firstRow = rows[0] || [];
     const firstCell = (firstRow[0] || '').toString().trim().toUpperCase();
     const restEmpty = firstRow.slice(1).every((cell) => (cell || '').toString().trim() === '');
-    const options = { editable: false };
-    // Drop the decorative first row: "STATEMENT" + empty cells.
-    if (firstCell === 'STATEMENT' && restEmpty) options.range = 1;
-    return XLSX.utils.sheet_to_html(worksheet, options);
+    const cleanedRows = (firstCell === 'STATEMENT' && restEmpty) ? rows.slice(1) : rows;
+    const normalizedRows = cleanedRows.length > 0 ? cleanedRows : [['']];
+    const cleanedSheet = XLSX.utils.aoa_to_sheet(normalizedRows);
+    return XLSX.utils.sheet_to_html(cleanedSheet, { editable: false });
   };
 
   const getDocumentStatus = () => {
@@ -312,6 +306,14 @@ const StatementView = () => {
                   {downloading ? 'Downloading...' : 'Download Statement'}
                 </button>
               )}
+              {canEdit && (
+                <button
+                  className="btn btn-info ms-2"
+                  onClick={() => navigate(`/statements/${id}/edit?returnQuery=${encodeURIComponent(returnQuery)}`, { state: { returnQuery } })}
+                >
+                  Edit
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -437,14 +439,6 @@ const StatementView = () => {
                           {hasPdf && <span className="badge bg-red-lt me-1">PDF</span>}
                           {hasXls && <span className="badge bg-green-lt">XLS</span>}
                           {!hasPdf && !hasXls && <span className="text-muted">-</span>}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="list-group-item px-0 py-2">
-                      <div className="d-flex flex-row align-items-center justify-content-between">
-                        <div className="text-muted small" style={{ minWidth: '140px', flexShrink: 0 }}>Workflow Status</div>
-                        <div className="text-end" style={{ flex: 1 }}>
-                          <span className={`badge ${statusBadgeClass(statement.status)}`}>{statement.status}</span>
                         </div>
                       </div>
                     </div>

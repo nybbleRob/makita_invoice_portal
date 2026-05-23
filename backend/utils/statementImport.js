@@ -62,6 +62,12 @@ function coerceNumber(raw) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function parseDateValue(raw) {
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 /**
  * Find or create a Statement row, slotting the file into the correct format column.
  *
@@ -95,8 +101,13 @@ async function findOrCreateStatement({
   }
 
   const fileSlot = classifyStatementFile(filePath);
-  const periodEnd = new Date(statementDate);
-  const periodStart = new Date(statementDate);
+  const parsedPeriodStart = parseDateValue(parsedData.periodStart || parsedData.statementPeriodStart);
+  const parsedPeriodEnd = parseDateValue(parsedData.periodEnd || parsedData.statementPeriodEnd || parsedData.statementDate);
+  const periodEnd = parsedPeriodEnd || new Date(statementDate);
+  let periodStart = parsedPeriodStart || new Date(periodEnd);
+  if (periodStart.getTime() > periodEnd.getTime()) {
+    periodStart = new Date(periodEnd);
+  }
 
   const existing = await Statement.findOne({
     where: {
@@ -193,7 +204,8 @@ async function findOrCreateStatement({
     closingBalance,
     totalDebits: 0,
     totalCredits: 0,
-    status: 'sent',
+    // Legacy workflow status retained for compatibility with old rows; UI uses documentStatus.
+    status: 'draft',
     documentStatus: documentStatus || 'ready',
     fileUrl: filePath,
     pdfFileUrl: fileSlot === 'pdf' ? filePath : null,
