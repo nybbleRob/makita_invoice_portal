@@ -5,6 +5,7 @@ import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../context/PermissionContext';
 import * as pdfjsLib from 'pdfjs-dist';
+import * as XLSX from 'xlsx';
 
 // Set worker path for PDF.js - use local worker file from public folder
 pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL || ''}/pdf.worker.js`;
@@ -43,6 +44,11 @@ const UnallocatedView = () => {
   const canvasContainerRef = useRef(null);
   const isRenderingRef = useRef(false);
   const pdfFetchedRef = useRef(false);
+  const [previewType, setPreviewType] = useState('pdf'); // 'pdf' | 'xls'
+  const [loadingXls, setLoadingXls] = useState(false);
+  const [xlsPreviewError, setXlsPreviewError] = useState('');
+  const [xlsSheets, setXlsSheets] = useState([]);
+  const [activeXlsSheet, setActiveXlsSheet] = useState('');
   const [editingData, setEditingData] = useState({});
   const [activeDataTab, setActiveDataTab] = useState('extracted'); // 'extracted' or 'json'
   const [attemptingAllocation, setAttemptingAllocation] = useState(false);
@@ -51,6 +57,11 @@ const UnallocatedView = () => {
     // Reset PDF state when id changes
     setPdfPages([]);
     setLoadingPdf(false);
+    setLoadingXls(false);
+    setXlsPreviewError('');
+    setXlsSheets([]);
+    setActiveXlsSheet('');
+    setPreviewType('pdf');
     isRenderingRef.current = false;
     pdfFetchedRef.current = false;
     if (canvasContainerRef.current) {
@@ -63,6 +74,11 @@ const UnallocatedView = () => {
     return () => {
       setPdfPages([]);
       setLoadingPdf(false);
+      setLoadingXls(false);
+      setXlsPreviewError('');
+      setXlsSheets([]);
+      setActiveXlsSheet('');
+      setPreviewType('pdf');
       isRenderingRef.current = false;
       pdfFetchedRef.current = false;
       if (canvasContainerRef.current) {
@@ -108,10 +124,18 @@ const UnallocatedView = () => {
         date: parsed.invoiceDate || parsed.date || parsed.taxPoint || parsed.tax_point || ''
       });
       setActiveDataTab('extracted'); // Reset to default tab
-      
-      // Fetch PDF for preview if file exists
+
+      const fileNameOrPath = (doc.fileName || doc.filePath || '').toLowerCase();
+      const isExcelFile = fileNameOrPath.endsWith('.xls') || fileNameOrPath.endsWith('.xlsx');
+      setPreviewType(isExcelFile ? 'xls' : 'pdf');
+
+      // Fetch preview based on file type
       if (doc.filePath) {
-        fetchPdfForPreview();
+        if (isExcelFile) {
+          fetchXlsForPreview();
+        } else {
+          fetchPdfForPreview();
+        }
       }
     } catch (error) {
       console.error('Error fetching document:', error);
@@ -162,6 +186,51 @@ const UnallocatedView = () => {
       console.error('Error loading PDF for preview:', error);
       setLoadingPdf(false);
       pdfFetchedRef.current = false; // Reset on error so it can retry
+    }
+  };
+
+  const fetchXlsForPreview = async () => {
+    try {
+      setLoadingXls(true);
+      setXlsPreviewError('');
+      setXlsSheets([]);
+      setActiveXlsSheet('');
+
+      const token = localStorage.getItem('token');
+      const baseUrl = API_BASE_URL;
+      const url = `${baseUrl}/api/unallocated/${id}/view-file`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to load XLS file');
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const sheetNames = workbook.SheetNames || [];
+
+      if (sheetNames.length === 0) {
+        throw new Error('No worksheets found in this XLS file');
+      }
+
+      const parsedSheets = sheetNames.map((sheetName) => ({
+        name: sheetName,
+        html: XLSX.utils.sheet_to_html(workbook.Sheets[sheetName], { editable: false })
+      }));
+
+      setXlsSheets(parsedSheets);
+      setActiveXlsSheet(parsedSheets[0].name);
+    } catch (error) {
+      console.error('Error loading XLS for preview:', error);
+      setXlsPreviewError(error.message || 'Failed to load XLS preview');
+    } finally {
+      setLoadingXls(false);
     }
   };
 
@@ -408,14 +477,48 @@ const UnallocatedView = () => {
       <div className="page-body">
         <div className="container-xl">
           <div className="row">
-            {/* PDF Preview - Left Column (67%) */}
+            {/* File Preview - Left Column (67%) */}
             <div className="col-lg-8">
               <div className="card">
                 <div className="card-header">
-                  <h3 className="card-title">PDF Preview</h3>
+                  <h3 className="card-title">{previewType === 'xls' ? 'XLS Preview' : 'PDF Preview'}</h3>
                 </div>
                 <div className="card-body">
-                  {loadingPdf ? (
+                  {previewType === 'xls' ? (
+                    loadingXls ? (
+                      <div className="text-center py-5">
+                        <div className="spinner-border" role="status">
+                          <span className="visually-hidden">Loading XLS...</span>
+                        </div>
+                      </div>
+                    ) : xlsPreviewError ? (
+                      <div className="alert alert-danger mb-0">{xlsPreviewError}</div>
+                    ) : (
+                      <>
+                        {xlsSheets.length > 1 && (
+                          <div className="mb-3 d-flex flex-wrap gap-2">
+                            {xlsSheets.map((sheet) => (
+                              <button
+                                key={sheet.name}
+                                type="button"
+                                className={`btn btn-sm ${activeXlsSheet === sheet.name ? 'btn-primary' : 'btn-outline-primary'}`}
+                                onClick={() => setActiveXlsSheet(sheet.name)}
+                              >
+                                {sheet.name}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <div className="border rounded p-2 bg-white" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+                          <div
+                            dangerouslySetInnerHTML={{
+                              __html: xlsSheets.find((sheet) => sheet.name === activeXlsSheet)?.html || ''
+                            }}
+                          />
+                        </div>
+                      </>
+                    )
+                  ) : loadingPdf ? (
                     <div className="text-center py-5">
                       <div className="spinner-border" role="status">
                         <span className="visually-hidden">Loading PDF...</span>
@@ -484,6 +587,7 @@ const UnallocatedView = () => {
                       value={editingData.documentType || ''}
                       onChange={(e) => setEditingData(prev => ({ ...prev, documentType: e.target.value }))}
                       placeholder="invoice, credit_note, statement"
+                      style={{ textTransform: 'capitalize' }}
                       readOnly={!canEdit}
                       disabled={!canEdit}
                     />
@@ -875,8 +979,8 @@ const UnallocatedView = () => {
                                 maxHeight: '500px', 
                                 overflow: 'auto', 
                                 fontSize: '12px',
-                                backgroundColor: '#000000',
-                                color: '#ffffff',
+                                backgroundColor: '#ffffff',
+                                color: '#1f2937',
                                 padding: '1rem',
                                 borderRadius: '4px',
                                 margin: 0

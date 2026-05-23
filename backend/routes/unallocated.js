@@ -403,6 +403,59 @@ router.get('/:id/view-pdf', async (req, res) => {
   }
 });
 
+// View unallocated original file inline (PDF/XLS/XLSX)
+router.get('/:id/view-file', async (req, res) => {
+  try {
+    if (req.user.role === 'external_user') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const file = await File.findByPk(req.params.id);
+
+    if (!file) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+
+    if (file.status !== 'unallocated' && file.status !== 'failed' && file.status !== 'duplicate') {
+      return res.status(400).json({ message: 'Document is not unallocated, failed, or duplicate' });
+    }
+
+    if (!file.filePath) {
+      return res.status(404).json({ message: 'No document file available' });
+    }
+
+    let filePath;
+    if (path.isAbsolute(file.filePath)) {
+      filePath = file.filePath;
+    } else {
+      filePath = path.join(__dirname, '..', file.filePath);
+      if (!fs.existsSync(filePath)) {
+        filePath = file.filePath;
+      }
+    }
+
+    if (!fs.existsSync(filePath)) {
+      console.error(`File not found: ${filePath} (original: ${file.filePath})`);
+      return res.status(404).json({ message: 'Document file not found on server' });
+    }
+
+    const ext = path.extname(file.fileName || filePath).toLowerCase();
+    const mimeByExt = {
+      '.pdf': 'application/pdf',
+      '.xls': 'application/vnd.ms-excel',
+      '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    };
+    const contentType = mimeByExt[ext] || 'application/octet-stream';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${file.fileName}"`);
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('Error viewing unallocated document file:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Update parsed data and requeue for processing - GA + Admin + Manager only
 router.put('/:id', requirePermission('UNALLOCATED_EDIT'), async (req, res) => {
   try {

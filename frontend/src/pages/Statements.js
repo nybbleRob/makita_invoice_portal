@@ -6,6 +6,7 @@ import { useSettings } from '../context/SettingsContext';
 import { usePermissions } from '../context/PermissionContext';
 import DocumentRetentionTimer from '../components/DocumentRetentionTimer';
 import HierarchicalCompanyFilter from '../components/HierarchicalCompanyFilter';
+import * as XLSX from 'xlsx';
 
 const Statements = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -66,6 +67,12 @@ const Statements = () => {
   const [importResults, setImportResults] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importPollingInterval, setImportPollingInterval] = useState(null);
+  const [showXlsPreviewModal, setShowXlsPreviewModal] = useState(false);
+  const [xlsPreviewLoading, setXlsPreviewLoading] = useState(false);
+  const [xlsPreviewError, setXlsPreviewError] = useState('');
+  const [xlsPreviewTitle, setXlsPreviewTitle] = useState('');
+  const [xlsPreviewSheets, setXlsPreviewSheets] = useState([]);
+  const [activePreviewSheet, setActivePreviewSheet] = useState('');
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -211,22 +218,6 @@ const Statements = () => {
     return classes[status] || 'bg-secondary';
   };
 
-  // Sortable column header helper
-  const handleSort = (field) => {
-    if (sortBy === field) {
-      setSortOrder(prev => (prev === 'ASC' ? 'DESC' : 'ASC'));
-    } else {
-      setSortBy(field);
-      setSortOrder('DESC');
-    }
-    setPagination(prev => ({ ...prev, page: 1 }));
-  };
-
-  const renderSortIndicator = (field) => {
-    if (sortBy !== field) return <span className="text-muted ms-1">↕</span>;
-    return <span className="ms-1">{sortOrder === 'ASC' ? '↑' : '↓'}</span>;
-  };
-
   const hasActiveFilters = activeSearchQuery || statusFilter !== 'all' || sortBy !== 'periodEnd' || sortOrder !== 'DESC' || selectedCompanyIds.length > 0 || retentionFilter !== 'all';
 
   const handleResetFilters = () => {
@@ -302,6 +293,59 @@ const Statements = () => {
   const handleDownloadXls = async (statement) => {
     await openAuthenticatedFile(`/api/statements/${statement.id}/download-xls`, `statement-${statement.statementNumber || statement.id}.xlsx`, 'download');
     fetchStatements();
+  };
+
+  const closeXlsPreview = () => {
+    setShowXlsPreviewModal(false);
+    setXlsPreviewLoading(false);
+    setXlsPreviewError('');
+    setXlsPreviewTitle('');
+    setXlsPreviewSheets([]);
+    setActivePreviewSheet('');
+  };
+
+  const handleViewXls = async (statement) => {
+    try {
+      setShowXlsPreviewModal(true);
+      setXlsPreviewLoading(true);
+      setXlsPreviewError('');
+      setXlsPreviewTitle(`Statement ${statement.statementNumber || statement.id}`);
+      setXlsPreviewSheets([]);
+      setActivePreviewSheet('');
+
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/api/statements/${statement.id}/download-xls`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Request failed' }));
+        throw new Error(errorData.message || 'Failed to fetch XLS file');
+      }
+
+      const fileBuffer = await response.arrayBuffer();
+      const workbook = XLSX.read(fileBuffer, { type: 'array' });
+      const sheetNames = workbook.SheetNames || [];
+
+      if (sheetNames.length === 0) {
+        throw new Error('No worksheets found in this XLS file');
+      }
+
+      const parsedSheets = sheetNames.map((sheetName) => ({
+        name: sheetName,
+        html: XLSX.utils.sheet_to_html(workbook.Sheets[sheetName], { editable: false })
+      }));
+
+      setXlsPreviewSheets(parsedSheets);
+      setActivePreviewSheet(parsedSheets[0].name);
+    } catch (error) {
+      console.error('Error previewing XLS:', error);
+      setXlsPreviewError(error.message || 'Failed to preview XLS file');
+      toast.error(`Error previewing XLS: ${error.message || 'Unknown error'}`);
+    } finally {
+      setXlsPreviewLoading(false);
+    }
   };
 
   // Edit handlers
@@ -703,24 +747,14 @@ const Statements = () => {
                         />
                       </th>
                     )}
-                    <th style={{ cursor: 'pointer' }} onClick={() => handleSort('statementNumber')}>
-                      Statement No.{renderSortIndicator('statementNumber')}
-                    </th>
+                    <th>Statement No.</th>
                     <th>Company</th>
                     <th>Account No.</th>
-                    <th style={{ cursor: 'pointer' }} onClick={() => handleSort('periodEnd')}>
-                      Period{renderSortIndicator('periodEnd')}
-                    </th>
-                    <th style={{ cursor: 'pointer' }} onClick={() => handleSort('openingBalance')}>
-                      Opening{renderSortIndicator('openingBalance')}
-                    </th>
-                    <th style={{ cursor: 'pointer' }} onClick={() => handleSort('closingBalance')}>
-                      Closing{renderSortIndicator('closingBalance')}
-                    </th>
+                    <th>Period</th>
+                    <th>Opening</th>
+                    <th>Closing</th>
                     <th>Files</th>
-                    <th style={{ cursor: 'pointer' }} onClick={() => handleSort('status')}>
-                      Status{renderSortIndicator('status')}
-                    </th>
+                    <th>Status</th>
                     {settings?.documentRetentionPeriod && <th>Retention</th>}
                     <th>Actions</th>
                   </tr>
@@ -822,6 +856,15 @@ const Statements = () => {
                                   title="Download XLS"
                                 >
                                   XLS
+                                </button>
+                              )}
+                              {hasXls && (
+                                <button
+                                  className="btn btn-sm btn-primary"
+                                  onClick={() => handleViewXls(statement)}
+                                  title="Preview XLS"
+                                >
+                                  Preview XLS
                                 </button>
                               )}
                               {canEdit && (
@@ -1031,6 +1074,64 @@ const Statements = () => {
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-primary" onClick={handleFinishImport}>Done</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* XLS Preview Modal */}
+      {showXlsPreviewModal && (
+        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
+          <div className="modal-dialog modal-xl">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">{xlsPreviewTitle ? `${xlsPreviewTitle} - XLS Preview` : 'XLS Preview'}</h5>
+                <button type="button" className="btn-close" onClick={closeXlsPreview}></button>
+              </div>
+              <div className="modal-body">
+                {xlsPreviewLoading && (
+                  <div className="text-center py-5">
+                    <div className="spinner-border text-primary mb-3" role="status">
+                      <span className="visually-hidden">Loading...</span>
+                    </div>
+                    <div className="text-muted">Loading spreadsheet preview...</div>
+                  </div>
+                )}
+
+                {!xlsPreviewLoading && xlsPreviewError && (
+                  <div className="alert alert-danger mb-0">{xlsPreviewError}</div>
+                )}
+
+                {!xlsPreviewLoading && !xlsPreviewError && xlsPreviewSheets.length > 0 && (
+                  <>
+                    <div className="mb-3 d-flex flex-wrap gap-2">
+                      {xlsPreviewSheets.map((sheet) => (
+                        <button
+                          key={sheet.name}
+                          type="button"
+                          className={`btn btn-sm ${activePreviewSheet === sheet.name ? 'btn-primary' : 'btn-outline-primary'}`}
+                          onClick={() => setActivePreviewSheet(sheet.name)}
+                        >
+                          {sheet.name}
+                        </button>
+                      ))}
+                    </div>
+                    <div
+                      className="border rounded p-2 bg-white"
+                      style={{ maxHeight: '65vh', overflow: 'auto' }}
+                    >
+                      <div
+                        dangerouslySetInnerHTML={{
+                          __html: xlsPreviewSheets.find((sheet) => sheet.name === activePreviewSheet)?.html || ''
+                        }}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={closeXlsPreview}>Close</button>
               </div>
             </div>
           </div>

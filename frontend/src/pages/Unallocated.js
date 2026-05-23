@@ -1346,6 +1346,7 @@ const Unallocated = () => {
                                 value={editingData.documentType || ''}
                                 onChange={(e) => setEditingData(prev => ({ ...prev, documentType: e.target.value }))}
                                 placeholder="invoice, credit_note, statement"
+                                style={{ textTransform: 'capitalize' }}
                               />
                             </div>
 
@@ -1534,8 +1535,8 @@ const Unallocated = () => {
                                       maxHeight: '500px', 
                                       overflow: 'auto', 
                                       fontSize: '12px',
-                                      backgroundColor: '#000000',
-                                      color: '#ffffff',
+                                      backgroundColor: '#ffffff',
+                                      color: '#1f2937',
                                       padding: '1rem',
                                       borderRadius: '4px',
                                       margin: 0
