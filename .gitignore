@@ -50,3 +50,6 @@ backend/credentials/
 
 # Tabler email templates source (purchased asset - root folder only)
 /emails/
+
+# Cursor SpecStory local chat artifacts
+.specstory/
