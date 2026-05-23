@@ -50,12 +50,12 @@ const PERMISSIONS = {
   CREDIT_NOTES_DELETE: ['global_admin', 'administrator'],
   CREDIT_NOTES_DOWNLOAD: PORTAL_ROLES,
   
-  // STATEMENTS
-  STATEMENTS_VIEW: ['global_admin'],
-  STATEMENTS_IMPORT: ['global_admin'],
-  STATEMENTS_EDIT: ['global_admin'],
-  STATEMENTS_DELETE: ['global_admin'],
-  STATEMENTS_DOWNLOAD: ['global_admin'],
+  // STATEMENTS (aligned with Invoices/Credit Notes)
+  STATEMENTS_VIEW: PORTAL_ROLES,
+  STATEMENTS_IMPORT: ['global_admin', 'administrator', 'manager'],
+  STATEMENTS_EDIT: ['global_admin', 'administrator', 'manager'],
+  STATEMENTS_DELETE: ['global_admin', 'administrator'],
+  STATEMENTS_DOWNLOAD: PORTAL_ROLES,
   
   // UNALLOCATED DOCUMENTS
   UNALLOCATED_VIEW: ['global_admin', 'administrator', 'manager', 'credit_senior', 'credit_controller'],

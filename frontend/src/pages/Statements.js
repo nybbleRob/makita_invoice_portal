@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api, { API_BASE_URL } from '../services/api';
 import toast from '../utils/toast';
 import { useSettings } from '../context/SettingsContext';
 import { usePermissions } from '../context/PermissionContext';
 import DocumentRetentionTimer from '../components/DocumentRetentionTimer';
 import HierarchicalCompanyFilter from '../components/HierarchicalCompanyFilter';
-import * as XLSX from 'xlsx';
 
 const Statements = () => {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { settings } = useSettings();
   const { hasPermission } = usePermissions();
@@ -33,6 +33,8 @@ const Statements = () => {
   const searchInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const selectAllCheckboxRef = useRef(null);
+  const returnQueryRef = useRef(searchParams.toString());
+  returnQueryRef.current = searchParams.toString();
 
   // Single delete modal state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -67,12 +69,6 @@ const Statements = () => {
   const [importResults, setImportResults] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importPollingInterval, setImportPollingInterval] = useState(null);
-  const [showXlsPreviewModal, setShowXlsPreviewModal] = useState(false);
-  const [xlsPreviewLoading, setXlsPreviewLoading] = useState(false);
-  const [xlsPreviewError, setXlsPreviewError] = useState('');
-  const [xlsPreviewTitle, setXlsPreviewTitle] = useState('');
-  const [xlsPreviewSheets, setXlsPreviewSheets] = useState([]);
-  const [activePreviewSheet, setActivePreviewSheet] = useState('');
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -80,6 +76,12 @@ const Statements = () => {
       if (importPollingInterval) clearInterval(importPollingInterval);
     };
   }, [importPollingInterval]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('statementsReturnQuery', searchParams.toString());
+    } catch (_) {}
+  }, [searchParams]);
 
   // Hydrate state from URL
   useEffect(() => {
@@ -198,45 +200,6 @@ const Statements = () => {
     return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(amount || 0);
   };
 
-  const excelPreviewStyles = `
-    .excel-preview-surface {
-      background: #f7f9fc;
-      border: 1px solid #dce3ea;
-    }
-    .excel-preview-surface table {
-      border-collapse: collapse !important;
-      width: max-content;
-      min-width: 100%;
-      background: #ffffff;
-      font-family: Calibri, "Segoe UI", Tahoma, Arial, sans-serif;
-      font-size: 13px;
-      color: #1f2937;
-    }
-    .excel-preview-surface td,
-    .excel-preview-surface th {
-      border: 1px solid #dbe1e8 !important;
-      padding: 6px 10px !important;
-      line-height: 1.25;
-      vertical-align: middle;
-      white-space: nowrap;
-    }
-    .excel-preview-surface tr:first-child td,
-    .excel-preview-surface tr:first-child th {
-      position: sticky;
-      top: 0;
-      z-index: 2;
-      background: #edf2f7;
-      font-weight: 600;
-      box-shadow: 0 1px 0 #dbe1e8;
-    }
-    .excel-preview-surface tr:nth-child(even) td {
-      background: #fbfdff;
-    }
-    .excel-preview-surface tr:hover td {
-      background: #eef6ff;
-    }
-  `;
-
   const formatDate = (date) => {
     if (!date) return '-';
     return new Date(date).toLocaleDateString('en-GB');
@@ -249,12 +212,12 @@ const Statements = () => {
 
   const getStatusBadgeClass = (status) => {
     const classes = {
-      draft: 'bg-secondary',
-      sent: 'bg-info',
-      acknowledged: 'bg-success',
-      disputed: 'bg-warning'
+      draft: 'bg-secondary-lt',
+      sent: 'bg-info-lt',
+      acknowledged: 'bg-success-lt',
+      disputed: 'bg-warning-lt'
     };
-    return classes[status] || 'bg-secondary';
+    return classes[status] || 'bg-secondary-lt';
   };
 
   const hasActiveFilters = activeSearchQuery || statusFilter !== 'all' || sortBy !== 'periodEnd' || sortOrder !== 'DESC' || selectedCompanyIds.length > 0 || retentionFilter !== 'all';
@@ -280,8 +243,8 @@ const Statements = () => {
   };
   const isAllSelected = statements.length > 0 && selectedStatements.length === statements.length;
 
-  // View / Download handlers — open authenticated blob URLs in a new tab
-  const openAuthenticatedFile = async (url, filenameHint, action) => {
+  // Download handlers
+  const openAuthenticatedFile = async (url, filenameHint) => {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}${url}`, {
@@ -294,114 +257,41 @@ const Statements = () => {
       }
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
-
-      if (action === 'view') {
-        window.open(blobUrl, '_blank', 'noopener,noreferrer');
-      } else {
-        const contentDisposition = response.headers.get('Content-Disposition');
-        let filename = filenameHint;
-        if (contentDisposition) {
-          const m = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-          if (m && m[1]) filename = m[1].replace(/['"]/g, '');
-        }
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.setAttribute('download', filename);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = filenameHint;
+      if (contentDisposition) {
+        const m = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (m && m[1]) filename = m[1].replace(/['"]/g, '');
       }
-      // Revoke the URL after a small delay so the new tab has time to load it
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
       setTimeout(() => window.URL.revokeObjectURL(blobUrl), 30 * 1000);
     } catch (error) {
-      console.error(`Error during ${action}:`, error);
+      console.error('Error during download:', error);
       toast.error(`Error: ${error.message}`);
     }
   };
 
-  const handleViewPdf = async (statement) => {
-    await openAuthenticatedFile(`/api/statements/${statement.id}/view-pdf`, `statement-${statement.statementNumber || statement.id}.pdf`, 'view');
+  const handleDownloadStatement = async (statement) => {
+    const hasPdf = !!(statement.pdfFileUrl || (statement.fileUrl && /\.pdf$/i.test(statement.fileUrl)));
+    const format = hasPdf ? 'pdf' : 'xls';
+    const ext = format === 'pdf' ? 'pdf' : 'xlsx';
+    await openAuthenticatedFile(
+      `/api/statements/${statement.id}/download?format=${format}`,
+      `statement-${statement.statementNumber || statement.id}.${ext}`
+    );
     fetchStatements();
-  };
-
-  const handleDownloadPdf = async (statement) => {
-    await openAuthenticatedFile(`/api/statements/${statement.id}/download?format=pdf`, `statement-${statement.statementNumber || statement.id}.pdf`, 'download');
-    fetchStatements();
-  };
-
-  const handleDownloadXls = async (statement) => {
-    await openAuthenticatedFile(`/api/statements/${statement.id}/download-xls`, `statement-${statement.statementNumber || statement.id}.xlsx`, 'download');
-    fetchStatements();
-  };
-
-  const closeXlsPreview = () => {
-    setShowXlsPreviewModal(false);
-    setXlsPreviewLoading(false);
-    setXlsPreviewError('');
-    setXlsPreviewTitle('');
-    setXlsPreviewSheets([]);
-    setActivePreviewSheet('');
-  };
-
-  const handleViewXls = async (statement) => {
-    try {
-      setShowXlsPreviewModal(true);
-      setXlsPreviewLoading(true);
-      setXlsPreviewError('');
-      setXlsPreviewTitle(`Statement ${statement.statementNumber || statement.id}`);
-      setXlsPreviewSheets([]);
-      setActivePreviewSheet('');
-
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/api/statements/${statement.id}/download-xls`, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Request failed' }));
-        throw new Error(errorData.message || 'Failed to fetch XLS file');
-      }
-
-      const fileBuffer = await response.arrayBuffer();
-      const workbook = XLSX.read(fileBuffer, { type: 'array' });
-      const sheetNames = workbook.SheetNames || [];
-
-      if (sheetNames.length === 0) {
-        throw new Error('No worksheets found in this XLS file');
-      }
-
-      const parsedSheets = sheetNames.map((sheetName) => ({
-        name: sheetName,
-        html: XLSX.utils.sheet_to_html(workbook.Sheets[sheetName], { editable: false })
-      }));
-
-      setXlsPreviewSheets(parsedSheets);
-      setActivePreviewSheet(parsedSheets[0].name);
-    } catch (error) {
-      console.error('Error previewing XLS:', error);
-      setXlsPreviewError(error.message || 'Failed to preview XLS file');
-      toast.error(`Error previewing XLS: ${error.message || 'Unknown error'}`);
-    } finally {
-      setXlsPreviewLoading(false);
-    }
   };
 
   // Edit handlers
   const openEditModal = (statement) => {
-    setStatementToEdit(statement);
-    setEditForm({
-      periodStart: statement.periodStart ? new Date(statement.periodStart).toISOString().split('T')[0] : '',
-      periodEnd: statement.periodEnd ? new Date(statement.periodEnd).toISOString().split('T')[0] : '',
-      openingBalance: statement.openingBalance != null ? String(statement.openingBalance) : '',
-      closingBalance: statement.closingBalance != null ? String(statement.closingBalance) : '',
-      totalDebits: statement.totalDebits != null ? String(statement.totalDebits) : '',
-      totalCredits: statement.totalCredits != null ? String(statement.totalCredits) : '',
-      status: statement.status || 'draft',
-      notes: statement.notes || '',
-      editReason: ''
-    });
-    setShowEditModal(true);
+    const q = returnQueryRef.current || searchParams.toString();
+    try { sessionStorage.setItem('statementsReturnQuery', q); } catch (_) {}
+    navigate(`/statements/${statement.id}/edit?returnQuery=${encodeURIComponent(q)}`, { state: { returnQuery: q } });
   };
 
   const handleSaveEdit = async () => {
@@ -630,7 +520,6 @@ const Statements = () => {
 
   return (
     <div className="page">
-      <style>{excelPreviewStyles}</style>
       <div className="page-body">
         <div className="container-xl">
           <div className="card">
@@ -787,7 +676,6 @@ const Statements = () => {
                         />
                       </th>
                     )}
-                    <th>Statement No.</th>
                     <th>Company</th>
                     <th>Account No.</th>
                     <th>Period</th>
@@ -804,7 +692,6 @@ const Statements = () => {
                     [...Array(8)].map((_, i) => (
                       <tr key={`skeleton-${i}`}>
                         {canDelete && <td><span className="placeholder" style={{ width: '16px', height: '16px', borderRadius: '3px' }}></span></td>}
-                        <td><span className="placeholder col-8"></span></td>
                         <td><span className="placeholder col-10"></span></td>
                         <td><span className="placeholder col-5"></span></td>
                         <td><span className="placeholder col-9"></span></td>
@@ -818,7 +705,7 @@ const Statements = () => {
                     ))
                   ) : statements.length === 0 ? (
                     <tr>
-                      <td colSpan={(canDelete ? 1 : 0) + 9 + (settings?.documentRetentionPeriod ? 1 : 0)} className="text-center py-3 text-muted">
+                      <td colSpan={(canDelete ? 1 : 0) + 8 + (settings?.documentRetentionPeriod ? 1 : 0)} className="text-center py-3 text-muted">
                         No statements found
                       </td>
                     </tr>
@@ -842,7 +729,6 @@ const Statements = () => {
                               />
                             </td>
                           )}
-                          <td><strong>{statement.statementNumber || '-'}</strong></td>
                           <td>{statement.company?.name || '-'}</td>
                           <td>{accountNumber}</td>
                           <td>{formatPeriod(statement.periodStart, statement.periodEnd)}</td>
@@ -871,40 +757,24 @@ const Statements = () => {
                           )}
                           <td>
                             <div className="btn-list flex-nowrap">
-                              {hasPdf && (
-                                <button
-                                  className="btn btn-sm btn-primary"
-                                  onClick={() => handleViewPdf(statement)}
-                                  title="View PDF"
-                                >
-                                  View
-                                </button>
-                              )}
-                              {canDownload && hasPdf && (
-                                <button
-                                  className="btn btn-sm btn-success"
-                                  onClick={() => handleDownloadPdf(statement)}
-                                  title="Download PDF"
-                                >
-                                  PDF
-                                </button>
-                              )}
-                              {canDownload && hasXls && (
+                              <button
+                                className="btn btn-sm btn-primary"
+                                onClick={() => {
+                                  const q = returnQueryRef.current || searchParams.toString();
+                                  try { sessionStorage.setItem('statementsReturnQuery', q); } catch (_) {}
+                                  navigate(`/statements/${statement.id}/view?returnQuery=${encodeURIComponent(q)}`, { state: { returnQuery: q } });
+                                }}
+                                title="View"
+                              >
+                                View
+                              </button>
+                              {canDownload && (hasPdf || hasXls) && (
                                 <button
                                   className="btn btn-sm btn-success"
-                                  onClick={() => handleDownloadXls(statement)}
-                                  title="Download XLS"
+                                  onClick={() => handleDownloadStatement(statement)}
+                                  title="Download"
                                 >
-                                  XLS
-                                </button>
-                              )}
-                              {hasXls && (
-                                <button
-                                  className="btn btn-sm btn-primary"
-                                  onClick={() => handleViewXls(statement)}
-                                  title="Preview XLS"
-                                >
-                                  Preview XLS
+                                  Download
                                 </button>
                               )}
                               {canEdit && (
@@ -1114,64 +984,6 @@ const Statements = () => {
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-primary" onClick={handleFinishImport}>Done</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* XLS Preview Modal */}
-      {showXlsPreviewModal && (
-        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
-          <div className="modal-dialog modal-xl">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">{xlsPreviewTitle ? `${xlsPreviewTitle} - XLS Preview` : 'XLS Preview'}</h5>
-                <button type="button" className="btn-close" onClick={closeXlsPreview}></button>
-              </div>
-              <div className="modal-body">
-                {xlsPreviewLoading && (
-                  <div className="text-center py-5">
-                    <div className="spinner-border text-primary mb-3" role="status">
-                      <span className="visually-hidden">Loading...</span>
-                    </div>
-                    <div className="text-muted">Loading spreadsheet preview...</div>
-                  </div>
-                )}
-
-                {!xlsPreviewLoading && xlsPreviewError && (
-                  <div className="alert alert-danger mb-0">{xlsPreviewError}</div>
-                )}
-
-                {!xlsPreviewLoading && !xlsPreviewError && xlsPreviewSheets.length > 0 && (
-                  <>
-                    <div className="mb-3 d-flex flex-wrap gap-2">
-                      {xlsPreviewSheets.map((sheet) => (
-                        <button
-                          key={sheet.name}
-                          type="button"
-                          className={`btn btn-sm ${activePreviewSheet === sheet.name ? 'btn-primary' : 'btn-outline-primary'}`}
-                          onClick={() => setActivePreviewSheet(sheet.name)}
-                        >
-                          {sheet.name}
-                        </button>
-                      ))}
-                    </div>
-                    <div
-                      className="excel-preview-surface rounded p-2"
-                      style={{ maxHeight: '65vh', overflow: 'auto' }}
-                    >
-                      <div
-                        dangerouslySetInnerHTML={{
-                          __html: xlsPreviewSheets.find((sheet) => sheet.name === activePreviewSheet)?.html || ''
-                        }}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={closeXlsPreview}>Close</button>
               </div>
             </div>
           </div>

@@ -93,8 +93,8 @@ async function markStatementAccess(statement, kind, req) {
   return statement;
 }
 
-// Apply auth and document access check to all routes
-// Statements are GA only for now
+// Apply auth and document access check to all routes.
+// Role access is controlled via STATEMENTS_* permissions.
 router.use(auth);
 router.use(requirePermission('STATEMENTS_VIEW'));
 router.use(checkDocumentAccess);
@@ -1010,6 +1010,68 @@ router.get('/:id/view-pdf', async (req, res) => {
     res.sendFile(filePath);
   } catch (error) {
     console.error('Error viewing statement PDF:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+/**
+ * Stream XLS/XLSX inline for in-browser preview and mark as "viewed"
+ * (not downloaded), mirroring PDF preview semantics.
+ */
+router.get('/:id/view-xls', async (req, res) => {
+  try {
+    const statement = await Statement.findByPk(req.params.id, {
+      include: [{ model: Company, as: 'company', attributes: ['id', 'name'] }]
+    });
+
+    if (!statement) return res.status(404).json({ message: 'Statement not found' });
+    if (req.accessibleCompanyIds !== null && !req.accessibleCompanyIds.includes(statement.companyId)) {
+      return res.status(403).json({ message: 'Access denied. You do not have access to this statement.' });
+    }
+
+    let stored = statement.xlsFileUrl;
+    if (!stored && statement.fileUrl &&
+        (statement.fileUrl.toLowerCase().endsWith('.xls') || statement.fileUrl.toLowerCase().endsWith('.xlsx'))) {
+      stored = statement.fileUrl;
+    }
+    if (!stored) {
+      return res.status(404).json({ message: 'No XLS file available for this statement' });
+    }
+
+    const filePath = resolveStatementFile(stored);
+    if (!filePath) {
+      console.error(`Statement XLS not found on disk: ${stored}`);
+      return res.status(404).json({ message: 'XLS file not found on server' });
+    }
+
+    await markStatementAccess(statement, 'view', req);
+
+    await logActivity({
+      type: ActivityType.STATEMENT_VIEWED,
+      userId: req.user.userId,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: `Viewed statement XLS ${statement.statementNumber || statement.id}`,
+      details: {
+        statementId: statement.id,
+        statementNumber: statement.statementNumber,
+        viewMethod: 'xls_preview'
+      },
+      companyId: statement.companyId,
+      companyName: statement.company?.name || null,
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    });
+
+    const ext = path.extname(filePath).toLowerCase();
+    const contentType = ext === '.xlsx'
+      ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      : 'application/vnd.ms-excel';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${path.basename(filePath)}"`);
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('Error viewing statement XLS:', error);
     res.status(500).json({ message: error.message });
   }
 });

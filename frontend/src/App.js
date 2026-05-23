@@ -30,6 +30,8 @@ import CreditNotes from './pages/CreditNotes';
 import CreditNoteView from './pages/CreditNoteView';
 import CreditNoteEdit from './pages/CreditNoteEdit';
 import Statements from './pages/Statements';
+import StatementView from './pages/StatementView';
+import StatementEdit from './pages/StatementEdit';
 import Unallocated from './pages/Unallocated';
 import UnallocatedView from './pages/UnallocatedView';
 import ActivityLogs from './pages/ActivityLogs';
@@ -208,6 +210,8 @@ function AppRoutes() {
         
         {/* Statements - permission-gated; visible to roles in STATEMENTS_VIEW */}
         <Route path="statements" element={<PermissionRoute permission="STATEMENTS_VIEW"><Statements /></PermissionRoute>} />
+        <Route path="statements/:id/view" element={<PermissionRoute permission="STATEMENTS_VIEW"><StatementView /></PermissionRoute>} />
+        <Route path="statements/:id/edit" element={<PermissionRoute permission="STATEMENTS_EDIT"><StatementEdit /></PermissionRoute>} />
         
         {/* Unallocated - GA, Admin, Manager */}
         <Route path="unallocated" element={<PermissionRoute permission="UNALLOCATED_VIEW"><Unallocated /></PermissionRoute>} />

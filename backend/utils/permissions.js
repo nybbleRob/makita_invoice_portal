@@ -59,12 +59,13 @@ const PERMISSIONS = {
   
   // =====================
   // STATEMENTS
+  // Keep aligned with Invoice/Credit Note permission model.
   // =====================
-  STATEMENTS_VIEW: ['global_admin'],
-  STATEMENTS_IMPORT: ['global_admin'],
-  STATEMENTS_EDIT: ['global_admin'],
-  STATEMENTS_DELETE: ['global_admin'],
-  STATEMENTS_DOWNLOAD: ['global_admin'],
+  STATEMENTS_VIEW: PORTAL_ROLES,
+  STATEMENTS_IMPORT: ['global_admin', 'administrator', 'manager'],
+  STATEMENTS_EDIT: ['global_admin', 'administrator', 'manager'],
+  STATEMENTS_DELETE: ['global_admin', 'administrator'],
+  STATEMENTS_DOWNLOAD: PORTAL_ROLES,
   
   // =====================
   // UNALLOCATED DOCUMENTS
