@@ -53,6 +53,45 @@ const UnallocatedView = () => {
   const [activeDataTab, setActiveDataTab] = useState('extracted'); // 'extracted' or 'json'
   const [attemptingAllocation, setAttemptingAllocation] = useState(false);
 
+  const excelPreviewStyles = `
+    .excel-preview-surface {
+      background: #f7f9fc;
+      border: 1px solid #dce3ea;
+    }
+    .excel-preview-surface table {
+      border-collapse: collapse !important;
+      width: max-content;
+      min-width: 100%;
+      background: #ffffff;
+      font-family: Calibri, "Segoe UI", Tahoma, Arial, sans-serif;
+      font-size: 13px;
+      color: #1f2937;
+    }
+    .excel-preview-surface td,
+    .excel-preview-surface th {
+      border: 1px solid #dbe1e8 !important;
+      padding: 6px 10px !important;
+      line-height: 1.25;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    .excel-preview-surface tr:first-child td,
+    .excel-preview-surface tr:first-child th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #edf2f7;
+      font-weight: 600;
+      box-shadow: 0 1px 0 #dbe1e8;
+    }
+    .excel-preview-surface tr:nth-child(even) td {
+      background: #fbfdff;
+    }
+    .excel-preview-surface tr:hover td {
+      background: #eef6ff;
+    }
+  `;
+
   useEffect(() => {
     // Reset PDF state when id changes
     setPdfPages([]);
@@ -459,6 +498,7 @@ const UnallocatedView = () => {
 
   return (
     <div className="page">
+      <style>{excelPreviewStyles}</style>
       <div className="page-header">
         <div className="container-xl">
           <div className="row g-2 align-items-center">
@@ -509,7 +549,7 @@ const UnallocatedView = () => {
                             ))}
                           </div>
                         )}
-                        <div className="border rounded p-2 bg-white" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+                        <div className="excel-preview-surface rounded p-2" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
                           <div
                             dangerouslySetInnerHTML={{
                               __html: xlsSheets.find((sheet) => sheet.name === activeXlsSheet)?.html || ''
