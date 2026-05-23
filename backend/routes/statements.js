@@ -93,10 +93,9 @@ async function markStatementAccess(statement, kind, req) {
   return statement;
 }
 
-// Apply auth and document access check to all routes.
-// Role access is controlled via STATEMENTS_* permissions.
+// Apply auth and company-scoped document access checks to all routes.
+// Route-level permissions for create/edit/delete/import mirror invoices/credit notes.
 router.use(auth);
-router.use(requirePermission('STATEMENTS_VIEW'));
 router.use(checkDocumentAccess);
 
 // Get all statements (filtered by user's accessible companies)
@@ -144,8 +143,38 @@ router.get('/', async (req, res) => {
       whereConditions.companyId = { [Op.in]: Array.from(expandedIds) };
     }
     
-    if (status) {
-      whereConditions.status = status;
+    // Document status filter (ready_new, viewed, downloaded, queried, review) - same as invoices/credit notes
+    if (status && status !== 'all') {
+      const statusConditions = [];
+      if (status === 'ready_new') {
+        statusConditions.push({
+          documentStatus: 'ready',
+          viewedAt: null
+        });
+      } else if (status === 'viewed') {
+        statusConditions.push({
+          [Op.or]: [
+            { documentStatus: 'viewed' },
+            Sequelize.literal(`("Statement"."viewedAt" IS NOT NULL AND "Statement"."downloadedAt" IS NULL)`)
+          ]
+        });
+      } else if (status === 'downloaded') {
+        statusConditions.push({
+          [Op.or]: [
+            { documentStatus: 'downloaded' },
+            Sequelize.literal(`"Statement"."downloadedAt" IS NOT NULL`)
+          ]
+        });
+      } else if (status === 'queried') {
+        statusConditions.push({ documentStatus: 'queried' });
+      } else if (status === 'review') {
+        statusConditions.push({ documentStatus: 'review' });
+      }
+
+      if (statusConditions.length > 0) {
+        whereConditions[Op.and] = whereConditions[Op.and] || [];
+        whereConditions[Op.and].push(...statusConditions);
+      }
     }
     
     if (startDate || endDate) {
@@ -654,16 +683,9 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create statement (only for admins/managers/staff)
-router.post('/', async (req, res) => {
+// Create statement (permission parity with invoice/credit-note edit/create routes)
+router.post('/', requirePermission('STATEMENTS_EDIT'), async (req, res) => {
   try {
-    // Only admins, managers, and staff can create statements
-    if (req.user.role === 'external_user') {
-      return res.status(403).json({ 
-        message: 'Access denied. External users cannot create statements.' 
-      });
-    }
-    
     const {
       statementNumber,
       companyId,
@@ -675,6 +697,7 @@ router.post('/', async (req, res) => {
       totalCredits,
       transactions,
       status,
+      documentStatus,
       notes,
       fileUrl,
       metadata
@@ -751,16 +774,9 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update statement (only for admins/managers/staff)
-router.put('/:id', async (req, res) => {
+// Update statement (permission parity with invoice/credit-note edit routes)
+router.put('/:id', requirePermission('STATEMENTS_EDIT'), async (req, res) => {
   try {
-    // Only admins, managers, and staff can update statements
-    if (req.user.role === 'external_user') {
-      return res.status(403).json({ 
-        message: 'Access denied. External users cannot update statements.' 
-      });
-    }
-    
     const statement = await Statement.findByPk(req.params.id);
     
     if (!statement) {
@@ -828,6 +844,7 @@ router.put('/:id', async (req, res) => {
     recordChange('totalCredits', totalCredits);
     recordChange('transactions', transactions);
     recordChange('status', status);
+    recordChange('documentStatus', documentStatus);
     recordChange('notes', notes);
     recordChange('fileUrl', fileUrl);
     recordChange('metadata', metadata);

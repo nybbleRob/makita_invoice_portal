@@ -208,9 +208,9 @@ function AppRoutes() {
         <Route path="credit-notes/:id/view" element={<CreditNoteView />} />
         <Route path="credit-notes/:id/edit" element={<PermissionRoute permission="CREDIT_NOTES_EDIT"><CreditNoteEdit /></PermissionRoute>} />
         
-        {/* Statements - permission-gated; visible to roles in STATEMENTS_VIEW */}
-        <Route path="statements" element={<PermissionRoute permission="STATEMENTS_VIEW"><Statements /></PermissionRoute>} />
-        <Route path="statements/:id/view" element={<PermissionRoute permission="STATEMENTS_VIEW"><StatementView /></PermissionRoute>} />
+        {/* Statements - same route access pattern as Invoices/Credit Notes */}
+        <Route path="statements" element={<Statements />} />
+        <Route path="statements/:id/view" element={<StatementView />} />
         <Route path="statements/:id/edit" element={<PermissionRoute permission="STATEMENTS_EDIT"><StatementEdit /></PermissionRoute>} />
         
         {/* Unallocated - GA, Admin, Manager */}
