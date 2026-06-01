@@ -270,13 +270,33 @@ async function getActivityLogs(options = {}) {
       page = 1,
       limit = 50,
       userId = null,
+      userIds = null,
       companyId = null,
+      companyIds = null,
       role = null,
       type = null,
       startDate = null,
       endDate = null,
       search = null
     } = options;
+
+    const normalizeIds = (value) => {
+      if (!value) return [];
+      if (Array.isArray(value)) {
+        return value.map(v => String(v).trim()).filter(Boolean);
+      }
+      return String(value)
+        .split(',')
+        .map(v => v.trim())
+        .filter(Boolean);
+    };
+
+    const normalizedUserIds = normalizeIds(userIds);
+    const normalizedCompanyIds = normalizeIds(companyIds);
+    const effectiveUserIds = normalizedUserIds.length > 0 ? normalizedUserIds : (userId ? [String(userId)] : []);
+    const effectiveCompanyIds = normalizedCompanyIds.length > 0 ? normalizedCompanyIds : (companyId ? [String(companyId)] : []);
+    const userIdSet = new Set(effectiveUserIds);
+    const companyIdSet = new Set(effectiveCompanyIds);
 
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
@@ -288,8 +308,8 @@ async function getActivityLogs(options = {}) {
     console.log(`[ActivityLogs] Found ${logIds.length} total log entries in Redis`);
 
     // Apply filters
-    if (userId || companyId || role || type || startDate || endDate || search) {
-      console.log(`[ActivityLogs] Applying filters:`, { userId, companyId, role, type, startDate, endDate, search });
+    if (effectiveUserIds.length > 0 || effectiveCompanyIds.length > 0 || role || type || startDate || endDate || search) {
+      console.log(`[ActivityLogs] Applying filters:`, { effectiveUserIds, effectiveCompanyIds, role, type, startDate, endDate, search });
       const filteredIds = [];
       
       // Fetch log entries to filter (we'll optimize this later if needed)
@@ -314,8 +334,8 @@ async function getActivityLogs(options = {}) {
         };
         
         // Apply filters
-        if (userId && log.userId !== userId) continue;
-        if (companyId && log.companyId !== companyId) continue;
+        if (userIdSet.size > 0 && !userIdSet.has(String(log.userId || ''))) continue;
+        if (companyIdSet.size > 0 && !companyIdSet.has(String(log.companyId || ''))) continue;
         if (role && log.userRole !== role) continue;
         if (type && log.type !== type) continue;
         

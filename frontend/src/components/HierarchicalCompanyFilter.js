@@ -12,6 +12,7 @@ const HierarchicalCompanyFilter = ({
   onApply
 }) => {
   const [companies, setCompanies] = useState([]);
+  const [selectedCompanyLookup, setSelectedCompanyLookup] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedIds, setExpandedIds] = useState(new Set());
@@ -27,6 +28,38 @@ const HierarchicalCompanyFilter = ({
   useEffect(() => {
     setTempSelectedIds(new Set(selectedCompanyIds.map(id => String(id))));
   }, [selectedCompanyIds]);
+
+  // Load selected company details so pills remain visible even when the selected
+  // company is not present on the current hierarchy page.
+  useEffect(() => {
+    const fetchSelectedCompanies = async () => {
+      const selectedIds = Array.from(tempSelectedIds);
+      if (selectedIds.length === 0) {
+        setSelectedCompanyLookup({});
+        return;
+      }
+
+      try {
+        const response = await api.get('/api/companies', {
+          params: { companyIds: selectedIds.join(',') }
+        });
+        const list = Array.isArray(response.data) ? response.data : (response.data?.data || []);
+        const lookup = {};
+        list.forEach((company) => {
+          lookup[String(company.id)] = {
+            id: String(company.id),
+            name: company.name,
+            referenceNo: company.referenceNo
+          };
+        });
+        setSelectedCompanyLookup(lookup);
+      } catch (error) {
+        console.error('Error loading selected companies for filter pills:', error);
+      }
+    };
+
+    fetchSelectedCompanies();
+  }, [tempSelectedIds]);
 
   // Fetch hierarchical company data
   const fetchHierarchy = useCallback(async (search = '', page = 1) => {
@@ -279,20 +312,12 @@ const HierarchicalCompanyFilter = ({
 
   // Get selected company names for display
   const selectedCompanyNames = useMemo(() => {
-    const names = [];
-    const findNames = (nodes) => {
-      nodes.forEach(node => {
-        if (tempSelectedIds.has(String(node.id))) {
-          names.push({ id: node.id, name: node.name, referenceNo: node.referenceNo });
-        }
-        if (node.children) {
-          findNames(node.children);
-        }
-      });
-    };
-    findNames(companies);
-    return names;
-  }, [companies, tempSelectedIds]);
+    return Array.from(tempSelectedIds).map((id) => {
+      const lookupCompany = selectedCompanyLookup[id];
+      if (lookupCompany) return lookupCompany;
+      return { id, name: `Company ${id}`, referenceNo: null };
+    });
+  }, [tempSelectedIds, selectedCompanyLookup]);
 
   // Render a single tree node
   const renderNode = (node, level = 0) => {

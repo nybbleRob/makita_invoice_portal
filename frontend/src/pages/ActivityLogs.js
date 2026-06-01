@@ -4,6 +4,7 @@ import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { useDebounce } from '../hooks/useDebounce';
 import HierarchicalCompanyFilter from '../components/HierarchicalCompanyFilter';
+import UserMultiSelectFilter from '../components/UserMultiSelectFilter';
 
 const ActivityLogs = () => {
   const { user } = useAuth();
@@ -36,9 +37,10 @@ const ActivityLogs = () => {
   };
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [userFilter, setUserFilter] = useState('');
+  const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
   const searchInputRef = useRef(null);
+  const [showUserFilterModal, setShowUserFilterModal] = useState(false);
   const [showCompanyFilterModal, setShowCompanyFilterModal] = useState(false);
   const [roleFilter, setRoleFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -106,7 +108,7 @@ const ActivityLogs = () => {
       });
       
       if (debouncedSearch && debouncedSearch.trim().length >= 3) params.append('search', debouncedSearch);
-      if (userFilter) params.append('userId', userFilter);
+      if (selectedUserIds.length > 0) params.append('userIds', selectedUserIds.join(','));
       if (selectedCompanyIds.length > 0) params.append('companyIds', selectedCompanyIds.join(','));
       if (roleFilter) params.append('role', roleFilter);
       if (typeFilter) params.append('type', typeFilter);
@@ -122,7 +124,7 @@ const ActivityLogs = () => {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, userFilter, selectedCompanyIds, roleFilter, typeFilter, startDate, endDate, pagination.limit]);
+  }, [debouncedSearch, selectedUserIds, selectedCompanyIds, roleFilter, typeFilter, startDate, endDate, pagination.limit]);
   
   // Fetch filter options
   const fetchFilterOptions = async () => {
@@ -324,7 +326,10 @@ const ActivityLogs = () => {
       accountNumber: 'Account Number',
       processingTime: 'Processing Time',
       ipAddress: 'IP Address',
-      userAgent: 'User Agent'
+      userAgent: 'User Agent',
+      fromEmail: 'Sent From',
+      hasAttachment: 'Has Attachment',
+      attachmentCount: 'Attachment Count'
     };
     
     const formatValue = (value) => {
@@ -368,6 +373,19 @@ const ActivityLogs = () => {
     
     return lines.join('\n');
   };
+
+  const getActorDisplay = (logEntry) => {
+    const logUser = users.find(u => u.id === logEntry.userId);
+    const rawEmail = (logEntry.userEmail || '').trim();
+    const isSystemEvent = !logEntry.userId && (!rawEmail || ['system', 'System', 'SYSTEM'].includes(rawEmail));
+    if (isSystemEvent) {
+      return { name: 'System Event', email: '' };
+    }
+
+    const name = logUser?.name || rawEmail || 'System Event';
+    const email = rawEmail && rawEmail !== name ? rawEmail : '';
+    return { name, email };
+  };
   
   // Get activity type badge color
   const getTypeBadgeColor = (type) => {
@@ -380,11 +398,11 @@ const ActivityLogs = () => {
   };
   
   // Reset filters (reset to default 7 days)
-  const hasActiveFilters = searchQuery || userFilter || selectedCompanyIds.length > 0 || roleFilter || typeFilter || dateRangePreset !== '7';
+  const hasActiveFilters = searchQuery || selectedUserIds.length > 0 || selectedCompanyIds.length > 0 || roleFilter || typeFilter || dateRangePreset !== '7';
 
   const resetFilters = () => {
     setSearchQuery('');
-    setUserFilter('');
+    setSelectedUserIds([]);
     setSelectedCompanyIds([]);
     setRoleFilter('');
     setTypeFilter('');
@@ -454,16 +472,13 @@ const ActivityLogs = () => {
                 
                 <div className="col-md-2">
                   <label className="form-label">User</label>
-                  <select
-                    className="form-select form-select-sm"
-                    value={userFilter}
-                    onChange={(e) => setUserFilter(e.target.value)}
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-info w-100"
+                    onClick={() => setShowUserFilterModal(true)}
                   >
-                    <option value="">All Users</option>
-                    {users.map(u => (
-                      <option key={u.id} value={u.id}>{u.name || u.email}</option>
-                    ))}
-                  </select>
+                    {selectedUserIds.length === 0 ? 'Filter by User' : `${selectedUserIds.length} Selected`}
+                  </button>
                 </div>
                 
                 <div className="col-md-2">
@@ -647,13 +662,12 @@ const ActivityLogs = () => {
                           <td>
                             <div>
                               {(() => {
-                                const logUser = users.find(u => u.id === log.userId);
-                                const userName = logUser?.name || log.userEmail || 'System';
+                                const actor = getActorDisplay(log);
                                 return (
                                   <>
-                                    <div className="fw-semibold">{userName}</div>
-                                    {log.userEmail && log.userEmail !== userName && (
-                                      <small className="text-muted d-block">{log.userEmail}</small>
+                                    <div className="fw-semibold">{actor.name}</div>
+                                    {actor.email && (
+                                      <small className="text-muted d-block">{actor.email}</small>
                                     )}
                                     {log.userId && (
                                       <small className="text-muted d-block">ID: {log.userId.substring(0, 8)}...</small>
@@ -854,13 +868,12 @@ const ActivityLogs = () => {
                       <div className="col-4"><strong>User:</strong></div>
                       <div className="col-8">
                         {(() => {
-                          const logUser = users.find(u => u.id === selectedLog.userId);
-                          const userName = logUser?.name || selectedLog.userEmail || 'System';
+                          const actor = getActorDisplay(selectedLog);
                           return (
                             <>
-                              <div className="fw-semibold">{userName}</div>
-                              {selectedLog.userEmail && selectedLog.userEmail !== userName && (
-                                <small className="text-muted d-block">{selectedLog.userEmail}</small>
+                              <div className="fw-semibold">{actor.name}</div>
+                              {actor.email && (
+                                <small className="text-muted d-block">{actor.email}</small>
                               )}
                             </>
                           );
@@ -1116,6 +1129,19 @@ const ActivityLogs = () => {
       )}
       
       {/* Company Filter Modal */}
+      {showUserFilterModal && (
+        <UserMultiSelectFilter
+          users={users}
+          selectedUserIds={selectedUserIds}
+          onSelectionChange={(ids) => {
+            setSelectedUserIds(ids);
+            setPagination(prev => ({ ...prev, page: 1 }));
+          }}
+          onClose={() => setShowUserFilterModal(false)}
+          onApply={() => setShowUserFilterModal(false)}
+        />
+      )}
+
       {/* Company Filter Modal */}
       {showCompanyFilterModal && (
         <HierarchicalCompanyFilter

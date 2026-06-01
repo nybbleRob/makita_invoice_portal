@@ -616,8 +616,8 @@ async function queueSummaryEmail(options) {
     html,
     templateName: 'document_upload_summary',
     metadata: {
-      userId: recipient.userId,
-      userEmail: recipient.email,
+      userId: triggeredByUserId || null,
+      userEmail: triggeredByEmail || 'system',
       companyId,
       companyName,
       importId,
@@ -738,8 +738,8 @@ async function queueIndividualEmail(options) {
     attachments: attachments.length > 0 ? attachments : undefined,
     templateName: 'document_upload_notification',
     metadata: {
-      userId: recipient.userId,
-      userEmail: recipient.email,
+      userId: triggeredByUserId || null,
+      userEmail: triggeredByEmail || 'system',
       companyId,
       companyName,
       notificationType: 'individual',

@@ -290,9 +290,12 @@ async function processEmailJob(job) {
         subject,
         messageId: result.messageId,
         provider: result.provider,
+        fromEmail: result.fromEmail || null,
         jobId: job.id,
         attempts: job.attemptsMade + 1,
-        isBatch: isBatch
+        isBatch: isBatch,
+        hasAttachment: Array.isArray(attachments) && attachments.length > 0,
+        attachmentCount: Array.isArray(attachments) ? attachments.length : 0
       },
       companyId: metadata?.companyId || null,
       companyName: metadata?.companyName || null
