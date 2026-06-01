@@ -363,13 +363,19 @@ async function queueDocumentNotifications(options) {
   }
   
   // Queue individual emails (batch when possible for Office 365).
-  // Statements bypass the batch path because their attachment plan (PDF vs XLS)
-  // is per-recipient, so a single email-with-attachments can't represent multiple
-  // recipients correctly.
+  // Statements always bypass batching because attachment plan is per-recipient (PDF/XLS).
+  // Invoices/credit-notes also need per-recipient handling when any recipient wants
+  // attachments, otherwise a single batch email cannot respect mixed preferences.
   for (const [key, group] of individualEmailGroups) {
     try {
       const isStatement = group.documentType === 'statement';
-      if (group.recipients.length > 1 && !isStatement) {
+      const hasAnyInvoiceAttachments = group.recipients.some(r => !!r.sendAttachment);
+      const canBatchWithoutAttachmentMismatch =
+        group.recipients.length > 1 &&
+        !isStatement &&
+        !hasAnyInvoiceAttachments;
+
+      if (canBatchWithoutAttachmentMismatch) {
         const batchEmail = await queueBatchIndividualEmail({
           recipients: group.recipients,
           document: group.document,
