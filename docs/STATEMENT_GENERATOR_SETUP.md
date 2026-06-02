@@ -41,7 +41,7 @@ installed `uno` module while still being isolated for our pip-installed deps:
 sudo mkdir -p /opt/makita-stmt-venv
 sudo python3 -m venv --system-site-packages /opt/makita-stmt-venv
 sudo /opt/makita-stmt-venv/bin/pip install --upgrade pip
-sudo /opt/makita-stmt-venv/bin/pip install --upgrade unoserver openpyxl pypdf
+sudo /opt/makita-stmt-venv/bin/pip install --upgrade unoserver openpyxl pypdf Pillow
 
 # Expose unoserver/unoconvert on PATH.
 sudo ln -sf /opt/makita-stmt-venv/bin/unoserver  /usr/local/bin/unoserver
@@ -69,7 +69,7 @@ works - but you STILL need `python3-uno` for the `uno` bindings:
 ```bash
 sudo apt install -y libreoffice python3 python3-pip python3-uno \
   poppler-utils fonts-liberation fontconfig
-sudo pip3 install --upgrade unoserver openpyxl pypdf
+sudo pip3 install --upgrade unoserver openpyxl pypdf Pillow
 # STATEMENT_PYTHON_BIN can stay unset; the default `python3` will find them.
 ```
 
@@ -81,6 +81,7 @@ sudo pip3 install --upgrade unoserver openpyxl pypdf
 |------------------------------|------------------------------------------------------------|-----------|
 | Python 3.8+                  | `fill_template.py` runs as a child process from the worker | yes       |
 | `openpyxl`                   | Fills the `ACR11P.xlsx` template cell by cell              | yes       |
+| `Pillow` (PIL)               | Required by `openpyxl` to **preserve** embedded images on save - without it `wb.save()` silently strips the logo + bank-details images | yes       |
 | LibreOffice (`soffice`)      | Converts the filled XLSX to PDF                            | yes       |
 | `unoserver` (`unoconvert`)   | Persistent LibreOffice listener - no per-page startup cost | strongly recommended |
 | `pdfunite` (poppler-utils)   | Merges per-page PDFs into one statement                    | yes (or pypdf) |

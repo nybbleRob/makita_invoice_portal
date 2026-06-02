@@ -45,6 +45,22 @@ from copy import copy
 from openpyxl import load_workbook
 from openpyxl.worksheet.properties import PageSetupProperties
 
+# openpyxl needs Pillow installed to round-trip embedded images. Without it,
+# load_workbook + wb.save() silently strips the logo + bank-details block from
+# the template, producing a visually broken PDF. Fail fast at import time so
+# the operator gets a clear error rather than a confusing rendering bug.
+try:
+    import PIL  # noqa: F401
+except ImportError as exc:
+    print(
+        "ERROR: Pillow (PIL) is not installed in this Python environment. "
+        "openpyxl requires Pillow to preserve embedded images (logo + bank "
+        "details) when saving the filled template. Install with: "
+        "`pip install Pillow` in the venv that STATEMENT_PYTHON_BIN points at.",
+        file=sys.stderr,
+    )
+    raise SystemExit(2) from exc
+
 ROWS_PER_PAGE = 36
 FIRST_ROW = 19  # template invoice block: rows 19..54
 
