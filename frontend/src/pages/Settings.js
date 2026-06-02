@@ -634,6 +634,57 @@ const Settings = () => {
     if (el) el.value = '';
   };
 
+  // Auth-protected file download for the sandbox results table. Same blob+anchor
+  // pattern Statements.js / Invoices.js use, lifted inline because Settings.js
+  // doesn't already pull it in. Hits the admin-only GET /api/files/:id/download
+  // endpoint so it works for both matched (CORP) and unmatched customers.
+  const downloadSandboxFile = async (fileId, suggestedName) => {
+    if (!fileId) return;
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/api/files/${fileId}/download`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Download failed' }));
+        throw new Error(errorData.message || 'Download failed');
+      }
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = suggestedName;
+      if (contentDisposition) {
+        const m = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (m && m[1]) filename = m[1].replace(/['"]/g, '');
+      }
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 30 * 1000);
+    } catch (error) {
+      console.error('Sandbox download failed:', error);
+      toast.error(`Download failed: ${error.message}`);
+    }
+  };
+
+  // Map a sandbox result row into the right label + bootstrap badge class for
+  // a single "what happened to this customer?" column. Lifted out of JSX to
+  // keep the table render readable.
+  const describeSandboxOutcome = (result) => {
+    if (!result.success) return { label: 'failed', cls: 'bg-danger' };
+    if (result.contentUnchanged) return { label: 'unchanged', cls: 'bg-secondary' };
+    if (result.baselined) return { label: 'baselined', cls: 'bg-info' };
+    if (!result.companyId) return { label: 'unmatched', cls: 'bg-warning' };
+    if (result.isNew) return { label: 'new', cls: 'bg-success' };
+    if (result.correction) return { label: 'correction', cls: 'bg-primary' };
+    if (result.suppressedByAuthority) return { label: 'suppressed (manual upload)', cls: 'bg-dark' };
+    return { label: 'regenerated', cls: 'bg-success' };
+  };
+
   const handleGlobalEDIChange = async (enabled) => {
     const action = enabled ? 'enable' : 'disable';
     if (!window.confirm(`Are you sure you want to ${action} EDI for ALL companies? This will affect every company in the system.`)) {
@@ -1735,55 +1786,156 @@ const Settings = () => {
                             </div>
                           )}
 
-                          {sandboxResults && (
-                            <div className="mt-3">
-                              <h4 className="mb-2">Results</h4>
-                              <div className="row g-2 mb-3">
-                                <div className="col-md-3">
-                                  <div className="card card-sm bg-success-subtle">
-                                    <div className="card-body text-center py-2">
-                                      <div className="h4 mb-0 text-success">{sandboxResults.processedFiles || 0}</div>
-                                      <div className="text-muted small">Customers processed</div>
+                          {sandboxResults && (() => {
+                            const results = sandboxResults.results || [];
+                            const successCount = results.filter(r => r.success).length;
+                            const failedCount = results.filter(r => !r.success).length;
+                            const unmatchedCount = results.filter(r => r.success && !r.companyId).length;
+                            const unchangedCount = results.filter(r => r.contentUnchanged).length;
+                            const baselinedCount = results.filter(r => r.baselined).length;
+                            const sortedResults = [...results].sort((a, b) => {
+                              const aNum = parseInt(a.accountNumber, 10);
+                              const bNum = parseInt(b.accountNumber, 10);
+                              if (Number.isFinite(aNum) && Number.isFinite(bNum)) return aNum - bNum;
+                              return String(a.accountNumber || '').localeCompare(String(b.accountNumber || ''));
+                            });
+                            return (
+                              <div className="mt-3">
+                                <h4 className="mb-2">Results</h4>
+                                <div className="row g-2 mb-3">
+                                  <div className="col-md-2">
+                                    <div className="card card-sm bg-success-subtle">
+                                      <div className="card-body text-center py-2">
+                                        <div className="h4 mb-0 text-success">{successCount}</div>
+                                        <div className="text-muted small">OK</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="col-md-2">
+                                    <div className="card card-sm bg-warning-subtle">
+                                      <div className="card-body text-center py-2">
+                                        <div className="h4 mb-0 text-warning">{unmatchedCount}</div>
+                                        <div className="text-muted small">Unmatched</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="col-md-2">
+                                    <div className="card card-sm bg-danger-subtle">
+                                      <div className="card-body text-center py-2">
+                                        <div className="h4 mb-0 text-danger">{failedCount}</div>
+                                        <div className="text-muted small">Failed</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="col-md-2">
+                                    <div className="card card-sm bg-secondary-subtle">
+                                      <div className="card-body text-center py-2">
+                                        <div className="h4 mb-0 text-secondary">{unchangedCount}</div>
+                                        <div className="text-muted small">Unchanged</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="col-md-2">
+                                    <div className="card card-sm bg-info-subtle">
+                                      <div className="card-body text-center py-2">
+                                        <div className="h4 mb-0 text-info">{baselinedCount}</div>
+                                        <div className="text-muted small">Baselined</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="col-md-2">
+                                    <div className="card card-sm">
+                                      <div className="card-body text-center py-2">
+                                        <div className="h4 mb-0">{results.length}</div>
+                                        <div className="text-muted small">Total</div>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
-                                <div className="col-md-3">
-                                  <div className="card card-sm bg-info-subtle">
-                                    <div className="card-body text-center py-2">
-                                      <div className="h4 mb-0 text-info">{sandboxResults.totalFiles || 0}</div>
-                                      <div className="text-muted small">Total in export</div>
-                                    </div>
-                                  </div>
+
+                                <div className="alert alert-success mb-3">
+                                  <i className="fas fa-shield-alt me-2"></i>
+                                  <strong>No customer emails were sent.</strong> Generated files are stored against matched companies and listed below for inspection.
                                 </div>
-                                <div className="col-md-3">
-                                  <div className="card card-sm bg-warning-subtle">
-                                    <div className="card-body text-center py-2">
-                                      <div className="h4 mb-0 text-warning">{(sandboxResults.failedFiles || []).length}</div>
-                                      <div className="text-muted small">Failed</div>
-                                    </div>
-                                  </div>
+
+                                <div className="table-responsive" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                                  <table className="table table-sm table-vcenter">
+                                    <thead className="sticky-top bg-white">
+                                      <tr>
+                                        <th>Cust #</th>
+                                        <th>Customer</th>
+                                        <th className="text-end">Pages</th>
+                                        <th>Outcome</th>
+                                        <th>Company match</th>
+                                        <th className="text-end">Time</th>
+                                        <th className="text-center" style={{ minWidth: '140px' }}>Files</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {sortedResults.map((r, idx) => {
+                                        const outcome = describeSandboxOutcome(r);
+                                        const pdfName = `${r.accountNumber}_Statement.pdf`;
+                                        const xlsxName = `${r.accountNumber}_Statement.xlsx`;
+                                        const hasFreshFiles = r.success && r.fileId && r.xlsFileId;
+                                        return (
+                                          <tr key={`${r.accountNumber}-${idx}`}>
+                                            <td><code>{r.accountNumber}</code></td>
+                                            <td className="text-truncate" style={{ maxWidth: '220px' }} title={r.customerName || ''}>
+                                              {r.customerName || <span className="text-muted">—</span>}
+                                            </td>
+                                            <td className="text-end">{r.pages ?? '—'}</td>
+                                            <td><span className={`badge ${outcome.cls}`}>{outcome.label}</span></td>
+                                            <td className="text-truncate" style={{ maxWidth: '180px' }} title={r.companyName || ''}>
+                                              {r.companyName || (r.success ? <span className="text-muted small">{r.specificFailureReason || 'unmatched'}</span> : <span className="text-danger small">—</span>)}
+                                            </td>
+                                            <td className="text-end text-muted small">
+                                              {Number.isFinite(r.processingTime) ? `${(r.processingTime / 1000).toFixed(1)}s` : '—'}
+                                            </td>
+                                            <td className="text-center">
+                                              {hasFreshFiles ? (
+                                                <div className="btn-group btn-group-sm" role="group">
+                                                  <button
+                                                    type="button"
+                                                    className="btn btn-outline-primary btn-sm"
+                                                    onClick={() => downloadSandboxFile(r.fileId, pdfName)}
+                                                    title="Download generated PDF"
+                                                  >
+                                                    PDF
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    className="btn btn-outline-success btn-sm"
+                                                    onClick={() => downloadSandboxFile(r.xlsFileId, xlsxName)}
+                                                    title="Download generated XLSX"
+                                                  >
+                                                    XLSX
+                                                  </button>
+                                                </div>
+                                              ) : !r.success ? (
+                                                <span className="text-danger small" title={r.error || ''}>error</span>
+                                              ) : (r.contentUnchanged || r.baselined) ? (
+                                                <span className="text-muted small" title="No new files were generated for this customer">no new files</span>
+                                              ) : (
+                                                <span className="text-muted small">—</span>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
                                 </div>
-                                <div className="col-md-3">
-                                  <div className="card card-sm bg-secondary-subtle">
-                                    <div className="card-body text-center py-2">
-                                      <div className="h4 mb-0 text-secondary">{(sandboxResults.unallocatedFiles || []).length}</div>
-                                      <div className="text-muted small">Unmatched (non-CORP)</div>
-                                    </div>
+
+                                {failedCount > 0 && (
+                                  <div className="alert alert-warning mt-3 mb-0">
+                                    <strong>{failedCount} customer(s) failed.</strong>{' '}
+                                    Hover the error indicator above for the message, or check{' '}
+                                    <code>pm2 logs invoice-portal-queue-worker</code> for the full stack.
                                   </div>
-                                </div>
+                                )}
                               </div>
-                              <div className="alert alert-success mb-2">
-                                <i className="fas fa-shield-alt me-2"></i>
-                                <strong>No customer emails were sent.</strong> Generated PDFs and Excel files are stored against matched companies and visible on the Statements page for review.
-                              </div>
-                              {(sandboxResults.failedFiles || []).length > 0 && (
-                                <div className="alert alert-warning mb-0">
-                                  <strong>{(sandboxResults.failedFiles || []).length} failed.</strong>{' '}
-                                  Check pm2 logs / the Files admin view for per-customer errors.
-                                </div>
-                              )}
-                            </div>
-                          )}
+                            );
+                          })()}
                         </div>
                       </div>
 

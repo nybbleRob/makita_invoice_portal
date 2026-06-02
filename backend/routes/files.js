@@ -135,6 +135,58 @@ router.get('/', globalAdmin, async (req, res) => {
 });
 
 /**
+ * Stream the raw bytes of a File row. Global-admin only because this bypasses
+ * the per-document access checks (Statement / Invoice / CreditNote routes have
+ * their own download endpoints that enforce company access). Used by the
+ * Statement Generator Sandbox so admins can inspect the PDF and XLSX produced
+ * for each customer - including unmatched (non-CORP) customers, which have
+ * File rows but no Statement record to route through.
+ *
+ * Declared before /:id so the bare-id metadata route doesn't swallow it.
+ */
+router.get('/:id/download', globalAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid file ID format' });
+    }
+
+    const file = await File.findByPk(id);
+    if (!file) {
+      return res.status(404).json({ success: false, message: 'File not found' });
+    }
+
+    const stored = file.filePath;
+    if (!stored) {
+      return res.status(404).json({ success: false, message: 'File has no path on disk' });
+    }
+
+    // Resolve relative paths against the backend root, then fall back to the
+    // raw path. Mirrors the resolution used by the Statement download routes.
+    let resolved = stored;
+    if (!path.isAbsolute(stored)) {
+      const candidate = path.join(__dirname, '..', stored);
+      resolved = fs.existsSync(candidate) ? candidate : stored;
+    }
+    if (!fs.existsSync(resolved)) {
+      console.error(`File ${id} not found on disk at ${resolved} (stored=${stored})`);
+      return res.status(404).json({ success: false, message: 'File not found on server' });
+    }
+
+    res.download(resolved, file.fileName || path.basename(resolved), (err) => {
+      if (err && !res.headersSent) {
+        console.error(`Error streaming file ${id}:`, err);
+        res.status(500).json({ success: false, message: 'Error downloading file' });
+      }
+    });
+  } catch (error) {
+    console.error('Error downloading file:', error);
+    res.status(500).json({ success: false, message: 'Error downloading file: ' + error.message });
+  }
+});
+
+/**
  * Get single file with full details
  */
 router.get('/:id', globalAdmin, async (req, res) => {
