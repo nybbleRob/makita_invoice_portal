@@ -21,20 +21,34 @@ that the worker is pointed at via `STATEMENT_PYTHON_BIN`.
 sudo apt update
 sudo apt install -y \
   libreoffice \
-  python3 python3-venv python3-full \
+  python3 python3-venv python3-full python3-uno \
   poppler-utils \
   fonts-liberation fontconfig
+```
 
-# Dedicated venv for the statement generator's Python deps. Path is arbitrary -
-# adjust to match wherever you keep app-local virtualenvs.
+`python3-uno` is critical: the `uno` Python bindings ship as a Debian package
+alongside LibreOffice, NOT on PyPI. Without it, `unoserver` fails at startup
+with `ModuleNotFoundError: No module named 'uno'`. Confirm before continuing:
+
+```bash
+python3 -c "import uno; print('uno OK')"
+```
+
+Now create the venv WITH `--system-site-packages` so it inherits the apt-
+installed `uno` module while still being isolated for our pip-installed deps:
+
+```bash
 sudo mkdir -p /opt/makita-stmt-venv
-sudo python3 -m venv /opt/makita-stmt-venv
+sudo python3 -m venv --system-site-packages /opt/makita-stmt-venv
 sudo /opt/makita-stmt-venv/bin/pip install --upgrade pip
 sudo /opt/makita-stmt-venv/bin/pip install --upgrade unoserver openpyxl pypdf
 
-# Make the unoserver/unoconvert binaries discoverable on PATH.
+# Expose unoserver/unoconvert on PATH.
 sudo ln -sf /opt/makita-stmt-venv/bin/unoserver  /usr/local/bin/unoserver
 sudo ln -sf /opt/makita-stmt-venv/bin/unoconvert /usr/local/bin/unoconvert
+
+# Final sanity check - venv's python should also see uno:
+/opt/makita-stmt-venv/bin/python3 -c "import uno; print('uno OK from venv')"
 ```
 
 Then point the worker at the venv's Python interpreter by adding to
@@ -50,11 +64,11 @@ or more unoservers (see "Persistent LibreOffice listener" below).
 ### Older systems (Debian 11, Ubuntu 22.04 and earlier)
 
 PEP 668 isn't enforced, so the original `sudo pip3 install` approach still
-works:
+works - but you STILL need `python3-uno` for the `uno` bindings:
 
 ```bash
-sudo apt install -y libreoffice python3 python3-pip poppler-utils \
-  fonts-liberation fontconfig
+sudo apt install -y libreoffice python3 python3-pip python3-uno \
+  poppler-utils fonts-liberation fontconfig
 sudo pip3 install --upgrade unoserver openpyxl pypdf
 # STATEMENT_PYTHON_BIN can stay unset; the default `python3` will find them.
 ```
