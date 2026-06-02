@@ -18,6 +18,7 @@ const IORedis = require('ioredis');
 const { processFileImport } = require('../jobs/fileImport');
 const { processBulkParsingTest } = require('../jobs/bulkParsingTest');
 const { processInvoiceImport } = require('../jobs/invoiceImport');
+const { processStatementGenerate } = require('../jobs/statementGenerate');
 const { processSupplierDocumentImportJob } = require('../jobs/supplierDocumentImport');
 const { processEmailJob } = require('../jobs/emailJob');
 const { cleanupOldFiles } = require('../jobs/fileCleanup');
@@ -26,6 +27,7 @@ const {
   fileImportQueue, 
   bulkParsingQueue, 
   invoiceImportQueue,
+  statementGenerateQueue,
   supplierDocumentQueue,
   emailQueue,
   scheduledTasksQueue,
@@ -181,6 +183,7 @@ async function monitorQueueHealth() {
       { name: 'file-import', queue: fileImportQueue },
       { name: 'bulk-parsing', queue: bulkParsingQueue },
       { name: 'invoice-import', queue: invoiceImportQueue },
+      { name: 'statement-generate', queue: statementGenerateQueue },
       { name: 'email', queue: emailQueue },
       { name: 'scheduled-tasks', queue: scheduledTasksQueue }
     ];
@@ -234,6 +237,7 @@ async function getHealthStatus() {
       { name: 'file-import', queue: fileImportQueue },
       { name: 'bulk-parsing', queue: bulkParsingQueue },
       { name: 'invoice-import', queue: invoiceImportQueue },
+      { name: 'statement-generate', queue: statementGenerateQueue },
       { name: 'supplier-document-import', queue: supplierDocumentQueue },
       { name: 'email', queue: emailQueue },
       { name: 'scheduled-tasks', queue: scheduledTasksQueue }
@@ -393,6 +397,50 @@ invoiceImportWorker.on('stalled', (jobId) => {
 
 workers.push(invoiceImportWorker);
 console.log('✅ Invoice import worker initialized');
+
+// Statement generation worker (fans out one job per customer from a single
+// ACR11P export upload). Concurrency is configurable so it can be matched to
+// the unoserver pool size - one LibreOffice listener per concurrent worker
+// avoids contention. Default 4 is a sensible starting point for a server with
+// 4 unoservers (ports 2003..2006); tune via STATEMENT_GENERATE_CONCURRENCY.
+const STATEMENT_GENERATE_CONCURRENCY = parseInt(process.env.STATEMENT_GENERATE_CONCURRENCY, 10) || 4;
+// 10 min lock - large customers (100+ pages) take ~5 min with unoconvert and
+// the default Python timeout is 3 min; the lock has to outlast both.
+const STATEMENT_GENERATE_LOCK_MS = parseInt(process.env.STATEMENT_GENERATE_LOCK_MS, 10) || 10 * 60 * 1000;
+
+const statementGenerateWorker = new Worker('statement-generate', async (job) => {
+  const custNo = job.data?.customer?.custNo || 'unknown';
+  console.log(`📄 Processing statement-generate job ${job.id}: custNo=${custNo}`);
+  return await processStatementGenerate(job);
+}, {
+  ...commonWorkerOptions,
+  concurrency: STATEMENT_GENERATE_CONCURRENCY,
+  lockDuration: STATEMENT_GENERATE_LOCK_MS
+});
+
+statementGenerateWorker.on('completed', (job, result) => {
+  console.log(`✅ Statement-generate job ${job.id} completed: custNo=${result?.accountNumber || 'Unknown'} pages=${result?.pages || 0}`);
+});
+
+statementGenerateWorker.on('failed', async (job, err) => {
+  const custNo = job.data?.customer?.custNo || 'Unknown';
+  console.error(`❌ Statement-generate job ${job.id} failed (custNo=${custNo}):`, err.message);
+  const maxAttempts = job.opts?.attempts || 2;
+  if (job.attemptsMade >= maxAttempts) {
+    await moveToDeadLetterQueue(job, err, 'statement-generate');
+  }
+});
+
+statementGenerateWorker.on('error', (error) => {
+  console.error('❌ Statement-generate worker error:', error.message);
+});
+
+statementGenerateWorker.on('stalled', (jobId) => {
+  console.warn(`⚠️  Statement-generate job ${jobId} stalled - will be retried`);
+});
+
+workers.push(statementGenerateWorker);
+console.log(`✅ Statement generate worker initialized (concurrency=${STATEMENT_GENERATE_CONCURRENCY}, lockDuration=${STATEMENT_GENERATE_LOCK_MS}ms)`);
 
 // Supplier document import worker (concurrency 2 for parallel processing)
 const supplierDocumentWorker = new Worker('supplier-document-import', async (job) => {

@@ -12,7 +12,7 @@ const { checkDocumentAccess, buildCompanyFilter } = require('../middleware/docum
 const { getDescendantCompanyIds } = require('../utils/companyHierarchy');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const { requirePermission } = require('../middleware/permissions');
-const { invoiceImportQueue } = require('../config/queue');
+const { invoiceImportQueue, statementGenerateQueue } = require('../config/queue');
 const { ensureStorageDirs, getStorageDir } = require('../config/storage');
 const router = express.Router();
 
@@ -37,6 +37,24 @@ const importUpload = multer({
       cb(null, true);
     } else {
       cb(new Error('Only PDF and Excel files (.pdf, .xlsx, .xls) are allowed for statement imports.'), false);
+    }
+  }
+});
+
+// Separate multer config for the ACR11P export generator. Accepts a single
+// tab-delimited .TXT (or .csv) file. Limit is larger than the per-file PDF
+// limit because the export covers all customers in one upload.
+const STATEMENT_EXPORT_ALLOWED_EXTS = ['.txt', '.csv'];
+const STATEMENT_EXPORT_MAX_BYTES = 50 * 1024 * 1024; // 50 MB
+const exportUpload = multer({
+  storage: importStorage,
+  limits: { fileSize: STATEMENT_EXPORT_MAX_BYTES, files: 1 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (STATEMENT_EXPORT_ALLOWED_EXTS.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only tab-delimited .TXT or .csv export files are allowed.'), false);
     }
   }
 });
@@ -548,6 +566,235 @@ router.post('/import',
     }
   });
 
+/**
+ * Generate statements from an uploaded ACR11P export.
+ *
+ * Accepts ONE tab-delimited .TXT file containing every customer's open
+ * invoices. Parses inline so we know how many customers to fan out to, then
+ * registers one batch and enqueues one `statement-generate` job per customer.
+ * Each job produces PDF + XLSX, matches the customer to a CORP company, calls
+ * `findOrCreateStatement`, and the existing batch notification path picks up
+ * from there.
+ *
+ * Declared before /:id so 'generate' isn't matched as a statement id.
+ */
+router.post('/generate',
+  requirePermission('STATEMENTS_IMPORT'),
+  exportUpload.single('file'),
+  async (req, res) => {
+    let tempFilePath = null;
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: 'No file uploaded. Please attach the ACR11P export.',
+          error: 'No file provided'
+        });
+      }
+
+      tempFilePath = path.resolve(req.file.path);
+      if (!fs.existsSync(tempFilePath)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Uploaded file is missing on disk',
+          error: 'File not found after upload'
+        });
+      }
+
+      const userId = req.user.userId;
+      const buffer = fs.readFileSync(tempFilePath);
+      const fileHash = crypto.createHash('sha256').update(buffer).digest('hex');
+
+      // Operator escape: when true, the per-customer worker bypasses the
+      // content-hash short-circuit AND the manual-upload-is-authoritative
+      // suppression in findOrCreateStatement. Use sparingly; the default
+      // (false) is the right answer for nightly regenerations.
+      const forceOverwrite = req.body.forceOverwrite === 'true'
+        || req.body.forceOverwrite === true
+        || req.body.forceOverwrite === '1';
+
+      // Decouples "regenerate" from "notify". When true, the worker will
+      // regenerate and replace files as normal but NEVER send a customer
+      // notification, even for new statements or genuine corrections.
+      // Designed for the cutover normalisation case: pair with
+      // forceOverwrite=true to migrate every customer onto the new renderer
+      // without spamming 379 inboxes about a render-engine swap that didn't
+      // change a penny of their balance. Independent of forceOverwrite; can
+      // also be used on its own for "review-only" generation cycles.
+      const silent = req.body.silent === 'true'
+        || req.body.silent === true
+        || req.body.silent === '1';
+
+      // Best-effort dedupe against File records, mirroring the /import flow.
+      // We don't refuse on duplicate - just surface it - because re-running
+      // the same export to regenerate outputs is a legitimate operation.
+      let isDuplicate = false;
+      let duplicateFileId = null;
+      try {
+        const existing = await File.findOne({
+          where: { fileHash, deletedAt: null },
+          attributes: ['id', 'fileName']
+        });
+        if (existing) {
+          isDuplicate = true;
+          duplicateFileId = existing.id;
+        }
+      } catch (dupErr) {
+        console.warn('Duplicate check failed (non-fatal):', dupErr.message);
+      }
+
+      const { parseExportText } = require('../services/statementGenerator/parse');
+      const text = buffer.toString('utf8');
+      let parsed;
+      try {
+        parsed = parseExportText(text);
+      } catch (parseErr) {
+        return res.status(400).json({
+          success: false,
+          message: `Failed to parse export: ${parseErr.message}`,
+          error: parseErr.message
+        });
+      }
+
+      const customers = parsed.customerList;
+      if (customers.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Export contained no valid customer rows.',
+          error: 'No customers parsed',
+          validation: parsed.validation
+        });
+      }
+
+      const importId = uuidv4();
+      const statementDateIso = parsed.statementDate; // YYYY-MM-DD
+
+      await logActivity({
+        type: ActivityType.FILE_UPLOAD,
+        userId,
+        userEmail: req.user.email,
+        userRole: req.user.role,
+        action: (() => {
+          const flags = [];
+          if (forceOverwrite) flags.push('forceOverwrite');
+          if (silent) flags.push('silent');
+          const suffix = flags.length ? ` (${flags.join(', ')})` : '';
+          return `Uploaded ACR11P export for generation${suffix} (${customers.length} customers)`;
+        })(),
+        details: {
+          importId,
+          fileName: req.file.originalname,
+          fileHash,
+          customerCount: customers.length,
+          statementDate: statementDateIso,
+          malformedLines: parsed.validation.malformedLines.length,
+          unknownTermsCount: parsed.validation.unknownTerms.length,
+          uploadMethod: 'manual',
+          documentType: 'statement',
+          source: 'manual-upload-statement-generate',
+          forceOverwrite,
+          silent
+        },
+        companyId: null,
+        companyName: null,
+        ipAddress: req.ip || req.connection.remoteAddress,
+        userAgent: req.get('user-agent')
+      });
+
+      const importStore = require('../utils/importStore');
+      const { registerBatch } = require('../services/batchNotificationService');
+
+      // One "import session" tracking per-customer results, and one batch for
+      // notification fan-out. Both keyed by importId so the existing
+      // /import/:importId status + results endpoints work unchanged.
+      await importStore.createImport(importId, customers.length, [tempFilePath], userId);
+      try {
+        await registerBatch(importId, customers.length, {
+          userId,
+          userEmail: req.user.email,
+          source: 'manual-upload-statement-generate'
+        });
+      } catch (batchError) {
+        console.warn('Failed to register batch:', batchError.message);
+      }
+
+      // Move the source TXT to processed/statements/YYYY/MM/DD so per-customer
+      // jobs all reference the same archived export, not the temp file (which
+      // would be tidied up before the slowest job finishes).
+      const { PROCESSED_STATEMENTS, getDatedFolder } = require('../config/storage');
+      const archiveDate = statementDateIso ? new Date(statementDateIso) : new Date();
+      const archiveDir = getDatedFolder(PROCESSED_STATEMENTS, archiveDate);
+      const archiveName = `${path.basename(req.file.originalname, path.extname(req.file.originalname))}_${importId}${path.extname(req.file.originalname)}`;
+      const archivePath = path.join(archiveDir, archiveName);
+      try {
+        fs.copyFileSync(tempFilePath, archivePath);
+      } catch (copyErr) {
+        console.warn(`Could not archive export to ${archivePath}: ${copyErr.message}`);
+      }
+
+      const enqueuedAt = new Date().toISOString();
+      for (const cust of customers) {
+        await statementGenerateQueue.add('statement-generate', {
+          importId,
+          userId,
+          source: 'manual-upload-statement-generate',
+          enqueuedAt,
+          exportFileHash: fileHash,
+          exportFileName: req.file.originalname,
+          exportArchivePath: archivePath,
+          statementDateIso,
+          forceOverwrite,
+          silent,
+          customer: cust
+        }, {
+          priority: 1,
+          attempts: 2,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: true,
+          removeOnFail: false
+        });
+      }
+
+      // Tidy the temp upload now - we archived it above and the worker uses
+      // the in-memory customer payload, not the source file.
+      try { fs.unlinkSync(tempFilePath); } catch (_) { /* best effort */ }
+      tempFilePath = null;
+
+      res.json({
+        success: true,
+        importId,
+        totalCustomers: customers.length,
+        statementDate: statementDateIso,
+        validation: {
+          parsedLines: parsed.validation.parsedLines,
+          malformedLines: parsed.validation.malformedLines.length,
+          unknownTerms: parsed.validation.unknownTerms.length
+        },
+        isDuplicate,
+        duplicateFileId,
+        forceOverwrite,
+        silent,
+        message: (() => {
+          const flags = [];
+          if (forceOverwrite) flags.push('forceOverwrite');
+          if (silent) flags.push('silent');
+          const suffix = flags.length ? ` (${flags.join(', ')})` : '';
+          return `Statement generation queued for ${customers.length} customer(s)${suffix}.`;
+        })()
+      });
+    } catch (error) {
+      console.error('Error starting statement generation:', error);
+      if (tempFilePath && fs.existsSync(tempFilePath)) {
+        try { fs.unlinkSync(tempFilePath); } catch (_) { /* best effort */ }
+      }
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to start statement generation',
+        error: error.message
+      });
+    }
+  });
+
 // Statement import status (declared before /:id)
 router.get('/import/:importId', async (req, res) => {
   try {
@@ -900,6 +1147,112 @@ router.put('/:id', requirePermission('STATEMENTS_EDIT'), async (req, res) => {
   } catch (error) {
     console.error('Error updating statement:', error);
     res.status(400).json({ message: error.message });
+  }
+});
+
+/**
+ * Reset a statement's source authority back to `generated`.
+ *
+ * Background: when a manual upload corrects a generated statement,
+ * findOrCreateStatement stamps `metadata.source = 'manual_upload'`. After
+ * that, subsequent generated runs for the same (companyId, periodEnd) are
+ * suppressed by the manual-authority rule - which is the right default,
+ * because it stops the nightly generator from silently overwriting a fix
+ * someone made by hand.
+ *
+ * If BPCS is later corrected at source, an operator needs a way to release
+ * that lock so the next generated run wins. This endpoint provides that
+ * release without time-bound automatic unsticking (which the user explicitly
+ * declined). It pairs with the `forceOverwrite` flag on /generate, which is
+ * the one-shot equivalent; reset-source-to-generated is the permanent flip.
+ *
+ * Preserves `metadata.contentHash` on purpose. Pair with `forceOverwrite=true`
+ * on the next /generate call if you want immediate regeneration regardless of
+ * content; otherwise the next run honours the hash compare normally - matching
+ * data is a no-op (manual file kept since BPCS agrees with it), differing
+ * data is a correction (manual-authority lock now released).
+ */
+router.post('/:id/reset-source-to-generated', requirePermission('STATEMENTS_EDIT'), async (req, res) => {
+  try {
+    const statement = await Statement.findByPk(req.params.id, {
+      include: [{ model: Company, as: 'company', attributes: ['id', 'name'] }]
+    });
+
+    if (!statement) {
+      return res.status(404).json({ message: 'Statement not found' });
+    }
+
+    if (req.accessibleCompanyIds !== null && !req.accessibleCompanyIds.includes(statement.companyId)) {
+      return res.status(403).json({ message: 'Access denied. You do not have access to this statement.' });
+    }
+
+    const oldMetadata = statement.metadata || {};
+    const oldSource = oldMetadata.source || 'manual_upload';
+
+    // Deliberately PRESERVE metadata.contentHash on reset.
+    //
+    // If a manual upload had stamped its own content hash, the next generated
+    // run would compare cleanly: matching hash -> no-op (manual file kept,
+    // operator confirmed no change needed), differing hash -> correction
+    // (manual-authority lock now released, BPCS wins).
+    //
+    // If we instead cleared contentHash here, the next generated run would
+    // hit the pure-baseline branch (existingHash == null -> stamp + skip),
+    // which would leave the manual file in place forever without ever
+    // regenerating. That's the opposite of the operator's intent.
+    //
+    // If the operator wants IMMEDIATE regeneration regardless of content,
+    // that's what the forceOverwrite flag on /generate is for.
+    const newMetadata = {
+      ...oldMetadata,
+      source: 'generated',
+      sourceResetAt: new Date().toISOString(),
+      sourceResetBy: req.user.userId,
+      sourceResetFrom: oldSource
+    };
+
+    await statement.update({ metadata: newMetadata });
+
+    await logActivity({
+      type: ActivityType.STATEMENT_EDITED,
+      userId: req.user.userId,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: `Reset source to generated on statement ${statement.statementNumber || statement.id} (was ${oldSource})`,
+      details: {
+        statementId: statement.id,
+        statementNumber: statement.statementNumber,
+        periodEnd: statement.periodEnd,
+        previousSource: oldSource,
+        newSource: 'generated',
+        contentHashPreserved: !!oldMetadata.contentHash
+      },
+      companyId: statement.companyId,
+      companyName: statement.company?.name || null,
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    });
+
+    res.json({
+      success: true,
+      // Spelled out for the admin UI: an operator who clicks "reset" and
+      // sees no visible change has the correct outcome - this endpoint only
+      // releases the authority lock, it doesn't pull the generated file
+      // back on its own. The structured `nextRunBehavior` block is here so
+      // the frontend can render it as a callout without parsing prose.
+      message: 'Statement source reset to generated. The manual-upload authority lock is released; the next /generate run for this period will compare BPCS content normally.',
+      nextRunBehavior: {
+        ifContentUnchanged: 'No-op. The existing file stays in place (nothing visible changes). The reset alone does NOT pull the generated version back if BPCS still matches what was previously generated.',
+        ifContentDiffers: 'Correction. The generator regenerates files, updates the Statement, and notifies the customer.',
+        forImmediateRegeneration: 'Call /api/statements/generate with forceOverwrite=true (and optionally silent=true to suppress the email).'
+      },
+      statementId: statement.id,
+      previousSource: oldSource,
+      newSource: 'generated'
+    });
+  } catch (error) {
+    console.error('Error resetting statement source:', error);
+    res.status(500).json({ message: error.message });
   }
 });
 

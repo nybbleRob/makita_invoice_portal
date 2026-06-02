@@ -109,9 +109,12 @@ function extractInvoiceNumber(text) {
  * Extract date using common patterns
  */
 function extractDate(text) {
-  // Common date patterns
+  // Common date patterns. Includes dotted dd.mm.yyyy because the printed
+  // ACR11P statement uses that format; without it a re-uploaded statement PDF
+  // would never yield a statementDate, and the (companyId, periodEnd) dedupe
+  // wouldn't fire on corrections.
   const patterns = [
-    /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/, // DD/MM/YYYY or DD-MM-YYYY
+    /(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4})/, // DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY
     /(\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/, // YYYY/MM/DD or YYYY-MM-DD
     /(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4})/i, // DD MMM YYYY
     /((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{2,4})/i // MMM DD, YYYY

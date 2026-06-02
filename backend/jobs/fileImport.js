@@ -2,6 +2,7 @@ const { downloadFile, calculateFileHash, listFiles, moveFile } = require('../uti
 const { File, Settings, User, Template, Company, Invoice, CreditNote, Statement } = require('../models');
 const { extractInvoiceData, extractTextFromPDF } = require('../utils/pdfExtractor');
 const { findCorpCompanyByAccountNumber, findOrCreateStatement } = require('../utils/statementImport');
+const { parseDate: sharedParseDate } = require('../utils/parseDate');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -471,9 +472,12 @@ async function processFileImport(job) {
             // Statement creation goes through the centralised helper so dedupe
             // (companyId, periodEnd) and dual file slotting are handled in one place.
             try {
-              const statementDate = parsedData.statementDate
-                ? new Date(parsedData.statementDate)
-                : (parsedData.date ? new Date(parsedData.date) : new Date());
+              // Day-first parse so dd.mm.yyyy / dd/mm/yyyy land on the same UTC
+              // midnight as YYYYMMDD from the ACR11P CSV - otherwise corrections
+              // can silently dedupe wrong (or miss) for any statement dated <= 12th.
+              const statementDate = sharedParseDate(parsedData.statementDate)
+                || sharedParseDate(parsedData.date)
+                || new Date();
 
               const result = await findOrCreateStatement({
                 matchedCompanyId,
@@ -486,15 +490,21 @@ async function processFileImport(job) {
                   fileName,
                   processingMethod
                 },
-                settings
+                settings,
+                source: 'manual_upload',
+                fileHash: file.fileHash
               });
               document = result.statement;
 
               if (result.isNew) {
                 console.log(`✅ Created statement: ${document.statementNumber} for company: ${company.name} (closingBalance=${document.closingBalance}, slot=${result.fileSlot})`);
+              } else if (result.replaced) {
+                console.log(`✏️  Statement corrected: ${document.statementNumber} for company: ${company.name} (slot=${result.fileSlot}); will re-notify.`);
+                // Correction -> re-fire the notification.
+                statementSecondFormatPairing = false;
               } else {
                 console.log(`🔁 Updated existing statement ${document.statementNumber} for company: ${company.name} (slot=${result.fileSlot}); not re-notifying.`);
-                // Suppress notification on second-format pairing.
+                // Suppress notification on byte-identical re-upload or second-format pairing.
                 statementSecondFormatPairing = true;
               }
             } catch (statementError) {
@@ -586,9 +596,9 @@ async function processFileImport(job) {
             }
           } else if (fileType === 'statement' || parsedData.documentType?.toLowerCase() === 'statement') {
             try {
-              const statementDate = parsedData.statementDate
-                ? new Date(parsedData.statementDate)
-                : (parsedData.date ? new Date(parsedData.date) : new Date());
+              const statementDate = sharedParseDate(parsedData.statementDate)
+                || sharedParseDate(parsedData.date)
+                || new Date();
 
               const result = await findOrCreateStatement({
                 matchedCompanyId,
@@ -603,12 +613,17 @@ async function processFileImport(job) {
                   testModeAllocation: true,
                   originalAccountNumber: parsedData.accountNumber || null
                 },
-                settings
+                settings,
+                source: 'manual_upload',
+                fileHash: file.fileHash
               });
               document = result.statement;
 
               if (result.isNew) {
                 console.log(`🧪 TEST MODE: Created statement: ${document.statementNumber} (test-allocated, slot=${result.fileSlot})`);
+              } else if (result.replaced) {
+                console.log(`🧪 TEST MODE: Corrected existing test-allocated statement (slot=${result.fileSlot}); will re-notify.`);
+                statementSecondFormatPairing = false;
               } else {
                 console.log(`🧪 TEST MODE: Updated existing test-allocated statement (slot=${result.fileSlot}); not re-notifying.`);
                 statementSecondFormatPairing = true;

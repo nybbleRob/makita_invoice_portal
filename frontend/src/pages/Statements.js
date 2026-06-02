@@ -69,6 +69,12 @@ const Statements = () => {
   const [importResults, setImportResults] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importPollingInterval, setImportPollingInterval] = useState(null);
+  // Tracks whether the current import run is a "generate from ACR11P export"
+  // (true) or the legacy PDF/XLS upload flow (false). Affects modal copy only -
+  // the backend uses the same importStore + batch pipeline either way.
+  const [importIsGenerated, setImportIsGenerated] = useState(false);
+  const generateFileInputRef = useRef(null);
+  const [generating, setGenerating] = useState(false);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -433,6 +439,7 @@ const Statements = () => {
       return;
     }
     setShowImportModal(true);
+    setImportIsGenerated(false);
     setImportStatus({ processedFiles: 0, totalFiles: importFiles.length, status: 'processing' });
     try {
       const formData = new FormData();
@@ -446,6 +453,53 @@ const Statements = () => {
       toast.error('Error starting import: ' + (error.response?.data?.message || error.message), 8000);
       setShowImportModal(false);
       setImportStatus(null);
+    }
+  };
+
+  // Generate-from-export handler. Uploads ONE tab-delimited ACR11P .TXT (or
+  // .csv); the backend parses, fans out one job per customer, and we poll the
+  // shared import-status endpoint just like the legacy PDF/XLS import.
+  const handleGenerateFileSelect = (e) => {
+    const file = (e.target.files || [])[0];
+    if (!file) return;
+    void runGenerate(file);
+    if (generateFileInputRef.current) generateFileInputRef.current.value = '';
+  };
+
+  const runGenerate = async (file) => {
+    setGenerating(true);
+    setShowImportModal(true);
+    setImportIsGenerated(true);
+    setImportStatus({ processedFiles: 0, totalFiles: 1, status: 'processing' });
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await api.post('/api/statements/generate', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      const { importId, totalCustomers, validation, statementDate } = response.data;
+      // Use the customer count as totalFiles for the progress UI - matches the
+      // backend's importStore which registers one slot per customer job.
+      setImportStatus(prev => ({
+        ...(prev || {}),
+        importId,
+        totalFiles: totalCustomers,
+        processedFiles: 0,
+        status: 'processing',
+        meta: {
+          statementDate,
+          malformedLines: validation?.malformedLines || 0,
+          unknownTerms: validation?.unknownTerms || 0
+        }
+      }));
+      pollImportStatus(importId);
+    } catch (error) {
+      console.error('Error starting statement generation:', error);
+      toast.error('Error starting generation: ' + (error.response?.data?.message || error.message), 8000);
+      setShowImportModal(false);
+      setImportStatus(null);
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -533,7 +587,9 @@ const Statements = () => {
     setImportStatus(null);
     setImportResults(null);
     setImportFiles([]);
+    setImportIsGenerated(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
+    if (generateFileInputRef.current) generateFileInputRef.current.value = '';
     toast.info('Import cancelled', 3000);
   };
 
@@ -541,7 +597,9 @@ const Statements = () => {
     setImportStatus(null);
     setImportResults(null);
     setImportFiles([]);
+    setImportIsGenerated(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
+    if (generateFileInputRef.current) generateFileInputRef.current.value = '';
   };
 
   const canImport = hasPermission('STATEMENTS_IMPORT');
@@ -658,9 +716,17 @@ const Statements = () => {
                           onChange={handleFileSelect}
                           style={{ display: 'none' }}
                         />
+                        <input
+                          ref={generateFileInputRef}
+                          type="file"
+                          accept=".txt,.csv"
+                          onChange={handleGenerateFileSelect}
+                          style={{ display: 'none' }}
+                        />
                         <button
                           className="btn btn-sm btn-success"
                           onClick={() => fileInputRef.current?.click()}
+                          disabled={generating}
                         >
                           Upload
                         </button>
@@ -672,6 +738,14 @@ const Statements = () => {
                             Import {importFiles.length} File{importFiles.length !== 1 ? 's' : ''}
                           </button>
                         )}
+                        <button
+                          className="btn btn-sm btn-primary"
+                          onClick={() => generateFileInputRef.current?.click()}
+                          disabled={generating}
+                          title="Generate PDF + Excel statements from the ACR11P export (.TXT)"
+                        >
+                          {generating ? 'Generating…' : 'Generate from Export'}
+                        </button>
                       </>
                     )}
 
@@ -899,20 +973,41 @@ const Statements = () => {
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content">
               <div className="modal-header">
-                <h5 className="modal-title">Importing Statements</h5>
+                <h5 className="modal-title">{importIsGenerated ? 'Generating Statements' : 'Importing Statements'}</h5>
                 <button type="button" className="btn-close" onClick={handleCancelImport}></button>
               </div>
               <div className="modal-body text-center py-4">
                 <div className="alert alert-info mb-3">
-                  <strong>Note:</strong> Statements are matched to corporate (CORP) accounts only. PDF + XLS files for the same statement are paired into one record.
+                  {importIsGenerated ? (
+                    <>
+                      <strong>Note:</strong> Generating PDF + Excel statements per customer from the ACR11P export.
+                      Each customer is processed independently; customers not matched to a corporate (CORP) account are
+                      stored as unallocated (this is normal for non-portal customers in the export).
+                    </>
+                  ) : (
+                    <>
+                      <strong>Note:</strong> Statements are matched to corporate (CORP) accounts only. PDF + XLS files for the same statement are paired into one record.
+                    </>
+                  )}
                 </div>
                 <div className="spinner-border text-primary mb-3" role="status">
                   <span className="visually-hidden">Processing...</span>
                 </div>
-                <h3>Processing {importStatus?.totalFiles || 0} file(s)...</h3>
+                <h3>
+                  {importIsGenerated
+                    ? `Processing ${importStatus?.totalFiles || 0} customer${importStatus?.totalFiles === 1 ? '' : 's'}...`
+                    : `Processing ${importStatus?.totalFiles || 0} file(s)...`}
+                </h3>
                 <p className="text-muted">
-                  Processed {importStatus?.processedFiles || 0} of {importStatus?.totalFiles || 0} files
+                  {importIsGenerated
+                    ? `Generated ${importStatus?.processedFiles || 0} of ${importStatus?.totalFiles || 0} customer${importStatus?.totalFiles === 1 ? '' : 's'}`
+                    : `Processed ${importStatus?.processedFiles || 0} of ${importStatus?.totalFiles || 0} files`}
                 </p>
+                {importIsGenerated && importStatus?.meta?.malformedLines > 0 && (
+                  <p className="text-warning small mb-2">
+                    {importStatus.meta.malformedLines} malformed line(s) skipped during parsing.
+                  </p>
+                )}
                 {importStatus && importStatus.totalFiles > 0 && (
                   <div className="progress">
                     <div

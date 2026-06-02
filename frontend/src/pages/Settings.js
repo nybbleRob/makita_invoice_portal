@@ -968,8 +968,8 @@ const Settings = () => {
                       
                       <div className="row g-3 mt-3">
                         <div className="col-12">
-                          <h3 className="mb-3">Document Retention</h3>
-                          <p className="text-muted mb-3">Configure automatic deletion of documents (Invoices, Credit Notes, Statements) after a retention period.</p>
+                          <h3 className="mb-3">Invoice &amp; Credit Note Retention</h3>
+                          <p className="text-muted mb-3">Configure automatic deletion of Invoices and Credit Notes after a retention period. Statements have their own override below.</p>
                         </div>
                         <div className="col-md-6">
                           <label className="form-label">Retention Period</label>
@@ -984,7 +984,7 @@ const Settings = () => {
                             <option value="60">60 Days</option>
                             <option value="90">90 Days</option>
                           </select>
-                          <small className="form-hint">Number of days to keep documents before automatic deletion. Disabled means documents are never automatically deleted.</small>
+                          <small className="form-hint">Number of days to keep Invoices and Credit Notes before automatic deletion. Disabled means they are never automatically deleted.</small>
                         </div>
                         <div className="col-md-6">
                           <label className="form-label">Date Trigger</label>
@@ -1004,7 +1004,57 @@ const Settings = () => {
                           </small>
                         </div>
                       </div>
-                      
+
+                      <div className="row g-3 mt-3">
+                        <div className="col-12">
+                          <h3 className="mb-3">Statement Retention</h3>
+                          <p className="text-muted mb-3">
+                            Optional override for Statements. Leave fields blank to use the same policy as Invoices and Credit Notes above.
+                          </p>
+                        </div>
+                        <div className="col-md-6">
+                          <label className="form-label">Retention Period</label>
+                          <select
+                            className="form-select"
+                            value={settings.statementRetentionPeriod ?? ''}
+                            onChange={(e) => handleInputChange('statementRetentionPeriod', e.target.value === '' ? null : parseInt(e.target.value))}
+                          >
+                            <option value="">Use same as invoices/credit notes</option>
+                            <option value="14">14 Days</option>
+                            <option value="30">30 Days</option>
+                            <option value="60">60 Days</option>
+                            <option value="90">90 Days</option>
+                          </select>
+                          <small className="form-hint">
+                            {settings.statementRetentionPeriod
+                              ? `Statements use this override (${settings.statementRetentionPeriod} days), regardless of the invoice/credit-note setting above.`
+                              : settings.documentRetentionPeriod
+                                ? `Currently inheriting ${settings.documentRetentionPeriod} days from the invoice/credit-note policy above.`
+                                : 'Retention is currently disabled for statements (and inherited policy is also disabled).'}
+                          </small>
+                        </div>
+                        <div className="col-md-6">
+                          <label className="form-label">Date Trigger</label>
+                          <select
+                            className="form-select"
+                            value={settings.statementRetentionDateTrigger ?? ''}
+                            onChange={(e) => handleInputChange('statementRetentionDateTrigger', e.target.value === '' ? null : e.target.value)}
+                            disabled={!settings.statementRetentionPeriod && !settings.documentRetentionPeriod}
+                          >
+                            <option value="">Inherit (use invoice/credit-note trigger)</option>
+                            <option value="upload_date">Upload Date</option>
+                            <option value="invoice_date">Statement Date (Period End)</option>
+                          </select>
+                          <small className="form-hint">
+                            {settings.statementRetentionDateTrigger
+                              ? (settings.statementRetentionDateTrigger === 'upload_date'
+                                  ? 'Statement countdown starts when the statement is generated/uploaded.'
+                                  : 'Statement countdown starts from the statement period-end date.')
+                              : `Inheriting "${settings.documentRetentionDateTrigger === 'invoice_date' ? 'Invoice Date / Tax Point' : 'Upload Date'}" from the invoice/credit-note policy.`}
+                          </small>
+                        </div>
+                      </div>
+
                       <div className="row g-3 mt-3">
                         <div className="col-12">
                           <h3 className="mb-3">Activity Log Auto-Purge</h3>

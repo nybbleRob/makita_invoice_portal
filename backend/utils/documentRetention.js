@@ -120,10 +120,92 @@ function calculateDocumentRetentionDates(document, settings) {
   };
 }
 
+/**
+ * Resolve statement retention settings, falling back to the shared
+ * documentRetention* values when no statement-specific override is set.
+ * Null on either statement field means "inherit"; the user can set just the
+ * period override, just the trigger override, or both independently.
+ * @param {Object} settings - Settings object
+ * @returns {{retentionPeriod: number|null, dateTrigger: string}}
+ */
+function resolveStatementRetentionSettings(settings) {
+  if (!settings) {
+    return { retentionPeriod: null, dateTrigger: 'upload_date' };
+  }
+
+  const statementPeriod = settings.statementRetentionPeriod;
+  const statementTrigger = settings.statementRetentionDateTrigger;
+
+  const retentionPeriod = (statementPeriod === null || statementPeriod === undefined)
+    ? (settings.documentRetentionPeriod ?? null)
+    : statementPeriod;
+
+  const dateTrigger = (statementTrigger === null || statementTrigger === undefined || statementTrigger === '')
+    ? (settings.documentRetentionDateTrigger || 'upload_date')
+    : statementTrigger;
+
+  return { retentionPeriod, dateTrigger };
+}
+
+/**
+ * Calculate and set retention dates for a Statement, honouring the
+ * statement-specific override (if any) with fallback to the shared policy.
+ * @param {Object} statement - Statement object
+ * @param {Object} settings - Settings object
+ * @returns {Object} - { retentionStartDate, retentionExpiryDate }
+ */
+function calculateStatementRetentionDates(statement, settings) {
+  const { retentionPeriod, dateTrigger } = resolveStatementRetentionSettings(settings);
+
+  if (!retentionPeriod) {
+    return {
+      retentionStartDate: null,
+      retentionExpiryDate: null
+    };
+  }
+
+  const startDate = getRetentionStartDate(statement, dateTrigger);
+  const expiryDate = calculateRetentionExpiryDate(retentionPeriod, startDate);
+
+  return {
+    retentionStartDate: startDate,
+    retentionExpiryDate: expiryDate
+  };
+}
+
+/**
+ * Check if a Statement row should be deleted based on the resolved
+ * statement retention settings (statement override falling back to shared).
+ * @param {Object} statement - Statement row with retentionExpiryDate
+ * @param {Object} settings - Settings object
+ * @returns {boolean}
+ */
+function shouldDeleteStatement(statement, settings) {
+  const { retentionPeriod } = resolveStatementRetentionSettings(settings);
+
+  if (!retentionPeriod) {
+    return false;
+  }
+
+  if (statement.retentionDeletedAt || statement.deletedAt) {
+    return false;
+  }
+
+  if (!statement.retentionExpiryDate) {
+    return false;
+  }
+
+  const expiryDate = new Date(statement.retentionExpiryDate);
+  return expiryDate <= new Date();
+}
+
 module.exports = {
   calculateRetentionExpiryDate,
   getRetentionStartDate,
   shouldDeleteDocument,
-  calculateDocumentRetentionDates
+  calculateDocumentRetentionDates,
+  resolveStatementRetentionSettings,
+  calculateStatementRetentionDates,
+  shouldDeleteStatement
 };
 

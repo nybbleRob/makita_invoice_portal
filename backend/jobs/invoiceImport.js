@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const { File, Template, Company, Invoice, CreditNote, Statement, User, Sequelize, Settings } = require('../models');
 const { Op } = Sequelize;
 const { extractTextFromPDF } = require('../utils/pdfExtractor');
+const { parseDate: sharedParseDate } = require('../utils/parseDate');
 const { 
   ensureStorageDirs, 
   getStorageDir, 
@@ -995,101 +996,19 @@ async function processInvoiceImport(job) {
     
     console.log(`📄 [Import ${importId}] Final document type determination: ${detectedType} (isInvoice: ${isInvoice}, isCreditNote: ${isCreditNote}, isStatement: ${isStatement})`);
     
-    // Helper function to intelligently parse date from various formats
+    // Day-first date parser shared with fileImport.js and the statement
+    // generator. Centralised in utils/parseDate so dd/mm/yyyy, dd.mm.yyyy,
+    // dd-mm-yyyy, ISO, and "dd MMM yyyy" are interpreted identically across
+    // every ingest path. Wraps the shared util to keep the original
+    // fallback-to-now semantics and import-scoped logging.
     const parseDate = (dateStr) => {
-      if (!dateStr) return new Date();
-      
-      try {
-        const str = dateStr.toString().trim();
-        
-        // Try multiple date format patterns (same as validation above)
-        const datePatterns = [
-          // dd/mm/yy or dd/mm/yyyy
-          { pattern: /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/, format: 'dd/mm/yy' },
-          // dd-mm-yy or dd-mm-yyyy
-          { pattern: /^(\d{1,2})-(\d{1,2})-(\d{2,4})$/, format: 'dd-mm-yy' },
-          // dd.mm.yy or dd.mm.yyyy
-          { pattern: /^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/, format: 'dd.mm.yy' },
-          // yyyy-mm-dd (ISO format)
-          { pattern: /^(\d{4})-(\d{1,2})-(\d{1,2})$/, format: 'yyyy-mm-dd' },
-          // yyyy/mm/dd
-          { pattern: /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/, format: 'yyyy/mm/dd' },
-          // dd MMM yyyy or dd MMM yy (e.g., "05 Dec 2025" or "05 Dec 25")
-          { pattern: /^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{2,4})$/, format: 'dd MMM yyyy' },
-          // MMM dd, yyyy (e.g., "Dec 05, 2025")
-          { pattern: /^([A-Za-z]{3,})\s+(\d{1,2}),\s+(\d{2,4})$/, format: 'MMM dd, yyyy' }
-        ];
-        
-        for (const { pattern, format } of datePatterns) {
-          const match = str.match(pattern);
-          if (match) {
-            let day, month, year;
-            
-            if (format.includes('MMM')) {
-              // Text month format
-              const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-              const monthStr = (format === 'dd MMM yyyy' ? match[2] : match[1]).toLowerCase();
-              month = monthNames.findIndex(m => monthStr.startsWith(m)) + 1;
-              
-              if (month === 0) continue; // Month not found
-              
-              if (format === 'dd MMM yyyy') {
-                day = parseInt(match[1], 10);
-                year = parseInt(match[3], 10);
-              } else {
-                // MMM dd, yyyy
-                day = parseInt(match[2], 10);
-                year = parseInt(match[3], 10);
-              }
-            } else {
-              // Numeric format
-              if (format.startsWith('yyyy')) {
-                // yyyy-mm-dd or yyyy/mm/dd format
-                year = parseInt(match[1], 10);
-                month = parseInt(match[2], 10);
-                day = parseInt(match[3], 10);
-              } else {
-                // dd/mm/yy or dd-mm-yy format
-                day = parseInt(match[1], 10);
-                month = parseInt(match[2], 10);
-                year = parseInt(match[3], 10);
-              }
-            }
-            
-            // Convert 2-digit year to 4-digit (assume 2000s if < 50, 1900s if >= 50)
-            if (year < 100) {
-              year = year < 50 ? 2000 + year : 1900 + year;
-            }
-            
-            // Validate day and month ranges
-            if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-              // Create date using UTC to avoid timezone issues
-              const parsedDate = new Date(Date.UTC(year, month - 1, day));
-              
-              // Verify the date is valid (handles invalid dates like Feb 30)
-              if (parsedDate.getUTCFullYear() === year && 
-                  parsedDate.getUTCMonth() === month - 1 && 
-                  parsedDate.getUTCDate() === day) {
-                console.log(`✅ [Import ${importId}] Parsed date "${str}" as ${day}/${month}/${year} (${parsedDate.toISOString().split('T')[0]})`);
-                return parsedDate;
-              } else {
-                console.log(`⚠️  [Import ${importId}] Invalid date: ${day}/${month}/${year} (e.g., Feb 30)`);
-              }
-            }
-          }
-        }
-        
-        // If no pattern matched, try standard Date parsing as fallback
-        const standardDate = new Date(str);
-        if (!isNaN(standardDate.getTime()) && standardDate.getFullYear() > 1900) {
-          console.log(`✅ [Import ${importId}] Parsed date "${str}" using standard Date parser: ${standardDate.toISOString().split('T')[0]}`);
-          return standardDate;
-        }
-      } catch (e) {
-        console.log(`⚠️  [Import ${importId}] Date parsing error for "${dateStr}":`, e.message);
-      }
+      const parsed = sharedParseDate(dateStr, {
+        log: (m) => console.log(`✅ [Import ${importId}] ${m}`),
+        warn: (m) => console.log(`⚠️  [Import ${importId}] ${m}`)
+      });
+      if (parsed) return parsed;
       console.log(`⚠️  [Import ${importId}] Could not parse date "${dateStr}", using current date as fallback`);
-      return new Date(); // Fallback to current date
+      return new Date();
     };
     
     // Helper function to clean and parse amount (handles currency symbols, commas, decimals)

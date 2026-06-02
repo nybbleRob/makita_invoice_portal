@@ -12,6 +12,7 @@ const path = require('path');
 const { sendTemplatedEmail } = require('../utils/sendTemplatedEmail');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const { STORAGE_BASE, PROCESSED_BASE, UNPROCESSED_BASE } = require('../config/storage');
+const { resolveStatementRetentionSettings } = require('../utils/documentRetention');
 
 /**
  * Clean up expired documents based on retention policy
@@ -24,104 +25,117 @@ async function cleanupExpiredDocuments() {
     
     const settings = await Settings.getSettings();
     const retentionPeriod = settings.documentRetentionPeriod;
-    
-    // If retention is disabled, skip cleanup
-    if (!retentionPeriod) {
-      console.log('ℹ️  Document retention is disabled, skipping cleanup');
+    const { retentionPeriod: statementRetentionPeriod } = resolveStatementRetentionSettings(settings);
+
+    // Skip the whole job only when both policies are off; otherwise scan
+    // each doc type independently below.
+    if (!retentionPeriod && !statementRetentionPeriod) {
+      console.log('ℹ️  Document retention is disabled (shared and statement-specific), skipping cleanup');
       return { deleted: 0, skipped: 0, errors: 0 };
     }
-    
+
+    if (!retentionPeriod) {
+      console.log('ℹ️  Shared invoice/credit-note retention is disabled; only statements will be scanned this run');
+    }
+    if (!statementRetentionPeriod) {
+      console.log('ℹ️  Statement retention resolves to disabled; only invoices and credit notes will be scanned this run');
+    }
+
     const now = new Date();
     console.log(`📅 Hard deleting documents with retentionExpiryDate <= ${now.toISOString()}`);
-    
+
     let deletedCount = 0;
     let errorCount = 0;
     const deletionLog = [];
-    
-    // Find expired invoices (including those already soft-deleted but not hard-deleted)
-    const expiredInvoices = await Invoice.findAll({
-      where: {
-        retentionExpiryDate: {
-          [Op.lte]: now
+    let expiredInvoices = [];
+    let expiredCreditNotes = [];
+    let expiredStatements = [];
+
+    if (retentionPeriod) {
+      expiredInvoices = await Invoice.findAll({
+        where: {
+          retentionExpiryDate: {
+            [Op.lte]: now
+          }
+        },
+        include: [{
+          model: Company,
+          as: 'company',
+          attributes: ['id', 'name', 'edi'],
+          required: false
+        }],
+        paranoid: false
+      });
+
+      console.log(`📄 Found ${expiredInvoices.length} expired invoice(s)`);
+
+      for (const invoice of expiredInvoices) {
+        try {
+          const result = await hardDeleteDocument(invoice, 'invoice', settings);
+          deletedCount++;
+          deletionLog.push(result);
+        } catch (error) {
+          console.error(`❌ Error deleting invoice ${invoice.invoiceNumber}:`, error.message);
+          errorCount++;
         }
-      },
-      include: [{
-        model: Company,
-        as: 'company',
-        attributes: ['id', 'name', 'edi'],
-        required: false
-      }],
-      paranoid: false // Include soft-deleted records
-    });
-    
-    console.log(`📄 Found ${expiredInvoices.length} expired invoice(s)`);
-    
-    for (const invoice of expiredInvoices) {
-      try {
-        const result = await hardDeleteDocument(invoice, 'invoice', settings);
-        deletedCount++;
-        deletionLog.push(result);
-      } catch (error) {
-        console.error(`❌ Error deleting invoice ${invoice.invoiceNumber}:`, error.message);
-        errorCount++;
+      }
+
+      expiredCreditNotes = await CreditNote.findAll({
+        where: {
+          retentionExpiryDate: {
+            [Op.lte]: now
+          }
+        },
+        include: [{
+          model: Company,
+          as: 'company',
+          attributes: ['id', 'name', 'edi'],
+          required: false
+        }],
+        paranoid: false
+      });
+
+      console.log(`📄 Found ${expiredCreditNotes.length} expired credit note(s)`);
+
+      for (const creditNote of expiredCreditNotes) {
+        try {
+          const result = await hardDeleteDocument(creditNote, 'credit_note', settings);
+          deletedCount++;
+          deletionLog.push(result);
+        } catch (error) {
+          console.error(`❌ Error deleting credit note ${creditNote.creditNoteNumber}:`, error.message);
+          errorCount++;
+        }
       }
     }
-    
-    // Find expired credit notes
-    const expiredCreditNotes = await CreditNote.findAll({
-      where: {
-        retentionExpiryDate: {
-          [Op.lte]: now
+
+    if (statementRetentionPeriod) {
+      expiredStatements = await Statement.findAll({
+        where: {
+          retentionExpiryDate: {
+            [Op.lte]: now
+          }
+        },
+        include: [{
+          model: Company,
+          as: 'company',
+          attributes: ['id', 'name', 'edi'],
+          required: false
+        }],
+        paranoid: false
+      });
+
+      console.log(`📄 Found ${expiredStatements.length} expired statement(s)`);
+
+      for (const statement of expiredStatements) {
+        try {
+          const result = await hardDeleteDocument(statement, 'statement', settings);
+          deletedCount++;
+          deletionLog.push(result);
+        } catch (error) {
+          console.error(`❌ Error deleting statement ${statement.statementNumber}:`, error.message);
+          errorCount++;
         }
-      },
-      include: [{
-        model: Company,
-        as: 'company',
-        attributes: ['id', 'name', 'edi'],
-        required: false
-      }],
-      paranoid: false
-    });
-    
-    console.log(`📄 Found ${expiredCreditNotes.length} expired credit note(s)`);
-    
-    for (const creditNote of expiredCreditNotes) {
-      try {
-        const result = await hardDeleteDocument(creditNote, 'credit_note', settings);
-        deletedCount++;
-        deletionLog.push(result);
-      } catch (error) {
-        console.error(`❌ Error deleting credit note ${creditNote.creditNoteNumber}:`, error.message);
-        errorCount++;
-      }
-    }
-    
-    // Find expired statements
-    const expiredStatements = await Statement.findAll({
-      where: {
-        retentionExpiryDate: {
-          [Op.lte]: now
-        }
-      },
-      include: [{
-        model: Company,
-        as: 'company',
-        attributes: ['id', 'name', 'edi'],
-        required: false
-      }],
-      paranoid: false
-    });
-    
-    console.log(`📄 Found ${expiredStatements.length} expired statement(s)`);
-    
-    for (const statement of expiredStatements) {
-      try {
-        const result = await hardDeleteDocument(statement, 'statement', settings);
-        deletedCount++;
-        deletionLog.push(result);
-      } catch (error) {
-        console.error(`❌ Error deleting statement ${statement.statementNumber}:`, error.message);
-        errorCount++;
       }
     }
     
@@ -144,6 +158,7 @@ async function cleanupExpiredDocuments() {
           errorCount,
           orphanedFilesDeleted: orphanedFilesResult.deleted,
           retentionPeriodDays: retentionPeriod,
+          statementRetentionPeriodDays: statementRetentionPeriod,
           deletionLog: deletionLog.slice(0, 50) // Limit log size
         },
         ipAddress: 'system',
@@ -156,7 +171,7 @@ async function cleanupExpiredDocuments() {
     // Send summary notification to Administrators and Global Administrators
     if (deletedCount > 0) {
       try {
-        await notifyAdministrators(deletedCount, deletionLog, settings, retentionPeriod);
+        await notifyAdministrators(deletedCount, deletionLog, settings, retentionPeriod, statementRetentionPeriod);
       } catch (notifyError) {
         console.error('Failed to send admin notifications:', notifyError.message);
       }
@@ -312,7 +327,7 @@ async function hardDeleteDocument(document, documentType, settings) {
  * @param {Object} settings - Settings object
  * @param {number} retentionPeriod - Retention period in days
  */
-async function notifyAdministrators(deletedCount, deletionLog, settings, retentionPeriod) {
+async function notifyAdministrators(deletedCount, deletionLog, settings, retentionPeriod, statementRetentionPeriod) {
   // Find all administrators and global administrators (User model has no deletedAt; use isActive)
   const admins = await User.findAll({
     where: {
@@ -361,6 +376,7 @@ async function notifyAdministrators(deletedCount, deletionLog, settings, retenti
             creditNoteCount,
             statementCount,
             retentionPeriod,
+            statementRetentionPeriod,
             deletions: formattedDeletions,
             hasMoreDeletions: deletionLog.length > 50,
             totalDeletions: deletionLog.length,

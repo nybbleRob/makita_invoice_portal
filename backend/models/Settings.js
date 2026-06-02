@@ -202,6 +202,21 @@ module.exports = (sequelize) => {
       defaultValue: 'upload_date',
       comment: 'Date trigger for retention countdown: upload_date (when document becomes ready) or invoice_date (invoice/tax point date)'
     },
+    statementRetentionPeriod: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null,
+      validate: {
+        isIn: [[null, 14, 30, 60, 90]]
+      },
+      comment: 'Statement-specific retention period in days (null = inherit documentRetentionPeriod, otherwise 14/30/60/90)'
+    },
+    statementRetentionDateTrigger: {
+      type: DataTypes.ENUM('upload_date', 'invoice_date'),
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Statement-specific date trigger override (null = inherit documentRetentionDateTrigger)'
+    },
     activityLogPurgeSchedule: {
       type: DataTypes.STRING,
       allowNull: true,

@@ -53,3 +53,14 @@ backend/credentials/
 
 # Cursor SpecStory local chat artifacts
 .specstory/
+
+# Cursor local agent artifacts (plans, debug logs)
+.cursor/
+
+# Statement generator prototype + sample customer PDFs - kept in working tree
+# for reference but never committed (sample files contain real customer data).
+/Statement Generator/
+
+# Python bytecode caches
+**/__pycache__/
+*.pyc

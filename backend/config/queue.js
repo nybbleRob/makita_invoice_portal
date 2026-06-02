@@ -215,6 +215,34 @@ if (connection) {
   invoiceImportQueue = createDummyQueue();
 }
 
+// Statement generator queue: per-customer jobs fanned out from a single
+// uploaded ACR11P export. Separate from invoice-import so concurrency,
+// lockDuration, and retries can be tuned for the heavier
+// generate-PDF-and-XLS-then-allocate workload.
+const defaultStatementGenerateOptions = {
+  attempts: 2,
+  backoff: { type: 'exponential', delay: 5000 },
+  removeOnComplete: {
+    age: 24 * 3600,
+    count: 1000
+  },
+  removeOnFail: {
+    age: 7 * 24 * 3600
+  }
+};
+
+let statementGenerateQueue = null;
+if (connection) {
+  statementGenerateQueue = new Queue('statement-generate', {
+    connection,
+    defaultJobOptions: defaultStatementGenerateOptions
+  });
+  console.log('✅ Statement generate queue initialized');
+} else {
+  console.log('ℹ️  Statement generate queue: Not initialized (Redis not configured)');
+  statementGenerateQueue = createDummyQueue();
+}
+
 // Email queue with rate limiting
 let emailQueue = null;
 if (connection) {
@@ -287,6 +315,9 @@ async function closeAllQueues() {
   if (invoiceImportQueue && invoiceImportQueue.close) {
     closePromises.push(invoiceImportQueue.close().catch(err => console.error('Error closing invoiceImportQueue:', err.message)));
   }
+  if (statementGenerateQueue && statementGenerateQueue.close) {
+    closePromises.push(statementGenerateQueue.close().catch(err => console.error('Error closing statementGenerateQueue:', err.message)));
+  }
   if (emailQueue && emailQueue.close) {
     closePromises.push(emailQueue.close().catch(err => console.error('Error closing emailQueue:', err.message)));
   }
@@ -319,6 +350,7 @@ module.exports = {
   fileImportQueue,
   bulkParsingQueue,
   invoiceImportQueue,
+  statementGenerateQueue,
   emailQueue,
   scheduledTasksQueue,
   nestedSetQueue,
@@ -329,6 +361,7 @@ module.exports = {
   defaultFileImportOptions,
   defaultBulkParsingOptions,
   defaultInvoiceImportOptions,
+  defaultStatementGenerateOptions,
   defaultEmailOptions,
   defaultScheduledTaskOptions,
   defaultNestedSetOptions,

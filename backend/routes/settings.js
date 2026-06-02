@@ -444,7 +444,37 @@ router.put('/', globalAdmin, async (req, res) => {
       
       settings.documentRetentionDateTrigger = req.body.documentRetentionDateTrigger;
     }
-    
+
+    // Update statement-specific retention period override
+    // null/'' means "inherit documentRetentionPeriod"; otherwise must be 14/30/60/90
+    if (req.body.statementRetentionPeriod !== undefined) {
+      const raw = req.body.statementRetentionPeriod;
+      const statementRetentionPeriod = (raw === '' || raw === null || raw === 'null')
+        ? null
+        : parseInt(raw);
+
+      if (statementRetentionPeriod !== null && ![14, 30, 60, 90].includes(statementRetentionPeriod)) {
+        return res.status(400).json({ message: 'Statement retention period must be null (inherit), 14, 30, 60, or 90 days' });
+      }
+
+      settings.statementRetentionPeriod = statementRetentionPeriod;
+    }
+
+    // Update statement-specific retention date trigger override
+    // null/'' means "inherit documentRetentionDateTrigger"
+    if (req.body.statementRetentionDateTrigger !== undefined) {
+      const raw = req.body.statementRetentionDateTrigger;
+      const statementRetentionDateTrigger = (raw === '' || raw === null || raw === 'null')
+        ? null
+        : raw;
+
+      if (statementRetentionDateTrigger !== null && !['upload_date', 'invoice_date'].includes(statementRetentionDateTrigger)) {
+        return res.status(400).json({ message: 'Statement retention date trigger must be null (inherit), "upload_date" or "invoice_date"' });
+      }
+
+      settings.statementRetentionDateTrigger = statementRetentionDateTrigger;
+    }
+
     // Update activity log purge schedule
     if (req.body.activityLogPurgeSchedule !== undefined) {
       const raw = req.body.activityLogPurgeSchedule;
@@ -1050,47 +1080,47 @@ router.post('/test-retention', auth, globalAdmin, async (req, res) => {
     const { cleanupExpiredDocuments } = require('../jobs/documentRetentionCleanup');
     const { Invoice, CreditNote, Statement, Settings } = require('../models');
     const { Op } = require('sequelize');
-    
+    const { resolveStatementRetentionSettings } = require('../utils/documentRetention');
+
     // Get retention settings
     const settings = await Settings.getSettings();
     const retentionPeriod = settings.documentRetentionPeriod;
-    
-    if (!retentionPeriod) {
+    const { retentionPeriod: statementRetentionPeriod } = resolveStatementRetentionSettings(settings);
+
+    if (!retentionPeriod && !statementRetentionPeriod) {
       return res.json({
         success: true,
-        message: 'Document retention is disabled (no retention period set)',
+        message: 'Document retention is disabled (no retention period set for invoices/credit notes or statements)',
         retentionEnabled: false,
         expiredCount: 0
       });
     }
-    
-    // Count documents that would be deleted
+
+    // Count documents that would be deleted (only the doc types whose policy is active)
     const now = new Date();
-    const expiredInvoices = await Invoice.count({
-      where: { retentionExpiryDate: { [Op.lte]: now } },
-      paranoid: false
-    });
-    const expiredCreditNotes = await CreditNote.count({
-      where: { retentionExpiryDate: { [Op.lte]: now } },
-      paranoid: false
-    });
-    const expiredStatements = await Statement.count({
-      where: { retentionExpiryDate: { [Op.lte]: now } },
-      paranoid: false
-    });
-    
+    const expiredInvoices = retentionPeriod
+      ? await Invoice.count({ where: { retentionExpiryDate: { [Op.lte]: now } }, paranoid: false })
+      : 0;
+    const expiredCreditNotes = retentionPeriod
+      ? await CreditNote.count({ where: { retentionExpiryDate: { [Op.lte]: now } }, paranoid: false })
+      : 0;
+    const expiredStatements = statementRetentionPeriod
+      ? await Statement.count({ where: { retentionExpiryDate: { [Op.lte]: now } }, paranoid: false })
+      : 0;
+
     const totalExpired = expiredInvoices + expiredCreditNotes + expiredStatements;
-    
+
     console.log(`🧹 [Test Retention] Found ${totalExpired} expired documents (${expiredInvoices} invoices, ${expiredCreditNotes} credit notes, ${expiredStatements} statements)`);
-    
+
     // Run the cleanup
     const result = await cleanupExpiredDocuments();
-    
+
     res.json({
       success: true,
       message: `Retention cleanup completed. ${result.deleted} documents deleted.`,
       retentionEnabled: true,
       retentionPeriodDays: retentionPeriod,
+      statementRetentionPeriodDays: statementRetentionPeriod,
       expiredBefore: {
         invoices: expiredInvoices,
         creditNotes: expiredCreditNotes,
@@ -1110,57 +1140,60 @@ router.get('/retention-status', auth, globalAdmin, async (req, res) => {
   try {
     const { Invoice, CreditNote, Statement, Settings } = require('../models');
     const { Op } = require('sequelize');
-    
+    const { resolveStatementRetentionSettings } = require('../utils/documentRetention');
+
     const settings = await Settings.getSettings();
     const retentionPeriod = settings.documentRetentionPeriod;
-    
-    if (!retentionPeriod) {
+    const { retentionPeriod: statementRetentionPeriod, dateTrigger: statementDateTrigger } =
+      resolveStatementRetentionSettings(settings);
+
+    if (!retentionPeriod && !statementRetentionPeriod) {
       return res.json({
         retentionEnabled: false,
-        message: 'Document retention is disabled'
+        message: 'Document retention is disabled (no retention period set for invoices/credit notes or statements)'
       });
     }
-    
+
     const now = new Date();
-    
-    // Count expired documents
-    const expiredInvoices = await Invoice.count({
-      where: { retentionExpiryDate: { [Op.lte]: now } },
-      paranoid: false
-    });
-    const expiredCreditNotes = await CreditNote.count({
-      where: { retentionExpiryDate: { [Op.lte]: now } },
-      paranoid: false
-    });
-    const expiredStatements = await Statement.count({
-      where: { retentionExpiryDate: { [Op.lte]: now } },
-      paranoid: false
-    });
-    
+
+    // Count expired documents (only the doc types whose policy is active)
+    const expiredInvoices = retentionPeriod
+      ? await Invoice.count({ where: { retentionExpiryDate: { [Op.lte]: now } }, paranoid: false })
+      : 0;
+    const expiredCreditNotes = retentionPeriod
+      ? await CreditNote.count({ where: { retentionExpiryDate: { [Op.lte]: now } }, paranoid: false })
+      : 0;
+    const expiredStatements = statementRetentionPeriod
+      ? await Statement.count({ where: { retentionExpiryDate: { [Op.lte]: now } }, paranoid: false })
+      : 0;
+
     // Count documents expiring soon (next 7 days)
     const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const expiringInvoices = await Invoice.count({
-      where: { 
-        retentionExpiryDate: { [Op.gt]: now, [Op.lte]: nextWeek }
-      },
-      paranoid: false
-    });
-    const expiringCreditNotes = await CreditNote.count({
-      where: { 
-        retentionExpiryDate: { [Op.gt]: now, [Op.lte]: nextWeek }
-      },
-      paranoid: false
-    });
-    const expiringStatements = await Statement.count({
-      where: { 
-        retentionExpiryDate: { [Op.gt]: now, [Op.lte]: nextWeek }
-      },
-      paranoid: false
-    });
-    
+    const expiringInvoices = retentionPeriod
+      ? await Invoice.count({
+          where: { retentionExpiryDate: { [Op.gt]: now, [Op.lte]: nextWeek } },
+          paranoid: false
+        })
+      : 0;
+    const expiringCreditNotes = retentionPeriod
+      ? await CreditNote.count({
+          where: { retentionExpiryDate: { [Op.gt]: now, [Op.lte]: nextWeek } },
+          paranoid: false
+        })
+      : 0;
+    const expiringStatements = statementRetentionPeriod
+      ? await Statement.count({
+          where: { retentionExpiryDate: { [Op.gt]: now, [Op.lte]: nextWeek } },
+          paranoid: false
+        })
+      : 0;
+
     res.json({
       retentionEnabled: true,
       retentionPeriodDays: retentionPeriod,
+      statementRetentionPeriodDays: statementRetentionPeriod,
+      statementRetentionDateTrigger: statementDateTrigger,
+      statementOverrideActive: settings.statementRetentionPeriod !== null && settings.statementRetentionPeriod !== undefined,
       expired: {
         invoices: expiredInvoices,
         creditNotes: expiredCreditNotes,
