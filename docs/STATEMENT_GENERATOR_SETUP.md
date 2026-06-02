@@ -10,25 +10,54 @@ upload flow.
 
 ---
 
-## TL;DR install (Debian / Ubuntu)
+## TL;DR install (Debian 12+ / Ubuntu 23.04+)
+
+Modern Debian/Ubuntu ship Python under [PEP 668](https://peps.python.org/pep-0668/),
+which blocks `sudo pip3 install` against the system interpreter (you'll see
+`error: externally-managed-environment`). The right answer is a dedicated venv
+that the worker is pointed at via `STATEMENT_PYTHON_BIN`.
 
 ```bash
 sudo apt update
 sudo apt install -y \
   libreoffice \
-  python3 python3-pip \
+  python3 python3-venv python3-full \
   poppler-utils \
   fonts-liberation fontconfig
 
-# unoserver (persistent LibreOffice listener) + openpyxl
-sudo pip3 install --upgrade unoserver openpyxl
+# Dedicated venv for the statement generator's Python deps. Path is arbitrary -
+# adjust to match wherever you keep app-local virtualenvs.
+sudo mkdir -p /opt/makita-stmt-venv
+sudo python3 -m venv /opt/makita-stmt-venv
+sudo /opt/makita-stmt-venv/bin/pip install --upgrade pip
+sudo /opt/makita-stmt-venv/bin/pip install --upgrade unoserver openpyxl pypdf
 
-# Optional: pypdf as a pdfunite fallback for merge
-sudo pip3 install --upgrade pypdf
+# Make the unoserver/unoconvert binaries discoverable on PATH.
+sudo ln -sf /opt/makita-stmt-venv/bin/unoserver  /usr/local/bin/unoserver
+sudo ln -sf /opt/makita-stmt-venv/bin/unoconvert /usr/local/bin/unoconvert
+```
+
+Then point the worker at the venv's Python interpreter by adding to
+`backend/.env`:
+
+```bash
+STATEMENT_PYTHON_BIN=/opt/makita-stmt-venv/bin/python3
 ```
 
 Then install Arial / Arial Black / Calibri (see "Fonts" below) and start one
 or more unoservers (see "Persistent LibreOffice listener" below).
+
+### Older systems (Debian 11, Ubuntu 22.04 and earlier)
+
+PEP 668 isn't enforced, so the original `sudo pip3 install` approach still
+works:
+
+```bash
+sudo apt install -y libreoffice python3 python3-pip poppler-utils \
+  fonts-liberation fontconfig
+sudo pip3 install --upgrade unoserver openpyxl pypdf
+# STATEMENT_PYTHON_BIN can stay unset; the default `python3` will find them.
+```
 
 ---
 
