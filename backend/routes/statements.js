@@ -569,17 +569,35 @@ router.post('/import',
 /**
  * Generate statements from an uploaded ACR11P export.
  *
- * Accepts ONE tab-delimited .TXT file containing every customer's open
- * invoices. Parses inline so we know how many customers to fan out to, then
- * registers one batch and enqueues one `statement-generate` job per customer.
- * Each job produces PDF + XLSX, matches the customer to a CORP company, calls
- * `findOrCreateStatement`, and the existing batch notification path picks up
- * from there.
+ * ADMIN SANDBOX ONLY. The production path for .TXT exports is the FTP / local-
+ * folder importer; this HTTP endpoint exists so admins can drop an export onto
+ * the system from the Settings > Admin Tools page and verify parse + generate
+ * end-to-end WITHOUT sending any customer notifications.
+ *
+ * Two hard guarantees enforced here:
+ *  1. Requires global_admin role. This matches the Settings page gate exactly
+ *     so the API surface and UI surface are identical - no token with merely
+ *     STATEMENTS_IMPORT permission, and not even the `administrator` role,
+ *     can hit this route. The only other thing that writes statements is the
+ *     FTP importer (production path), which bypasses HTTP entirely.
+ *  2. `silent` is forced to `true` server-side regardless of what the client
+ *     sends. The per-customer worker will generate files and update Statement
+ *     rows but the notification gate at the end short-circuits. No emails.
  *
  * Declared before /:id so 'generate' isn't matched as a statement id.
  */
+const requireGlobalAdmin = (req, res, next) => {
+  const role = req.user && req.user.role;
+  if (role === 'global_admin') return next();
+  return res.status(403).json({
+    success: false,
+    message: 'Only global admins can run the ACR11P statement generator sandbox.',
+    error: 'Forbidden'
+  });
+};
+
 router.post('/generate',
-  requirePermission('STATEMENTS_IMPORT'),
+  requireGlobalAdmin,
   exportUpload.single('file'),
   async (req, res) => {
     let tempFilePath = null;
@@ -607,23 +625,19 @@ router.post('/generate',
 
       // Operator escape: when true, the per-customer worker bypasses the
       // content-hash short-circuit AND the manual-upload-is-authoritative
-      // suppression in findOrCreateStatement. Use sparingly; the default
-      // (false) is the right answer for nightly regenerations.
+      // suppression in findOrCreateStatement. Useful when re-testing the
+      // sandbox against the same export multiple times - flipping this on
+      // forces a full regenerate so you can inspect fresh PDF/XLSX output.
       const forceOverwrite = req.body.forceOverwrite === 'true'
         || req.body.forceOverwrite === true
         || req.body.forceOverwrite === '1';
 
-      // Decouples "regenerate" from "notify". When true, the worker will
-      // regenerate and replace files as normal but NEVER send a customer
-      // notification, even for new statements or genuine corrections.
-      // Designed for the cutover normalisation case: pair with
-      // forceOverwrite=true to migrate every customer onto the new renderer
-      // without spamming 379 inboxes about a render-engine swap that didn't
-      // change a penny of their balance. Independent of forceOverwrite; can
-      // also be used on its own for "review-only" generation cycles.
-      const silent = req.body.silent === 'true'
-        || req.body.silent === true
-        || req.body.silent === '1';
+      // ENFORCED SANDBOX: this route NEVER notifies customers. The flag is
+      // hardcoded true regardless of what the client sends - any incoming
+      // value is logged for audit but not honoured. Customer notifications
+      // for .TXT exports only fire via the FTP importer (production path).
+      const clientRequestedSilent = req.body.silent;
+      const silent = true;
 
       // Best-effort dedupe against File records, mirroring the /import flow.
       // We don't refuse on duplicate - just surface it - because re-running
@@ -675,11 +689,8 @@ router.post('/generate',
         userEmail: req.user.email,
         userRole: req.user.role,
         action: (() => {
-          const flags = [];
-          if (forceOverwrite) flags.push('forceOverwrite');
-          if (silent) flags.push('silent');
-          const suffix = flags.length ? ` (${flags.join(', ')})` : '';
-          return `Uploaded ACR11P export for generation${suffix} (${customers.length} customers)`;
+          const suffix = forceOverwrite ? ' (forceOverwrite)' : '';
+          return `Admin sandbox: generated statements from ACR11P export${suffix} (${customers.length} customers, no notifications)`;
         })(),
         details: {
           importId,
@@ -689,11 +700,12 @@ router.post('/generate',
           statementDate: statementDateIso,
           malformedLines: parsed.validation.malformedLines.length,
           unknownTermsCount: parsed.validation.unknownTerms.length,
-          uploadMethod: 'manual',
+          uploadMethod: 'admin-sandbox',
           documentType: 'statement',
-          source: 'manual-upload-statement-generate',
+          source: 'admin-sandbox-statement-generate',
           forceOverwrite,
-          silent
+          silent,
+          clientRequestedSilent
         },
         companyId: null,
         companyName: null,
@@ -712,7 +724,7 @@ router.post('/generate',
         await registerBatch(importId, customers.length, {
           userId,
           userEmail: req.user.email,
-          source: 'manual-upload-statement-generate'
+          source: 'admin-sandbox-statement-generate'
         });
       } catch (batchError) {
         console.warn('Failed to register batch:', batchError.message);
@@ -737,7 +749,7 @@ router.post('/generate',
         await statementGenerateQueue.add('statement-generate', {
           importId,
           userId,
-          source: 'manual-upload-statement-generate',
+          source: 'admin-sandbox-statement-generate',
           enqueuedAt,
           exportFileHash: fileHash,
           exportFileName: req.file.originalname,
@@ -774,12 +786,10 @@ router.post('/generate',
         duplicateFileId,
         forceOverwrite,
         silent,
+        sandbox: true,
         message: (() => {
-          const flags = [];
-          if (forceOverwrite) flags.push('forceOverwrite');
-          if (silent) flags.push('silent');
-          const suffix = flags.length ? ` (${flags.join(', ')})` : '';
-          return `Statement generation queued for ${customers.length} customer(s)${suffix}.`;
+          const suffix = forceOverwrite ? ' [forceOverwrite]' : '';
+          return `Sandbox generation queued for ${customers.length} customer(s)${suffix}. No customer emails will be sent.`;
         })()
       });
     } catch (error) {

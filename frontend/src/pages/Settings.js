@@ -15,7 +15,6 @@ const Settings = () => {
   const [testingConnection, setTestingConnection] = useState(false);
   const [testingImport, setTestingImport] = useState(false);
   const [queueStatus, setQueueStatus] = useState(null);
-  const [testingDocumentAI, setTestingDocumentAI] = useState(false);
   const [testingEmail, setTestingEmail] = useState(false);
   const [emailTemplates, setEmailTemplates] = useState([]);
   const [selectedEmailTemplate, setSelectedEmailTemplate] = useState('welcome');
@@ -25,8 +24,6 @@ const Settings = () => {
   const [showPurgeDocumentsModal, setShowPurgeDocumentsModal] = useState(false);
   const [showPurgeCustomersModal, setShowPurgeCustomersModal] = useState(false);
   const [showClearImportHistoryModal, setShowClearImportHistoryModal] = useState(false);
-  const [testingRetention, setTestingRetention] = useState(false);
-  const [retentionStatus, setRetentionStatus] = useState(null);
   const [purgeReason, setPurgeReason] = useState('');
   const [clearHistoryReason, setClearHistoryReason] = useState('');
   const [purgingDocuments, setPurgingDocuments] = useState(false);
@@ -36,13 +33,17 @@ const Settings = () => {
   const [importHistoryCount, setImportHistoryCount] = useState(0);
   const [updatingGlobalEDI, setUpdatingGlobalEDI] = useState(false);
   const [updatingGlobalEmail, setUpdatingGlobalEmail] = useState(false);
-  
-  // Email Stress Test state
-  const [stressTestCount, setStressTestCount] = useState(10);
-  const [stressTestAttachment, setStressTestAttachment] = useState(true);
-  const [stressTestDocType, setStressTestDocType] = useState('invoice');
-  const [runningStressTest, setRunningStressTest] = useState(false);
-  const [stressTestResult, setStressTestResult] = useState(null);
+
+  // Statement Generator Sandbox state. This is the admin-only test harness for
+  // the ACR11P (.TXT) generate path. The backend enforces silent=true, so no
+  // customer emails will ever fire from here - it's purely "did the file parse,
+  // did the workers generate PDFs/XLSXs, and where did each customer land".
+  const [sandboxFile, setSandboxFile] = useState(null);
+  const [sandboxForceOverwrite, setSandboxForceOverwrite] = useState(false);
+  const [sandboxRunning, setSandboxRunning] = useState(false);
+  const [sandboxStatus, setSandboxStatus] = useState(null);
+  const [sandboxResults, setSandboxResults] = useState(null);
+  const [sandboxError, setSandboxError] = useState(null);
   
   // Import Settings state
   const [importSettings, setImportSettings] = useState(null);
@@ -53,7 +54,6 @@ const Settings = () => {
   const [savingImportSettings, setSavingImportSettings] = useState(false);
   const [failedCount, setFailedCount] = useState(0);
   const [retryingFailed, setRetryingFailed] = useState(false);
-  const [resettingStats, setResettingStats] = useState(false);
   
   // Companies for test mode default company dropdown
   const [companies, setCompanies] = useState([]);
@@ -220,10 +220,10 @@ const Settings = () => {
     }
   }, [activeSection]);
 
-  // Fetch retention status and import history count when Admin Tools section is active
+  // Fetch import history count when Admin Tools section is active (used by
+  // the Clear Import History card).
   useEffect(() => {
     if (activeSection === 'admin-tools') {
-      fetchRetentionStatus();
       fetchImportHistoryCount();
     }
   }, [activeSection]);
@@ -284,25 +284,6 @@ const Settings = () => {
       toast.error('Error retrying failed imports: ' + (error.response?.data?.message || error.message));
     } finally {
       setRetryingFailed(false);
-    }
-  };
-
-  // Reset import statistics
-  const handleResetStatistics = async () => {
-    if (!window.confirm('Are you sure you want to reset all import statistics? This cannot be undone.')) {
-      return;
-    }
-    
-    setResettingStats(true);
-    try {
-      await api.post('/api/import-settings/reset-statistics');
-      toast.success('Import statistics have been reset');
-      fetchImportSettings();
-    } catch (error) {
-      console.error('Error resetting statistics:', error);
-      toast.error('Error resetting statistics: ' + (error.response?.data?.message || error.message));
-    } finally {
-      setResettingStats(false);
     }
   };
 
@@ -557,63 +538,100 @@ const Settings = () => {
     }
   };
 
-  // Fetch retention status
-  const fetchRetentionStatus = async () => {
-    try {
-      const response = await api.get('/api/settings/retention-status');
-      setRetentionStatus(response.data);
-    } catch (error) {
-      console.error('Error fetching retention status:', error);
-    }
-  };
-
-  // Test retention cleanup
-  const handleTestRetention = async () => {
-    if (!window.confirm('This will run the retention cleanup job and DELETE any expired documents. Continue?')) {
+  // Statement Generator Sandbox - admin-only, no-email .TXT test harness.
+  // Backend enforces silent=true on /api/statements/generate, so even if this
+  // handler somehow sent silent=false the server would override it. We still
+  // pass silent=true explicitly as a defence-in-depth signal.
+  const handleSandboxGenerate = async () => {
+    if (!sandboxFile) {
+      toast.error('Select an ACR11P .TXT (or .csv) file first.');
       return;
     }
+    setSandboxRunning(true);
+    setSandboxResults(null);
+    setSandboxError(null);
+    setSandboxStatus({ phase: 'uploading', processedFiles: 0, totalFiles: 1 });
 
-    setTestingRetention(true);
     try {
-      const response = await api.post('/api/settings/test-retention');
-      
-      if (response.data.result?.deleted > 0) {
-        toast.success(`Retention cleanup completed. ${response.data.result.deleted} documents deleted.`);
-      } else if (!response.data.retentionEnabled) {
-        toast.info('Document retention is disabled. Set a retention period in settings first.');
-      } else {
-        toast.info('No expired documents found to delete.');
-      }
-      
-      fetchRetentionStatus();
-    } catch (error) {
-      console.error('Error testing retention:', error);
-      toast.error('Error testing retention: ' + (error.response?.data?.message || error.message));
-    } finally {
-      setTestingRetention(false);
+      const formData = new FormData();
+      formData.append('file', sandboxFile);
+      formData.append('silent', 'true');
+      if (sandboxForceOverwrite) formData.append('forceOverwrite', 'true');
+
+      const response = await api.post('/api/statements/generate', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      const { importId, totalCustomers, validation, statementDate, isDuplicate } = response.data;
+      setSandboxStatus({
+        phase: 'processing',
+        importId,
+        processedFiles: 0,
+        totalFiles: totalCustomers,
+        meta: {
+          statementDate,
+          isDuplicate,
+          parsedLines: validation?.parsedLines || 0,
+          malformedLines: validation?.malformedLines || 0,
+          unknownTerms: validation?.unknownTerms || 0
+        }
+      });
+
+      const poll = async () => {
+        try {
+          const statusRes = await api.get(`/api/statements/import/${importId}`);
+          const importSession = statusRes.data.import;
+          if (!importSession) return;
+
+          setSandboxStatus(prev => ({
+            ...(prev || {}),
+            phase: importSession.status === 'completed' ? 'fetching-results' : 'processing',
+            processedFiles: importSession.processedFiles || 0,
+            totalFiles: importSession.totalFiles || prev?.totalFiles || 0,
+            status: importSession.status
+          }));
+
+          if (importSession.status === 'completed') {
+            try {
+              const resultsRes = await api.get(`/api/statements/import/${importId}/results`);
+              setSandboxResults(resultsRes.data.import);
+              setSandboxStatus(prev => ({ ...(prev || {}), phase: 'done' }));
+            } catch (resultsErr) {
+              setSandboxError(`Could not fetch results: ${resultsErr.response?.data?.message || resultsErr.message}`);
+              setSandboxStatus(prev => ({ ...(prev || {}), phase: 'done' }));
+            }
+            setSandboxRunning(false);
+            return;
+          }
+          if (importSession.status === 'failed' || importSession.cancelled) {
+            setSandboxError('Import session reported failure / cancellation.');
+            setSandboxStatus(prev => ({ ...(prev || {}), phase: 'done', status: importSession.status }));
+            setSandboxRunning(false);
+            return;
+          }
+          setTimeout(poll, 2000);
+        } catch (pollErr) {
+          setSandboxError(`Status poll failed: ${pollErr.response?.data?.message || pollErr.message}`);
+          setSandboxRunning(false);
+        }
+      };
+      setTimeout(poll, 1500);
+    } catch (err) {
+      const message = err.response?.data?.message || err.message;
+      setSandboxError(message);
+      setSandboxStatus(null);
+      setSandboxRunning(false);
+      toast.error(`Sandbox generation failed: ${message}`, 8000);
     }
   };
 
-  // Email stress test
-  const handleEmailStressTest = async () => {
-    setRunningStressTest(true);
-    setStressTestResult(null);
-    
-    try {
-      const response = await api.post('/api/settings/email-stress-test', {
-        count: stressTestCount,
-        includeAttachment: stressTestAttachment,
-        documentType: stressTestDocType
-      });
-      
-      setStressTestResult(response.data);
-      toast.success(`Queued ${response.data.emailCount} test emails to ${response.data.recipientEmail}`);
-    } catch (error) {
-      console.error('Error running email stress test:', error);
-      toast.error('Error running stress test: ' + (error.response?.data?.message || error.message));
-    } finally {
-      setRunningStressTest(false);
-    }
+  const resetSandbox = () => {
+    setSandboxFile(null);
+    setSandboxStatus(null);
+    setSandboxResults(null);
+    setSandboxError(null);
+    setSandboxForceOverwrite(false);
+    const el = document.getElementById('statement-sandbox-file-input');
+    if (el) el.value = '';
   };
 
   const handleGlobalEDIChange = async (enabled) => {
@@ -778,38 +796,6 @@ const Settings = () => {
     }
   };
 
-  const handleTestDocumentAI = async () => {
-    setTestingDocumentAI(true);
-    try {
-      const response = await api.post('/api/parsing/test-documentai');
-      if (response.data.success) {
-        toast.success(response.data.message, 5000);
-        if (response.data.details) {
-          console.log('Document AI Details:', response.data.details);
-        }
-      } else {
-        const errorMessage = response.data.message;
-        const suggestion = response.data.suggestion;
-        let fullMessage = errorMessage;
-        if (suggestion) {
-          fullMessage += ` ${suggestion}`;
-        }
-        toast.error(fullMessage, 8000);
-      }
-    } catch (error) {
-      console.error('Error testing Document AI:', error);
-      const errorMessage = error.response?.data?.message || error.message;
-      const suggestion = error.response?.data?.suggestion;
-      let fullMessage = 'Error testing Document AI: ' + errorMessage;
-      if (suggestion) {
-        fullMessage += ` ${suggestion}`;
-      }
-      toast.error(fullMessage, 8000);
-    } finally {
-      setTestingDocumentAI(false);
-    }
-  };
-
   if (!user || user.role !== 'global_admin') {
     return (
       <div className="card">
@@ -902,20 +888,6 @@ const Settings = () => {
                     >
                       Import Settings
                     </button>
-                    <button
-                      className={`list-group-item list-group-item-action d-flex align-items-center ${activeSection === 'parsing' ? 'active' : ''}`}
-                      onClick={() => setActiveSection('parsing')}
-                    >
-                      Parsing Provider
-                    </button>
-                    {user?.role === 'global_admin' && (
-                      <button
-                        className={`list-group-item list-group-item-action d-flex align-items-center ${activeSection === 'modules' ? 'active' : ''}`}
-                        onClick={() => setActiveSection('modules')}
-                      >
-                        Modules
-                      </button>
-                    )}
                     {user?.role === 'global_admin' && (
                       <button
                         className={`list-group-item list-group-item-action d-flex align-items-center ${activeSection === 'admin-tools' ? 'active' : ''}`}
@@ -1466,103 +1438,6 @@ const Settings = () => {
                             </div>
                           </div>
 
-                          {/* Import Statistics */}
-                          <div className="card mb-4">
-                            <div className="card-header d-flex justify-content-between align-items-center">
-                              <h3 className="card-title mb-0">Import Statistics</h3>
-                              <button
-                                type="button"
-                                className="btn btn-outline-secondary btn-sm"
-                                onClick={handleResetStatistics}
-                                disabled={resettingStats}
-                              >
-                                {resettingStats ? 'Resetting...' : 'Reset Statistics'}
-                              </button>
-                            </div>
-                            <div className="card-body">
-                              <div className="row g-4">
-                                <div className="col-sm-6 col-lg-3">
-                                  <div className="card card-sm">
-                                    <div className="card-body">
-                                      <div className="d-flex align-items-center">
-                                        <div>
-                                          <div className="subheader">Total Scans</div>
-                                          <div className="h3 mb-0">{importSettings?.stats?.totalScans || 0}</div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="col-sm-6 col-lg-3">
-                                  <div className="card card-sm">
-                                    <div className="card-body">
-                                      <div className="d-flex align-items-center">
-                                        <div>
-                                          <div className="subheader">Files Processed</div>
-                                          <div className="h3 mb-0 text-success">{importSettings?.stats?.totalSuccessful || 0}</div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="col-sm-6 col-lg-3">
-                                  <div className="card card-sm">
-                                    <div className="card-body">
-                                      <div className="d-flex align-items-center">
-                                        <div>
-                                          <div className="subheader">Failed</div>
-                                          <div className="h3 mb-0 text-danger">{importSettings?.stats?.totalFailed || 0}</div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="col-sm-6 col-lg-3">
-                                  <div className="card card-sm">
-                                    <div className="card-body">
-                                      <div className="d-flex align-items-center">
-                                        <div>
-                                          <div className="subheader">Last Run</div>
-                                          <div className="h5 mb-0">
-                                            {importSettings?.stats?.lastRunAt 
-                                              ? new Date(importSettings.stats.lastRunAt).toLocaleString()
-                                              : 'Never'}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                              
-                              {importSettings?.lastRun && (
-                                <div className="mt-3 p-3 bg-light rounded">
-                                  <h4 className="mb-2">Last Run Details</h4>
-                                  <div className="row">
-                                    <div className="col-md-3">
-                                      <small className="text-muted">Duration:</small><br/>
-                                      <strong>{importSettings.lastRun.duration ? `${(importSettings.lastRun.duration / 1000).toFixed(1)}s` : 'N/A'}</strong>
-                                    </div>
-                                    <div className="col-md-3">
-                                      <small className="text-muted">Files Scanned:</small><br/>
-                                      <strong>{importSettings.lastRun.results?.scanned || 0}</strong>
-                                    </div>
-                                    <div className="col-md-3">
-                                      <small className="text-muted">Files Queued:</small><br/>
-                                      <strong className="text-success">{importSettings.lastRun.results?.queued || 0}</strong>
-                                    </div>
-                                    <div className="col-md-3">
-                                      <small className="text-muted">Errors:</small><br/>
-                                      <strong className={importSettings.lastRun.results?.errors?.length ? 'text-danger' : ''}>
-                                        {importSettings.lastRun.results?.errors?.length || 0}
-                                      </strong>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
                           {/* Terminal-Style Log Viewer */}
                           <div className="card">
                             <div className="card-header d-flex justify-content-between align-items-center">
@@ -1663,341 +1538,6 @@ const Settings = () => {
                     </>
                   )}
 
-                  {activeSection === 'parsing' && (
-                    <>
-                      <h2 className="mb-4">Parsing Provider</h2>
-                      <p className="card-subtitle mb-4">Configure and test your PDF parsing providers. You can use Google Document AI or local coordinate-based parsing.</p>
-                      
-                      {/* Main Tabs: Configuration and Testing */}
-                      <div className="card mb-4">
-                        <div className="card-header">
-                          <h3 className="card-title mb-0">Configuration</h3>
-                        </div>
-                        <div className="card-body">
-                              <div className="mb-3">
-                                <label className="form-check form-switch">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                    checked={settings.parsingProvider?.enabled || false}
-                                    onChange={(e) => handleNestedChange('parsingProvider', 'enabled', e.target.checked)}
-                                  />
-                                  <span className="form-check-label">Enable Parsing Provider</span>
-                                </label>
-                                <small className="form-hint d-block mt-2">
-                                  When enabled, the system will use cloud-based parsing providers. When disabled, only local parsing is available.
-                                </small>
-                              </div>
-
-                              {/* Document AI Configuration */}
-                              <div className="card mt-3">
-                                <div className="card-header">
-                                  <h3 className="card-title mb-0">Google Document AI</h3>
-                                </div>
-                                <div className="card-body">
-                              <div className="alert alert-info mb-3 d-flex flex-column">
-                                <strong>Credentials Options:</strong> You can provide credentials in three ways (in order of priority):
-                                <ol className="mb-0 mt-2">
-                                  <li>Upload or paste JSON credentials below (stored in database)</li>
-                                  <li>Set <code>GOOGLE_APPLICATION_CREDENTIALS</code> environment variable with file path</li>
-                                  <li>Set <code>GOOGLE_APPLICATION_CREDENTIALS_JSON</code> environment variable with JSON content</li>
-                                </ol>
-                                <small className="d-block mt-2">For production, environment variables are recommended for better security.</small>
-                              </div>
-                              <div className="mb-3">
-                                <label className="form-check form-switch">
-                                  <input
-                                    className="form-check-input"
-                                    type="checkbox"
-                                    checked={settings.parsingProvider?.documentai?.enabled || false}
-                                    onChange={(e) => handleNestedChange('parsingProvider', 'documentai', { 
-                                      ...settings.parsingProvider?.documentai, 
-                                      enabled: e.target.checked 
-                                    })}
-                                    disabled={!settings.parsingProvider?.enabled}
-                                  />
-                                  <span className="form-check-label">Enable Google Document AI</span>
-                                </label>
-                                <small className="form-hint d-block">Fallback parsing method. More accurate but requires processor setup.</small>
-                              </div>
-
-                              <div className="row g-3">
-                                <div className="col-md-6">
-                                  <label className="form-label">Project ID</label>
-                                  <input
-                                    type="text"
-                                    className="form-control"
-                                    value={settings.parsingProvider?.documentai?.projectId || ''}
-                                    onChange={(e) => handleNestedChange('parsingProvider', 'documentai', { 
-                                      ...settings.parsingProvider?.documentai, 
-                                      projectId: e.target.value 
-                                    })}
-                                    placeholder="your-project-id"
-                                    disabled={!settings.parsingProvider?.enabled}
-                                  />
-                                  <small className="form-hint">Your Google Cloud Project ID</small>
-                                </div>
-                                <div className="col-md-6">
-                                  <label className="form-label">Location</label>
-                                  <input
-                                    type="text"
-                                    className="form-control"
-                                    value={settings.parsingProvider?.documentai?.location || 'us'}
-                                    onChange={(e) => handleNestedChange('parsingProvider', 'documentai', { 
-                                      ...settings.parsingProvider?.documentai, 
-                                      location: e.target.value 
-                                    })}
-                                    placeholder="us"
-                                    disabled={!settings.parsingProvider?.enabled}
-                                  />
-                                  <small className="form-hint">Google Cloud region</small>
-                                </div>
-                              </div>
-
-                              <div className="row g-3 mt-0">
-                                <div className="col-md-6">
-                                  <label className="form-label">Processor ID</label>
-                                  <input
-                                    type="text"
-                                    className="form-control"
-                                    value={settings.parsingProvider?.documentai?.processorId || ''}
-                                    onChange={(e) => handleNestedChange('parsingProvider', 'documentai', { 
-                                      ...settings.parsingProvider?.documentai, 
-                                      processorId: e.target.value 
-                                    })}
-                                    placeholder="abc123def456"
-                                    disabled={!settings.parsingProvider?.enabled}
-                                  />
-                                  <small className="form-hint">Document AI Processor ID (create in Google Cloud Console)</small>
-                                </div>
-                              </div>
-
-                              <div className="row g-3 mt-2">
-                                <div className="col-md-12">
-                                  <label className="form-label">Service Account Credentials</label>
-                                  <div className="mb-2">
-                                    <div className="btn-group" role="group">
-                                      <button
-                                        type="button"
-                                        className="btn btn-outline-primary btn-sm"
-                                        onClick={() => {
-                                          const input = document.createElement('input');
-                                          input.type = 'file';
-                                          input.accept = '.json';
-                                          input.onchange = (e) => {
-                                            const file = e.target.files[0];
-                                            if (file) {
-                                              const reader = new FileReader();
-                                              reader.onload = (event) => {
-                                                try {
-                                                  const json = event.target.result;
-                                                  JSON.parse(json);
-                                                  handleNestedChange('parsingProvider', 'documentai', {
-                                                    ...settings.parsingProvider?.documentai,
-                                                    credentialsJson: json
-                                                  });
-                                                  toast.success('Credentials file loaded successfully');
-                                                } catch (error) {
-                                                  toast.error('Invalid JSON file: ' + error.message);
-                                                }
-                                              };
-                                              reader.readAsText(file);
-                                            }
-                                          };
-                                          input.click();
-                                        }}
-                                        disabled={!settings.parsingProvider?.enabled}
-                                      >
-                                        Upload JSON File
-                                      </button>
-                                    </div>
-                                  </div>
-                                  <textarea
-                                    className="form-control font-monospace"
-                                    rows="8"
-                                    value={settings.parsingProvider?.documentai?.credentialsJson === '***' 
-                                      ? '' 
-                                      : (settings.parsingProvider?.documentai?.credentialsJson || '')}
-                                    onChange={(e) => {
-                                      const value = e.target.value;
-                                      if (value !== '***') {
-                                        handleNestedChange('parsingProvider', 'documentai', {
-                                          ...settings.parsingProvider?.documentai,
-                                          credentialsJson: value
-                                        });
-                                      }
-                                    }}
-                                    placeholder='Paste your service account JSON here, or upload a file above...'
-                                    disabled={!settings.parsingProvider?.enabled}
-                                    style={{ fontSize: '0.875rem' }}
-                                  />
-                                  <small className="form-hint d-block mt-1">
-                                    Paste your Google Cloud service account JSON credentials here, or upload the file. 
-                                    This will be stored securely in the database.
-                                    <br />
-                                    <strong>Note:</strong> If not set, will use the same credentials as Vision API.
-                                  </small>
-                                </div>
-                              </div>
-                              
-                              <div className="row g-3 mt-2">
-                                <div className="col-md-12">
-                                  <label className="form-label">Service Account JSON Path (Alternative)</label>
-                                  <input
-                                    type="text"
-                                    className="form-control"
-                                    value={settings.parsingProvider?.documentai?.credentialsPath || ''}
-                                    onChange={(e) => handleNestedChange('parsingProvider', 'documentai', { 
-                                      ...settings.parsingProvider?.documentai, 
-                                      credentialsPath: e.target.value 
-                                    })}
-                                    placeholder="/path/to/service-account.json"
-                                    disabled={!settings.parsingProvider?.enabled}
-                                  />
-                                  <small className="form-hint">Alternative: Path to service account JSON file on the server. Takes precedence over JSON above if both are set.</small>
-                                </div>
-                              </div>
-
-                              <div className="row g-3 mt-3">
-                                <div className="col-md-12">
-                                  <button
-                                    className="btn btn-outline-primary"
-                                    onClick={handleTestDocumentAI}
-                                    disabled={!settings.parsingProvider?.enabled || !settings.parsingProvider?.documentai?.enabled || testingDocumentAI}
-                                  >
-                                    {testingDocumentAI ? (
-                                      <>
-                                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                                        Testing...
-                                      </>
-                                    ) : (
-                                      'Test Document AI Connection'
-                                    )}
-                                  </button>
-                                </div>
-                              </div>
-                                </div>
-                              </div>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {activeSection === 'modules' && user?.role === 'global_admin' && (
-                    <>
-                      <h2 className="mb-4">System Modules</h2>
-                      <p className="card-subtitle mb-4">
-                        Enable or disable system-wide features. Only Global Administrators can modify module settings.
-                        When a module is disabled, all related features are hidden from all screens and API endpoints are disabled.
-                      </p>
-                      
-                      <div className="alert alert-info">
-                        <i className="fas fa-info-circle me-2"></i>
-                        <strong>Note:</strong> Module settings are system-wide and affect all users. Changes take effect immediately after saving.
-                      </div>
-                      
-                      <div className="card">
-                        <div className="card-header">
-                          <h3 className="card-title">Available Modules</h3>
-                        </div>
-                        <div className="card-body">
-                          <div className="list-group list-group-flush">
-                            {/* Document Queries Module */}
-                            <div className="list-group-item">
-                              <div className="d-flex justify-content-between align-items-center">
-                                <div className="flex-grow-1">
-                                  <h4 className="mb-1">Document Queries</h4>
-                                  <p className="text-muted mb-0 small">
-                                    Allows users to send queries about documents. When enabled, users can communicate with staff about invoices, credit notes, and statements.
-                                    When disabled, all query features are hidden and API endpoints are disabled.
-                                  </p>
-                                </div>
-                                <div className="ms-3">
-                                  <div className="form-check form-switch">
-                                    <input
-                                      className="form-check-input"
-                                      type="checkbox"
-                                      id="module-queriesEnabled"
-                                      checked={settings.queriesEnabled !== false}
-                                      onChange={(e) => handleInputChange('queriesEnabled', e.target.checked)}
-                                    />
-                                    <label className="form-check-label" htmlFor="module-queriesEnabled">
-                                      {settings.queriesEnabled !== false ? 'Enabled' : 'Disabled'}
-                                    </label>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Suppliers Module */}
-                            <div className="list-group-item">
-                              <div className="d-flex justify-content-between align-items-center">
-                                <div className="flex-grow-1">
-                                  <h4 className="mb-1">Suppliers</h4>
-                                  <p className="text-muted mb-0 small">
-                                    Allows internal staff to view and process supplier documents (invoices, credit notes, statements). When enabled, staff can manage suppliers, create templates, and process supplier documents. When disabled, all supplier features are hidden and API endpoints are disabled.
-                                  </p>
-                                </div>
-                                <div className="ms-3">
-                                  <div className="form-check form-switch">
-                                    <input
-                                      className="form-check-input"
-                                      type="checkbox"
-                                      id="module-suppliersEnabled"
-                                      checked={settings.suppliersEnabled !== false}
-                                      onChange={(e) => handleInputChange('suppliersEnabled', e.target.checked)}
-                                    />
-                                    <label className="form-check-label" htmlFor="module-suppliersEnabled">
-                                      {settings.suppliersEnabled !== false ? 'Enabled' : 'Disabled'}
-                                    </label>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Add more modules here as needed */}
-                            {/* Example:
-                            <div className="list-group-item">
-                              <div className="d-flex justify-content-between align-items-center">
-                                <div className="flex-grow-1">
-                                  <h4 className="mb-1">Future Module</h4>
-                                  <p className="text-muted mb-0 small">
-                                    Description of the module.
-                                  </p>
-                                </div>
-                                <div className="ms-3">
-                                  <div className="form-check form-switch">
-                                    <input
-                                      className="form-check-input"
-                                      type="checkbox"
-                                      id="module-futureModule"
-                                      checked={settings.futureModule || false}
-                                      onChange={(e) => handleInputChange('futureModule', e.target.checked)}
-                                    />
-                                    <label className="form-check-label" htmlFor="module-futureModule">
-                                      {settings.futureModule ? 'Enabled' : 'Disabled'}
-                                    </label>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                            */}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="mt-4">
-                        <button
-                          className="btn btn-primary"
-                          onClick={handleSave}
-                          disabled={saving}
-                        >
-                          {saving ? 'Saving...' : 'Save Module Settings'}
-                        </button>
-                      </div>
-                    </>
-                  )}
-
                   {activeSection === 'admin-tools' && (
                     <>
                       <h2 className="mb-4">Admin Tools</h2>
@@ -2082,180 +1622,178 @@ const Settings = () => {
                       </div>
                       
                       <hr className="my-4" />
-                      
+
+                      {/* Testing & Diagnostics */}
+                      <h4 className="mb-3">Testing &amp; Diagnostics</h4>
+                      <p className="text-muted mb-3">Admin-only tools for validating internal pipelines. None of these tools send customer emails.</p>
+
+                      {/* Statement Generator Sandbox */}
+                      <div className="card mb-3">
+                        <div className="card-header">
+                          <h3 className="card-title">Statement Generator Sandbox</h3>
+                        </div>
+                        <div className="card-body">
+                          <div className="alert alert-info mb-3">
+                            <strong>Sandbox / test only.</strong> Upload an ACR11P export (.TXT or .csv) to check that it parses cleanly and that PDF + Excel statements render correctly per customer. Generated files are stored against matched companies for inspection, but <strong>no customer emails are sent</strong> from this tool. The production path (FTP / scheduled import of .TXT) will fire notifications normally once we wire it up.
+                          </div>
+
+                          <div className="row g-3 align-items-end mb-3">
+                            <div className="col-md-7">
+                              <label className="form-label" htmlFor="statement-sandbox-file-input">ACR11P export file</label>
+                              <input
+                                id="statement-sandbox-file-input"
+                                type="file"
+                                className="form-control"
+                                accept=".txt,.csv"
+                                onChange={(e) => setSandboxFile((e.target.files || [])[0] || null)}
+                                disabled={sandboxRunning}
+                              />
+                              <small className="form-hint">Tab-delimited ACR11P export. One file at a time.</small>
+                            </div>
+                            <div className="col-md-5">
+                              <div className="form-check mb-2">
+                                <input
+                                  id="statement-sandbox-force-overwrite"
+                                  className="form-check-input"
+                                  type="checkbox"
+                                  checked={sandboxForceOverwrite}
+                                  onChange={(e) => setSandboxForceOverwrite(e.target.checked)}
+                                  disabled={sandboxRunning}
+                                />
+                                <label className="form-check-label" htmlFor="statement-sandbox-force-overwrite">
+                                  Force overwrite existing statements
+                                </label>
+                                <div className="form-hint small">Bypasses content-hash short-circuit so every customer regenerates, useful when re-testing the same export.</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="d-flex gap-2">
+                            <button
+                              className="btn btn-primary"
+                              onClick={handleSandboxGenerate}
+                              disabled={!sandboxFile || sandboxRunning}
+                            >
+                              {sandboxRunning ? (
+                                <>
+                                  <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                                  Running sandbox…
+                                </>
+                              ) : (
+                                <>
+                                  <i className="fas fa-flask me-2"></i>
+                                  Run Sandbox (no emails)
+                                </>
+                              )}
+                            </button>
+                            <button
+                              className="btn btn-outline-secondary"
+                              onClick={resetSandbox}
+                              disabled={sandboxRunning}
+                            >
+                              Reset
+                            </button>
+                          </div>
+
+                          {sandboxError && (
+                            <div className="alert alert-danger mt-3 mb-0">
+                              <strong>Error:</strong> {sandboxError}
+                            </div>
+                          )}
+
+                          {sandboxStatus && sandboxStatus.phase !== 'done' && (
+                            <div className="mt-3">
+                              <div className="d-flex justify-content-between mb-1">
+                                <span className="small">
+                                  {sandboxStatus.phase === 'uploading' && 'Uploading and parsing…'}
+                                  {sandboxStatus.phase === 'processing' && `Processing ${sandboxStatus.processedFiles} of ${sandboxStatus.totalFiles} customers…`}
+                                  {sandboxStatus.phase === 'fetching-results' && 'Fetching results…'}
+                                </span>
+                                {sandboxStatus.totalFiles > 0 && (
+                                  <span className="small text-muted">
+                                    {Math.round(((sandboxStatus.processedFiles || 0) / sandboxStatus.totalFiles) * 100)}%
+                                  </span>
+                                )}
+                              </div>
+                              {sandboxStatus.totalFiles > 0 && (
+                                <div className="progress" style={{ height: '8px' }}>
+                                  <div
+                                    className="progress-bar progress-bar-striped progress-bar-animated"
+                                    role="progressbar"
+                                    style={{ width: `${((sandboxStatus.processedFiles || 0) / sandboxStatus.totalFiles) * 100}%` }}
+                                  />
+                                </div>
+                              )}
+                              {sandboxStatus.meta && (
+                                <div className="text-muted small mt-2">
+                                  Statement date: <strong>{sandboxStatus.meta.statementDate || 'unknown'}</strong>
+                                  {' · '}Parsed: <strong>{sandboxStatus.meta.parsedLines}</strong>
+                                  {' · '}Malformed: <strong>{sandboxStatus.meta.malformedLines}</strong>
+                                  {sandboxStatus.meta.unknownTerms > 0 && <> {' · '}Unknown terms: <strong>{sandboxStatus.meta.unknownTerms}</strong></>}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {sandboxResults && (
+                            <div className="mt-3">
+                              <h4 className="mb-2">Results</h4>
+                              <div className="row g-2 mb-3">
+                                <div className="col-md-3">
+                                  <div className="card card-sm bg-success-subtle">
+                                    <div className="card-body text-center py-2">
+                                      <div className="h4 mb-0 text-success">{sandboxResults.processedFiles || 0}</div>
+                                      <div className="text-muted small">Customers processed</div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="col-md-3">
+                                  <div className="card card-sm bg-info-subtle">
+                                    <div className="card-body text-center py-2">
+                                      <div className="h4 mb-0 text-info">{sandboxResults.totalFiles || 0}</div>
+                                      <div className="text-muted small">Total in export</div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="col-md-3">
+                                  <div className="card card-sm bg-warning-subtle">
+                                    <div className="card-body text-center py-2">
+                                      <div className="h4 mb-0 text-warning">{(sandboxResults.failedFiles || []).length}</div>
+                                      <div className="text-muted small">Failed</div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="col-md-3">
+                                  <div className="card card-sm bg-secondary-subtle">
+                                    <div className="card-body text-center py-2">
+                                      <div className="h4 mb-0 text-secondary">{(sandboxResults.unallocatedFiles || []).length}</div>
+                                      <div className="text-muted small">Unmatched (non-CORP)</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="alert alert-success mb-2">
+                                <i className="fas fa-shield-alt me-2"></i>
+                                <strong>No customer emails were sent.</strong> Generated PDFs and Excel files are stored against matched companies and visible on the Statements page for review.
+                              </div>
+                              {(sandboxResults.failedFiles || []).length > 0 && (
+                                <div className="alert alert-warning mb-0">
+                                  <strong>{(sandboxResults.failedFiles || []).length} failed.</strong>{' '}
+                                  Check pm2 logs / the Files admin view for per-customer errors.
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <hr className="my-4" />
+
                       {/* Danger Zone */}
                       <h4 className="mb-3 text-danger">Danger Zone</h4>
                       <div className="alert alert-danger">
                         <i className="fas fa-exclamation-triangle me-2"></i>
                         <strong>Warning:</strong> These tools will permanently delete data from the system. Use with extreme caution. All actions are logged and cannot be undone.
-                      </div>
-                      
-                      {/* Test Document Retention */}
-                      <div className="card mb-3">
-                        <div className="card-header d-flex justify-content-between align-items-center">
-                          <h3 className="card-title mb-0">Test Document Retention</h3>
-                          <button 
-                            className="btn btn-sm btn-outline-secondary"
-                            onClick={fetchRetentionStatus}
-                            title="Refresh status"
-                          >
-                            <i className="fas fa-sync-alt"></i>
-                          </button>
-                        </div>
-                        <div className="card-body">
-                          <p className="text-muted mb-3">
-                            Manually trigger the document retention cleanup job. This will delete documents that have passed their retention expiry date.
-                          </p>
-                          
-                          {retentionStatus && (
-                            <div className="mb-3">
-                              {retentionStatus.retentionEnabled ? (
-                                <div className="row g-3 mb-3">
-                                  <div className="col-md-4">
-                                    <div className="card card-sm bg-danger-subtle">
-                                      <div className="card-body text-center">
-                                        <div className="h3 mb-0 text-danger">{retentionStatus.expired?.total || 0}</div>
-                                        <div className="text-muted small">Expired (ready to delete)</div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="col-md-4">
-                                    <div className="card card-sm bg-warning-subtle">
-                                      <div className="card-body text-center">
-                                        <div className="h3 mb-0 text-warning">{retentionStatus.expiringIn7Days?.total || 0}</div>
-                                        <div className="text-muted small">Expiring in 7 days</div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="col-md-4">
-                                    <div className="card card-sm bg-info-subtle">
-                                      <div className="card-body text-center">
-                                        <div className="h3 mb-0 text-info">{retentionStatus.retentionPeriodDays}</div>
-                                        <div className="text-muted small">Retention Period (days)</div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="alert alert-info mb-3">
-                                  <strong>Retention Disabled:</strong> Set a document retention period in the main settings to enable automatic document cleanup.
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          
-                          <button
-                            className="btn btn-warning"
-                            onClick={handleTestRetention}
-                            disabled={testingRetention}
-                          >
-                            {testingRetention ? (
-                              <>
-                                <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                                Running Cleanup...
-                              </>
-                            ) : (
-                              <>
-                                <i className="fas fa-clock me-2"></i>
-                                Run Retention Cleanup Now
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                      
-                      {/* Email Queue Stress Test */}
-                      <div className="card mb-3">
-                        <div className="card-header">
-                          <h3 className="card-title">Email Queue Stress Test</h3>
-                        </div>
-                        <div className="card-body">
-                          <p className="text-muted mb-3">
-                            Queue test notification emails to yourself to verify email deliverability and attachments.
-                            Emails will be sent to: <strong>{user?.email}</strong>
-                          </p>
-                          
-                          <div className="row g-3 mb-3">
-                            <div className="col-md-4">
-                              <label className="form-label">Number of Emails</label>
-                              <input
-                                type="number"
-                                className="form-control"
-                                min="1"
-                                max="100"
-                                value={stressTestCount}
-                                onChange={(e) => setStressTestCount(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
-                              />
-                              <small className="form-hint">1-100 emails (conserves Mailtrap credits)</small>
-                            </div>
-                            
-                            <div className="col-md-4">
-                              <label className="form-label">Document Type</label>
-                              <select
-                                className="form-select"
-                                value={stressTestDocType}
-                                onChange={(e) => setStressTestDocType(e.target.value)}
-                              >
-                                <option value="invoice">Invoice</option>
-                                <option value="credit_note">Credit Note</option>
-                              </select>
-                            </div>
-                            
-                            <div className="col-md-4">
-                              <label className="form-label">Include PDF Attachment</label>
-                              <div className="form-check form-switch mt-2">
-                                <input
-                                  type="checkbox"
-                                  className="form-check-input"
-                                  checked={stressTestAttachment}
-                                  onChange={(e) => setStressTestAttachment(e.target.checked)}
-                                />
-                                <label className="form-check-label">
-                                  {stressTestAttachment ? 'Yes (uses sample PDF)' : 'No'}
-                                </label>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="alert alert-info mb-3">
-                            <strong>Mailtrap Limits:</strong> 10 emails per 10 seconds, 500/month on free tier.
-                            {stressTestCount > 1 && (
-                              <span> Estimated delivery: ~{Math.ceil(stressTestCount)} seconds</span>
-                            )}
-                          </div>
-                          
-                          <button
-                            className="btn btn-primary"
-                            onClick={handleEmailStressTest}
-                            disabled={runningStressTest}
-                          >
-                            {runningStressTest ? (
-                              <>
-                                <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                                Queuing Emails...
-                              </>
-                            ) : (
-                              <>
-                                <i className="fas fa-paper-plane me-2"></i>
-                                Run Stress Test
-                              </>
-                            )}
-                          </button>
-                          
-                          {stressTestResult && (
-                            <div className="alert alert-success mt-3">
-                              <strong>Test Queued Successfully!</strong>
-                              <ul className="mb-0 mt-2">
-                                <li>Emails queued: {stressTestResult.emailCount}</li>
-                                <li>Recipient: {stressTestResult.recipientEmail}</li>
-                                <li>Document type: {stressTestResult.documentType}</li>
-                                <li>With attachments: {stressTestResult.emailsWithAttachment || 0} ({stressTestResult.attachmentSource || 'N/A'})</li>
-                                <li>Without attachments: {stressTestResult.emailsWithoutAttachment || stressTestResult.emailCount}</li>
-                                <li>Estimated delivery: ~{stressTestResult.estimatedDeliverySeconds || stressTestResult.emailCount} seconds</li>
-                              </ul>
-                            </div>
-                          )}
-                        </div>
                       </div>
                       
                       {/* Purge All Documents */}

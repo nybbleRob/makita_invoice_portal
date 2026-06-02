@@ -193,11 +193,10 @@ unoconvert --port 2003 some.xlsx some.pdf
 
 ### Telling the worker which port to use
 
-`fill_template.py` reads `UNOSERVER_PORT` from the environment (default: let
-`unoconvert` pick). For a multi-listener pool, set this via PM2 / systemd
-environment per worker, or round-robin in the Node worker by passing
-`opts.unoPort` to `buildPdf`. Default behaviour is fine for a single
-listener - the bottleneck only matters at higher concurrency.
+The Node worker reads `UNOSERVER_PORTS` (or `UNOSERVER_PORT`) at startup and
+**round-robins** each per-customer job across the listed listeners. There is
+no manual port assignment to do — set the env var, run that many unoservers,
+and the worker spreads load automatically.
 
 If `unoconvert` is not on the PATH, the Python script transparently falls
 back to `soffice --headless --convert-to pdf` with an isolated user-profile
@@ -208,21 +207,50 @@ lockfiles).
 
 ## Sizing the unoserver pool
 
-The Node worker concurrency is controlled by `STATEMENT_GENERATE_CONCURRENCY`
-(default: 4). Run **at least one** unoserver per concurrent worker - else
-queued conversions serialise on a single listener and the larger concurrency
-buys nothing.
+`unoserver` runs LibreOffice **single-threaded**: a second `unoconvert` call
+against the same listener simply waits in line. So worker concurrency MUST
+match the number of unoservers, or one customer's conversion stalls waiting
+behind another customer's and hits the per-page timeout.
 
-Example for a 4-core server:
+The worker reads `UNOSERVER_PORTS` at startup and:
+
+- defaults `STATEMENT_GENERATE_CONCURRENCY` to **the number of ports listed**;
+- prints a warning at startup if you override concurrency above that count;
+- prints a warning if neither `UNOSERVER_PORTS` nor `UNOSERVER_PORT` is set.
+
+### Single unoserver (safe default)
 
 ```bash
-# .env (or PM2 ecosystem)
-STATEMENT_GENERATE_CONCURRENCY=4
+# .env
 STATEMENT_PDF_RENDERER=unoconvert
 UNOSERVER_HOST=127.0.0.1
-# Per-worker port assignment is a refinement; the default behaviour is to let
-# unoconvert pick whichever unoserver responds first. To pin, set
-# UNOSERVER_PORT=2003 (etc.) on each worker process.
+UNOSERVER_PORT=2002
+# STATEMENT_GENERATE_CONCURRENCY defaults to 1 - leave it.
+```
+
+Run one listener:
+
+```bash
+sudo systemctl enable --now unoserver@2002
+```
+
+This is reliable and the right starting point. Throughput: ~1 customer at a
+time, but each conversion goes directly to a free listener so no contention.
+
+### Multi-listener pool (for throughput)
+
+```bash
+# .env
+STATEMENT_PDF_RENDERER=unoconvert
+UNOSERVER_HOST=127.0.0.1
+UNOSERVER_PORTS=2002,2004,2006,2008
+# STATEMENT_GENERATE_CONCURRENCY auto-defaults to 4 because 4 ports listed.
+```
+
+Run one listener per port:
+
+```bash
+sudo systemctl enable --now unoserver@2002 unoserver@2004 unoserver@2006 unoserver@2008
 ```
 
 Memory: each LibreOffice instance idles at ~150-250 MB. A pool of 4 listeners
@@ -238,12 +266,13 @@ sits around ~1 GB resident before any conversion load.
 | `STATEMENT_LOGO_PATH`             | `backend/assets/statement-template/makita_logo.png` | Logo embedded into XLSX output |
 | `STATEMENT_PYTHON_BIN`            | `python3`                                        | Path to Python interpreter |
 | `STATEMENT_PDF_RENDERER`          | `auto` (`unoconvert` if installed, else `soffice`) | Force a renderer |
-| `STATEMENT_PDF_TIMEOUT`           | `180` (seconds, per-conversion in Python)        | Per-page conversion timeout |
-| `STATEMENT_PDF_TIMEOUT_MS`        | `300000` (5 min, whole-customer in Node)         | Hard upper bound on the Python sidecar |
-| `STATEMENT_GENERATE_CONCURRENCY`  | `4`                                              | BullMQ worker concurrency |
-| `STATEMENT_GENERATE_LOCK_MS`      | `600000` (10 min)                                | BullMQ job lock; must outlast `STATEMENT_PDF_TIMEOUT_MS` |
+| `STATEMENT_PDF_TIMEOUT`           | `300` (seconds, per-page in Python)              | Per-page conversion timeout |
+| `STATEMENT_PDF_TIMEOUT_MS`        | `900000` (15 min, whole-customer in Node)        | Hard upper bound on the Python sidecar |
+| `STATEMENT_GENERATE_CONCURRENCY`  | matches `UNOSERVER_PORTS` count (or `1`)          | BullMQ worker concurrency |
+| `STATEMENT_GENERATE_LOCK_MS`      | `1200000` (20 min)                               | BullMQ job lock; must outlast `STATEMENT_PDF_TIMEOUT_MS` |
 | `UNOSERVER_HOST`                  | `127.0.0.1`                                      | unoconvert target host |
-| `UNOSERVER_PORT`                  | (let unoconvert decide)                          | unoconvert target port |
+| `UNOSERVER_PORT`                  | (let unoconvert decide)                          | Single-listener fallback (use `UNOSERVER_PORTS` for a pool) |
+| `UNOSERVER_PORTS`                 | (unset)                                          | Comma-separated listener ports for round-robin (`2002,2004,2006`) |
 
 None of these are required - sensible defaults are baked in. Override only
 when sizing for a specific server.

@@ -399,14 +399,38 @@ workers.push(invoiceImportWorker);
 console.log('✅ Invoice import worker initialized');
 
 // Statement generation worker (fans out one job per customer from a single
-// ACR11P export upload). Concurrency is configurable so it can be matched to
-// the unoserver pool size - one LibreOffice listener per concurrent worker
-// avoids contention. Default 4 is a sensible starting point for a server with
-// 4 unoservers (ports 2003..2006); tune via STATEMENT_GENERATE_CONCURRENCY.
-const STATEMENT_GENERATE_CONCURRENCY = parseInt(process.env.STATEMENT_GENERATE_CONCURRENCY, 10) || 4;
-// 10 min lock - large customers (100+ pages) take ~5 min with unoconvert and
-// the default Python timeout is 3 min; the lock has to outlast both.
-const STATEMENT_GENERATE_LOCK_MS = parseInt(process.env.STATEMENT_GENERATE_LOCK_MS, 10) || 10 * 60 * 1000;
+// ACR11P export upload). Concurrency MUST match the number of unoserver
+// listeners or LibreOffice serialises the conversions and large customers
+// silently time out (the "conversion timed out after 180s" symptom).
+//
+// Safe defaults:
+//   - 1 worker if UNOSERVER_PORTS is unset/single port
+//   - N workers if UNOSERVER_PORTS lists N ports
+// Override either via STATEMENT_GENERATE_CONCURRENCY (env), but only do that
+// when you have at least that many unoservers actually running.
+const { UNOSERVER_PORTS } = require('../jobs/statementGenerate');
+const STATEMENT_GENERATE_CONCURRENCY_DEFAULT = Math.max(1, UNOSERVER_PORTS.length || 1);
+const STATEMENT_GENERATE_CONCURRENCY = parseInt(process.env.STATEMENT_GENERATE_CONCURRENCY, 10)
+  || STATEMENT_GENERATE_CONCURRENCY_DEFAULT;
+// 20 min lock - has to outlast the Python sidecar's outer timeout (15 min
+// default, set in services/statementGenerator/pdf.js) which itself covers
+// fill + N page conversions + merge for worst-case ~100-page customers.
+const STATEMENT_GENERATE_LOCK_MS = parseInt(process.env.STATEMENT_GENERATE_LOCK_MS, 10) || 20 * 60 * 1000;
+
+if (UNOSERVER_PORTS.length > 0 && STATEMENT_GENERATE_CONCURRENCY > UNOSERVER_PORTS.length) {
+  console.warn(
+    `⚠️  STATEMENT_GENERATE_CONCURRENCY=${STATEMENT_GENERATE_CONCURRENCY} ` +
+    `exceeds UNOSERVER_PORTS count (${UNOSERVER_PORTS.length}: [${UNOSERVER_PORTS.join(',')}]). ` +
+    `Concurrent jobs will queue on the same LibreOffice listener and may hit the ` +
+    `per-conversion timeout. Spin up more unoservers or lower concurrency.`
+  );
+} else if (UNOSERVER_PORTS.length === 0) {
+  console.warn(
+    `⚠️  UNOSERVER_PORTS / UNOSERVER_PORT not set - statement-generate jobs will ` +
+    `use the unoconvert default port. If you run multiple unoservers, set ` +
+    `UNOSERVER_PORTS=2002,2004,... and STATEMENT_GENERATE_CONCURRENCY to match.`
+  );
+}
 
 const statementGenerateWorker = new Worker('statement-generate', async (job) => {
   const custNo = job.data?.customer?.custNo || 'unknown';

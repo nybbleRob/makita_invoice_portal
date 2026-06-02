@@ -39,6 +39,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from copy import copy
 
 from openpyxl import load_workbook
@@ -222,9 +223,14 @@ def main():
     parser.add_argument("--uno-host", default=os.environ.get("UNOSERVER_HOST", "127.0.0.1"))
     parser.add_argument("--uno-port", type=int,
                         default=int(os.environ.get("UNOSERVER_PORT", "0")) or None)
+    # Per-PAGE conversion timeout. A single page on a quiet unoserver renders
+    # in well under 2s; the high default exists because a contended listener
+    # can queue a request behind earlier conversions. With one unoserver and
+    # worker-side concurrency=1 (the new safe default in queueWorker.js) the
+    # listener is never contended and this timeout almost never fires.
     parser.add_argument("--timeout", type=int,
-                        default=int(os.environ.get("STATEMENT_PDF_TIMEOUT", "180")),
-                        help="Per-conversion timeout in seconds")
+                        default=int(os.environ.get("STATEMENT_PDF_TIMEOUT", "300")),
+                        help="Per-page conversion timeout in seconds")
     args = parser.parse_args()
 
     if not os.path.exists(args.template):
@@ -283,6 +289,20 @@ def main():
             ],
         }
 
+        cust_no_log = s(cust.get("custNo"))
+        port_log = args.uno_port if args.uno_port else "default"
+        total_pages = len(pages)
+        overall_start = time.monotonic()
+        # Per-page log to stderr - Node captures stderr and emits it on failure,
+        # and pm2 surfaces it live. When a page conversion blocks (contention
+        # on a single unoserver, or a malformed XLSX), this is the breadcrumb
+        # that tells us WHICH page WHICH customer hung.
+        print(
+            f"[stmtgen] custNo={cust_no_log} pages={total_pages} "
+            f"renderer={renderer} port={port_log}",
+            file=sys.stderr, flush=True
+        )
+
         pdf_paths = []
         for i, page in enumerate(pages):
             page_no = page.get("pageNo")
@@ -294,6 +314,7 @@ def main():
             xlsx_path = os.path.join(work_dir, f"page_{i + 1:03d}.xlsx")
             pdf_path = os.path.join(work_dir, f"page_{i + 1:03d}.pdf")
 
+            page_start = time.monotonic()
             # Fresh copy of the template per page - guarantees the embedded
             # images and styles are intact on every page.
             _clone_template_to(xlsx_path, args.template)
@@ -306,18 +327,45 @@ def main():
                 is_last=(i == len(pages) - 1)
             )
             wb.save(xlsx_path)
+            fill_ms = int((time.monotonic() - page_start) * 1000)
 
-            convert_to_pdf(
-                xlsx_path, pdf_path,
-                renderer=renderer,
-                uno_host=args.uno_host,
-                uno_port=args.uno_port,
-                timeout=args.timeout,
-                user_profile_dir=profile_dir
+            convert_start = time.monotonic()
+            try:
+                convert_to_pdf(
+                    xlsx_path, pdf_path,
+                    renderer=renderer,
+                    uno_host=args.uno_host,
+                    uno_port=args.uno_port,
+                    timeout=args.timeout,
+                    user_profile_dir=profile_dir
+                )
+            except subprocess.TimeoutExpired:
+                print(
+                    f"[stmtgen] custNo={cust_no_log} page {i + 1}/{total_pages} "
+                    f"TIMED OUT after {args.timeout}s on port={port_log} - "
+                    f"likely unoserver contention. Either lower concurrency or "
+                    f"add more unoservers (UNOSERVER_PORTS).",
+                    file=sys.stderr, flush=True
+                )
+                raise
+            convert_ms = int((time.monotonic() - convert_start) * 1000)
+
+            print(
+                f"[stmtgen] custNo={cust_no_log} page {i + 1}/{total_pages} "
+                f"fill={fill_ms}ms convert={convert_ms}ms",
+                file=sys.stderr, flush=True
             )
             pdf_paths.append(pdf_path)
 
+        merge_start = time.monotonic()
         merge_pdfs(pdf_paths, args.output)
+        merge_ms = int((time.monotonic() - merge_start) * 1000)
+        total_ms = int((time.monotonic() - overall_start) * 1000)
+        print(
+            f"[stmtgen] custNo={cust_no_log} done: pages={total_pages} "
+            f"total={total_ms}ms merge={merge_ms}ms",
+            file=sys.stderr, flush=True
+        )
         # Emit a small machine-readable summary on stdout for the Node caller.
         print(json.dumps({
             "output": args.output,

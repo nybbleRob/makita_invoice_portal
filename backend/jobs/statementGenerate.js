@@ -41,6 +41,45 @@ const { buildExcel } = require('../services/statementGenerator/excel');
 const { buildPdf } = require('../services/statementGenerator/pdf');
 const { isoDate } = require('../services/statementGenerator/parse');
 const { computeStatementContentHash } = require('../services/statementGenerator/contentHash');
+
+// Unoserver pool wiring. The Python sidecar calls `unoconvert`, which talks to
+// a running `unoserver` listener (single-threaded LibreOffice behind the
+// scenes). One listener serialises concurrent calls and is the cause of the
+// "conversion timed out after 180s" failures we saw under load.
+//
+// To scale we run N unoservers on different ports and round-robin per-job
+// across them. Configure via env:
+//   UNOSERVER_PORTS=2002,2004,2006,2008  (preferred; explicit list)
+//   UNOSERVER_PORT=2002                  (fallback; single listener)
+// If neither is set, we leave the port unset and the Python sidecar uses the
+// unoconvert client default (2002).
+//
+// Worker concurrency MUST match the number of listeners (one job per
+// listener). The queue worker enforces this hint at startup.
+function parseUnoserverPorts() {
+  const list = process.env.UNOSERVER_PORTS;
+  if (list && String(list).trim()) {
+    const ports = String(list)
+      .split(/[\s,]+/)
+      .map(p => parseInt(p, 10))
+      .filter(p => Number.isFinite(p) && p > 0 && p < 65536);
+    if (ports.length > 0) return ports;
+  }
+  const single = parseInt(process.env.UNOSERVER_PORT, 10);
+  if (Number.isFinite(single) && single > 0 && single < 65536) return [single];
+  return [];
+}
+
+const UNOSERVER_PORTS = parseUnoserverPorts();
+let _unoserverRoundRobinIdx = 0;
+
+function pickUnoserverPort() {
+  if (UNOSERVER_PORTS.length === 0) return null;
+  const idx = _unoserverRoundRobinIdx % UNOSERVER_PORTS.length;
+  _unoserverRoundRobinIdx = (_unoserverRoundRobinIdx + 1) % UNOSERVER_PORTS.length;
+  return UNOSERVER_PORTS[idx];
+}
+
 const { Statement } = require('../models');
 
 /**
@@ -137,7 +176,14 @@ async function processStatementGenerate(job) {
   // file bytes are NOT reliable here because of embedded creation timestamps).
   const contentHash = computeStatementContentHash(customer);
 
-  console.log(`📄 [StmtGen ${importId}] custNo=${custNo} pages=${(customer.pages || []).length} contentHash=${contentHash ? contentHash.slice(0, 12) : 'none'}${forceOverwrite ? ' forceOverwrite=true' : ''}${silent ? ' silent=true' : ''}`);
+  console.log(
+    `📄 [StmtGen ${importId}] custNo=${custNo} ` +
+    `pages=${(customer.pages || []).length} ` +
+    `contentHash=${contentHash ? contentHash.slice(0, 12) : 'none'} ` +
+    `unoPool=[${UNOSERVER_PORTS.join(',') || 'default'}]` +
+    `${forceOverwrite ? ' forceOverwrite=true' : ''}` +
+    `${silent ? ' silent=true' : ''}`
+  );
 
   const dateForName = stmtDateIso || new Date().toISOString().slice(0, 10);
   const baseName = `${custNo}_Statement_${dateForName}`;
@@ -296,7 +342,30 @@ async function processStatementGenerate(job) {
     xlsxHash = sha256(xlsxBuf);
     xlsxSize = xlsxBuf.length;
 
-    await buildPdf(customer, pdfStagedPath);
+    // Pick a unoserver port for this job (round-robin across UNOSERVER_PORTS).
+    // With one listener and concurrency=1 this is always the same port; with N
+    // listeners + concurrency=N each running job hits its own listener so no
+    // queuing happens inside LibreOffice.
+    const pdfStart = Date.now();
+    const pageCount = (customer.pages || []).length;
+    const pickedPort = pickUnoserverPort();
+    try {
+      await buildPdf(customer, pdfStagedPath, pickedPort ? { unoPort: pickedPort } : undefined);
+    } catch (pdfErr) {
+      const elapsedMs = Date.now() - pdfStart;
+      throw new Error(
+        `PDF generation failed for custNo=${custNo} after ${elapsedMs}ms ` +
+        `(pages=${pageCount}, unoPort=${pickedPort || 'default'}): ${pdfErr.message}`
+      );
+    }
+    const pdfElapsedMs = Date.now() - pdfStart;
+    if (pdfElapsedMs > 60_000) {
+      console.warn(
+        `🐢 [StmtGen ${importId}] custNo=${custNo} pdf took ${pdfElapsedMs}ms ` +
+        `(pages=${pageCount}, unoPort=${pickedPort || 'default'}) - consider adding ` +
+        `more unoservers (UNOSERVER_PORTS) or reducing STATEMENT_GENERATE_CONCURRENCY.`
+      );
+    }
     const pdfBuf = fs.readFileSync(pdfStagedPath);
     pdfHash = sha256(pdfBuf);
     pdfSize = pdfBuf.length;
@@ -609,5 +678,6 @@ async function processStatementGenerate(job) {
 }
 
 module.exports = {
-  processStatementGenerate
+  processStatementGenerate,
+  UNOSERVER_PORTS
 };

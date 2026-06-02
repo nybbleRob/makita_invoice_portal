@@ -79,10 +79,13 @@ async function buildPdf(cust, outPath, opts = {}) {
   if (opts.renderer) args.push('--renderer', opts.renderer);
   if (opts.unoHost) args.push('--uno-host', opts.unoHost);
   if (opts.unoPort) args.push('--uno-port', String(opts.unoPort));
-  // Per-conversion timeout (covers all pages + merge). Default 5 min upper bound
-  // is large enough for a ~100-page customer with unoconvert; the BullMQ job
-  // lockDuration must exceed this.
-  const timeoutMs = opts.timeoutMs || parseInt(process.env.STATEMENT_PDF_TIMEOUT_MS, 10) || 5 * 60 * 1000;
+  // Outer (Node) timeout - covers the whole Python invocation (fill + N page
+  // conversions + merge). Bumped to 15 min default so a worst-case ~100-page
+  // customer doesn't get SIGKILL'd before its sub-process timeouts can fire
+  // and report properly. The BullMQ job lockDuration must exceed this
+  // (queueWorker.js sets it to 10 min by default - increase together if you
+  // raise either).
+  const timeoutMs = opts.timeoutMs || parseInt(process.env.STATEMENT_PDF_TIMEOUT_MS, 10) || 15 * 60 * 1000;
 
   return new Promise((resolve, reject) => {
     const child = spawn(pythonBin, args, { stdio: ['pipe', 'pipe', 'pipe'] });
