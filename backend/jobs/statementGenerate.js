@@ -203,20 +203,26 @@ async function processStatementGenerate(job) {
 
     // 2. Currency guard at match time (per plan: cannot be done at parse time
     // because the export has no currency field).
+    //
+    // IMPORTANT: failureReason is an ENUM on the files table, allowed values
+    // are 'unallocated' | 'parsing_error' | 'validation_error' | 'duplicate'
+    // | 'other'. The detailed reason ('company_not_found' / 'currency_mismatch')
+    // goes into metadata.specificFailureReason where it can be arbitrary.
+    // This mirrors the invoice import flow in jobs/invoiceImport.js.
     let failureReason = null;
     let specificFailureReason = null;
     if (company) {
       const currency = getCompanyCurrency(company);
       if (currency !== 'GBP') {
-        failureReason = 'failed';
+        failureReason = 'unallocated';
         specificFailureReason = 'currency_mismatch';
         console.warn(
           `⚠️  [StmtGen ${importId}] custNo=${custNo} matched company ${company.id} ` +
-          `has currency=${currency}, expected GBP - routing to failed.`
+          `has currency=${currency}, expected GBP - routing to unallocated.`
         );
       }
     } else {
-      failureReason = 'failed';
+      failureReason = 'unallocated';
       specificFailureReason = 'company_not_found';
       console.log(
         `ℹ️  [StmtGen ${importId}] custNo=${custNo} did not match any CORP company - ` +
