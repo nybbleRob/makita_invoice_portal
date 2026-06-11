@@ -978,9 +978,14 @@ router.put('/:id', requirePermission('COMPANIES_EDIT'), async (req, res) => {
         return res.status(400).json({ message: 'Parent company not found' });
       }
       
-      // Prevent setting a descendant as parent
+      // Prevent setting one of the company's own descendants as its parent
+      // (that would create a cycle). In the nested set model, the proposed
+      // parent is a descendant of this company when its [left, right] interval
+      // is contained within the company's interval. Only reject in that case —
+      // the reverse (company contained within parent) is the normal, valid
+      // relationship of a branch under its corporate parent.
       if (parent.left && parent.right && company.left && company.right) {
-        if (company.left >= parent.left && company.right <= parent.right) {
+        if (parent.left >= company.left && parent.right <= company.right) {
           return res.status(400).json({ message: 'Cannot set a descendant as parent' });
         }
       }
