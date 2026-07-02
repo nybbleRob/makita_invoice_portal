@@ -1103,8 +1103,12 @@ router.put('/:id', canManageUsers, async (req, res) => {
     
     // Update fields
     if (req.body.name !== undefined) user.name = req.body.name;
-    // Only Credit Senior, Manager, Administrator, and Global Admin can change email; Credit Controller cannot
-    const canChangeEmail = !['credit_controller'].includes(req.user.role);
+    // Credit Controllers can change email only on External Users and Notification Contacts
+    // (the accounts they routinely enrol). Credit Senior and above can change email on any
+    // user that canManageRole above already permits them to edit.
+    const isCreditController = req.user.role === 'credit_controller';
+    const targetIsExternalOrNotifContact = ['external_user', 'notification_contact'].includes(user.role);
+    const canChangeEmail = !isCreditController || targetIsExternalOrNotifContact;
     if (canChangeEmail && req.body.email !== undefined) {
       const newEmail = req.body.email.trim().toLowerCase();
       
