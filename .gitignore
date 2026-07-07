@@ -64,3 +64,6 @@ backend/credentials/
 # Python bytecode caches
 **/__pycache__/
 *.pyc
+
+# Internal engineering handoff docs (kept in working tree, not committed)
+docs/PORTAL_INTEGRATION_GUIDE.md
