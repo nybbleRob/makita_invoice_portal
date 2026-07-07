@@ -7,6 +7,7 @@ import { getRoleLabel } from '../../utils/roleLabels';
 import { getInitials, getAvatarColorClass } from '../../utils/avatar';
 import PageTitle from '../PageTitle';
 import { API_BASE_URL } from '../../services/api';
+import { STATEMENTS_ENABLED } from '../../config/featureFlags';
 
 const Layout = () => {
   const { user, logout } = useAuth();
@@ -68,19 +69,21 @@ const Layout = () => {
           <span className="nav-link-title">Credit Notes</span>
         </Link>
       </li>
-      <li className={`nav-item ${location.pathname === '/statements' ? 'active' : ''}`}>
-        <Link to="/statements" className="nav-link">
-          <span className="nav-link-icon">
-            {/* Tabler IconFileAnalyticsFilled */}
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="icon icon-tabler icons-tabler-filled icon-tabler-file-analytics">
-              <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-              <path d="M12 2l.117 .007a1 1 0 0 1 .876 .876l.007 .117v4l.005 .15a2 2 0 0 0 1.838 1.844l.157 .006h4l.117 .007a1 1 0 0 1 .876 .876l.007 .117v9a3 3 0 0 1 -2.824 2.995l-.176 .005h-10a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-14a3 3 0 0 1 2.824 -2.995l.176 -.005zm-3 10a1 1 0 0 0 -1 1v5a1 1 0 0 0 2 0v-5a1 1 0 0 0 -1 -1m3 4a1 1 0 0 0 -1 1v1a1 1 0 0 0 2 0v-1a1 1 0 0 0 -1 -1m3 -2a1 1 0 0 0 -1 1v3a1 1 0 0 0 2 0v-3a1 1 0 0 0 -1 -1" />
-              <path d="M19 7h-4l-.001 -4.001z" />
-            </svg>
-          </span>
-          <span className="nav-link-title">Statements</span>
-        </Link>
-      </li>
+      {STATEMENTS_ENABLED && (
+        <li className={`nav-item ${location.pathname === '/statements' ? 'active' : ''}`}>
+          <Link to="/statements" className="nav-link">
+            <span className="nav-link-icon">
+              {/* Tabler IconFileAnalyticsFilled */}
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="icon icon-tabler icons-tabler-filled icon-tabler-file-analytics">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M12 2l.117 .007a1 1 0 0 1 .876 .876l.007 .117v4l.005 .15a2 2 0 0 0 1.838 1.844l.157 .006h4l.117 .007a1 1 0 0 1 .876 .876l.007 .117v9a3 3 0 0 1 -2.824 2.995l-.176 .005h-10a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-14a3 3 0 0 1 2.824 -2.995l.176 -.005zm-3 10a1 1 0 0 0 -1 1v5a1 1 0 0 0 2 0v-5a1 1 0 0 0 -1 -1m3 4a1 1 0 0 0 -1 1v1a1 1 0 0 0 2 0v-1a1 1 0 0 0 -1 -1m3 -2a1 1 0 0 0 -1 1v3a1 1 0 0 0 2 0v-3a1 1 0 0 0 -1 -1" />
+                <path d="M19 7h-4l-.001 -4.001z" />
+              </svg>
+            </span>
+            <span className="nav-link-title">Statements</span>
+          </Link>
+        </li>
+      )}
       {/* Unallocated - GA, Admin, Manager */}
       {hasPermission('UNALLOCATED_VIEW') && (
         <li className={`nav-item ${location.pathname === '/unallocated' ? 'active' : ''}`}>

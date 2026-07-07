@@ -48,6 +48,7 @@ import InactivityLogout from './components/InactivityLogout';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
 import { PermissionProvider, usePermissions } from './context/PermissionContext';
+import { STATEMENTS_ENABLED } from './config/featureFlags';
 import './App.css';
 
 // Protected Route Component
@@ -208,10 +209,13 @@ function AppRoutes() {
         <Route path="credit-notes/:id/view" element={<CreditNoteView />} />
         <Route path="credit-notes/:id/edit" element={<PermissionRoute permission="CREDIT_NOTES_EDIT"><CreditNoteEdit /></PermissionRoute>} />
         
-        {/* Statements - same route access pattern as Invoices/Credit Notes */}
-        <Route path="statements" element={<Statements />} />
-        <Route path="statements/:id/view" element={<StatementView />} />
-        <Route path="statements/:id/edit" element={<PermissionRoute permission="STATEMENTS_EDIT"><StatementEdit /></PermissionRoute>} />
+        {/* Statements - gated by STATEMENTS_ENABLED. When off, any bookmarked
+            /statements URL redirects to the dashboard so users don't land on
+            a blank layout outlet. Backend routes stay online for the sandbox. */}
+        {STATEMENTS_ENABLED && <Route path="statements" element={<Statements />} />}
+        {STATEMENTS_ENABLED && <Route path="statements/:id/view" element={<StatementView />} />}
+        {STATEMENTS_ENABLED && <Route path="statements/:id/edit" element={<PermissionRoute permission="STATEMENTS_EDIT"><StatementEdit /></PermissionRoute>} />}
+        {!STATEMENTS_ENABLED && <Route path="statements/*" element={<Navigate to="/" replace />} />}
         
         {/* Unallocated - GA, Admin, Manager */}
         <Route path="unallocated" element={<PermissionRoute permission="UNALLOCATED_VIEW"><Unallocated /></PermissionRoute>} />
