@@ -368,20 +368,34 @@ router.put('/', globalAdmin, async (req, res) => {
       settings.suppliersEnabled = req.body.suppliersEnabled === true || req.body.suppliersEnabled === 'true';
     }
     
-    // Update test mode default company ID
+    // Update test mode default company ID.
+    //
+    // The frontend PUTs the entire settings object on every save, so this
+    // field is present in req.body even when the operator is editing an
+    // unrelated section (e.g. SMTP). We only run the "does this company
+    // still exist?" check when the submitted value actually differs from
+    // what's stored — otherwise a company being deleted after this field
+    // was set would strand every future Settings save behind a stale
+    // foreign-key error, with no in-UI way to recover unless the operator
+    // realises they need to touch this dropdown first. Explicitly clearing
+    // to "-- No Default --" still works (null branch), giving operators a
+    // clean escape when they do want to drop the stale reference.
     if (req.body.testModeDefaultCompanyId !== undefined) {
-      // Allow null to clear the setting, otherwise validate UUID format
-      const newCompanyId = req.body.testModeDefaultCompanyId;
-      if (newCompanyId === null || newCompanyId === '' || newCompanyId === 'null') {
-        settings.testModeDefaultCompanyId = null;
-      } else {
-        // Validate that it's a valid UUID and the company exists
-        const { Company } = require('../models');
-        const company = await Company.findByPk(newCompanyId);
-        if (!company) {
-          return res.status(400).json({ message: 'Invalid company ID for test mode default company' });
+      const raw = req.body.testModeDefaultCompanyId;
+      const newCompanyId = (raw === null || raw === '' || raw === 'null') ? null : raw;
+      const currentCompanyId = settings.testModeDefaultCompanyId || null;
+
+      if (newCompanyId !== currentCompanyId) {
+        if (newCompanyId === null) {
+          settings.testModeDefaultCompanyId = null;
+        } else {
+          const { Company } = require('../models');
+          const company = await Company.findByPk(newCompanyId);
+          if (!company) {
+            return res.status(400).json({ message: 'Invalid company ID for test mode default company' });
+          }
+          settings.testModeDefaultCompanyId = newCompanyId;
         }
-        settings.testModeDefaultCompanyId = newCompanyId;
       }
     }
     
