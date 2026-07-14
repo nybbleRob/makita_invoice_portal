@@ -146,6 +146,16 @@ module.exports = (sequelize) => {
       type: DataTypes.DATE,
       allowNull: true,
       comment: 'Date when document was deleted due to retention policy (for audit trail)'
+    },
+    lastNotificationMessageId: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+      comment: 'SMTP Message-ID (RFC 5322) of the most recent notification email that included this statement. See Invoice.lastNotificationMessageId for rationale.'
+    },
+    lastNotifiedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'Timestamp of the most recent notification email that included this statement.'
     }
   }, {
     tableName: 'statements',

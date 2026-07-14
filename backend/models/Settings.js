@@ -224,7 +224,14 @@ module.exports = (sequelize) => {
       validate: {
         isIn: [['off', 'daily', 'weekly', 'monthly', 'quarterly']]
       },
-      comment: 'Activity log auto-purge schedule: off, daily, weekly, monthly, quarterly (runs at midnight)'
+      comment: 'How often the auto-prune job runs at midnight (off = never). When it runs it prunes entries older than activityLogRetentionDays; it no longer wipes everything.'
+    },
+    activityLogRetentionDays: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 14,
+      validate: { min: 1, max: 3650 },
+      comment: 'Retention window in days used by the scheduled activity-log prune. Entries older than this are removed; newer entries are kept. Default 14. LOGS_CLEARED audit entries are always preserved regardless of age.'
     },
     inactivityTimeoutMinutes: {
       type: DataTypes.INTEGER,

@@ -587,13 +587,19 @@ const scheduledTasksWorker = new Worker('scheduled-tasks', async (job) => {
       return retentionResult;
     
     case 'activity-log-purge': {
+      // Rolling-window prune: keep the last N days of activity logs (default
+      // 14). Previously this task truncated the entire activity log stream
+      // on the configured cadence, which meant a single missed screenshot
+      // could lose forensic evidence for months. `activityLogPurgeSchedule`
+      // still gates *when* the job runs; `activityLogRetentionDays` gates
+      // *how far back* we retain.
       const { Settings } = require('../models');
-      const { clearActivityLogs } = require('../services/activityLogger');
+      const { pruneActivityLogsOlderThan } = require('../services/activityLogger');
       const settings = await Settings.getSettings();
       const schedule = (settings.activityLogPurgeSchedule || 'off').toLowerCase();
       if (schedule === 'off') {
-        console.log('ℹ️  Activity log purge is disabled, skipping');
-        return { skipped: true, reason: 'Activity log purge is disabled' };
+        console.log('ℹ️  Activity log auto-prune is disabled, skipping');
+        return { skipped: true, reason: 'Auto-prune disabled' };
       }
       const now = new Date();
       const dayOfWeek = now.getDay();   // 0 = Sunday
@@ -605,24 +611,28 @@ const scheduledTasksWorker = new Worker('scheduled-tasks', async (job) => {
       else if (schedule === 'monthly') shouldRun = dayOfMonth === 1;
       else if (schedule === 'quarterly') shouldRun = dayOfMonth === 1 && [0, 3, 6, 9].includes(month);
       if (!shouldRun) {
-        console.log(`ℹ️  Activity log purge schedule (${schedule}) not due today, skipping`);
+        console.log(`ℹ️  Activity log prune schedule (${schedule}) not due today, skipping`);
         return { skipped: true, reason: 'Schedule not due today' };
       }
-      console.log(`🗑️  Running scheduled activity log purge (${schedule})...`);
-      const purgeResult = await clearActivityLogs(
-        'system',
-        'auto-purge@system',
-        `Scheduled auto-purge (${schedule})`,
-        'global_admin',
-        null,
-        'scheduled-job'
-      );
-      if (purgeResult.success) {
-        console.log(`✅ Activity log purge completed: ${purgeResult.count} cleared, ${purgeResult.preservedCount || 0} preserved`);
-        return { cleared: purgeResult.count, preserved: purgeResult.preservedCount || 0 };
+      const retentionDaysRaw = Number(settings.activityLogRetentionDays);
+      const retentionDays = Number.isFinite(retentionDaysRaw) && retentionDaysRaw >= 1 ? retentionDaysRaw : 14;
+      console.log(`🗑️  Running scheduled activity log prune (${schedule}, keeping last ${retentionDays} day${retentionDays === 1 ? '' : 's'})...`);
+      const pruneResult = await pruneActivityLogsOlderThan(retentionDays, {
+        userId: 'system',
+        userEmail: 'auto-purge@system',
+        userRole: 'global_admin',
+        userAgent: `scheduled-job (${schedule})`
+      });
+      if (pruneResult.success) {
+        console.log(`✅ Activity log prune completed: ${pruneResult.deleted || 0} deleted, ${pruneResult.preserved || 0} preserved (kept ${retentionDays}d)`);
+        return {
+          deleted: pruneResult.deleted || 0,
+          preserved: pruneResult.preserved || 0,
+          retentionDays
+        };
       }
-      console.warn('⚠️  Activity log purge failed:', purgeResult.message);
-      return purgeResult;
+      console.warn('⚠️  Activity log prune failed:', pruneResult.message);
+      return pruneResult;
     }
     
     default:

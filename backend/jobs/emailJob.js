@@ -9,9 +9,81 @@
 
 const { UnrecoverableError } = require('bullmq');
 const Bottleneck = require('bottleneck');
+const { Op } = require('sequelize');
 const { sendEmail } = require('../utils/emailService');
-const { Settings, EmailLog } = require('../models');
+const { Settings, EmailLog, Invoice, CreditNote, Statement } = require('../models');
 const { logActivity, ActivityType } = require('../services/activityLogger');
+
+/**
+ * Persist the SMTP Message-ID + sentAt onto every document that this email
+ * covered, so the evidence lives on the document itself (survives an
+ * email_logs wipe, easy to hand to a recipient IT team).
+ *
+ * Metadata shape emitted by documentNotificationService:
+ *   - Individual notifications: { documentType: 'invoice'|'credit_note'|'statement', documentId }
+ *   - Summary notifications:    { invoiceIds: [], creditNoteIds: [], statementIds: [] }
+ *
+ * Each is a best-effort update: a failure here must never fail the email
+ * job (the email did send successfully) — we log and move on.
+ */
+async function backfillDocumentMessageId(metadata, messageId, sentAt, jobId) {
+  if (!metadata || !messageId) return;
+
+  const buckets = {
+    invoice: [],
+    credit_note: [],
+    statement: []
+  };
+
+  // Individual-notification shape
+  if (metadata.documentId && metadata.documentType) {
+    if (buckets[metadata.documentType]) {
+      buckets[metadata.documentType].push(metadata.documentId);
+    }
+  }
+  // Summary-notification shape
+  if (Array.isArray(metadata.invoiceIds)) buckets.invoice.push(...metadata.invoiceIds);
+  if (Array.isArray(metadata.creditNoteIds)) buckets.credit_note.push(...metadata.creditNoteIds);
+  if (Array.isArray(metadata.statementIds)) buckets.statement.push(...metadata.statementIds);
+
+  const dedupe = (ids) => [...new Set(ids.filter(Boolean))];
+  const invoiceIds = dedupe(buckets.invoice);
+  const creditNoteIds = dedupe(buckets.credit_note);
+  const statementIds = dedupe(buckets.statement);
+
+  const patch = { lastNotificationMessageId: messageId, lastNotifiedAt: sentAt };
+
+  const tasks = [];
+  if (invoiceIds.length > 0) {
+    tasks.push(Invoice.update(patch, { where: { id: { [Op.in]: invoiceIds } } })
+      .then(([n]) => ({ table: 'invoices', requested: invoiceIds.length, updated: n }))
+      .catch(err => ({ table: 'invoices', error: err.message })));
+  }
+  if (creditNoteIds.length > 0) {
+    tasks.push(CreditNote.update(patch, { where: { id: { [Op.in]: creditNoteIds } } })
+      .then(([n]) => ({ table: 'credit_notes', requested: creditNoteIds.length, updated: n }))
+      .catch(err => ({ table: 'credit_notes', error: err.message })));
+  }
+  if (statementIds.length > 0) {
+    tasks.push(Statement.update(patch, { where: { id: { [Op.in]: statementIds } } })
+      .then(([n]) => ({ table: 'statements', requested: statementIds.length, updated: n }))
+      .catch(err => ({ table: 'statements', error: err.message })));
+  }
+
+  if (tasks.length === 0) return;
+
+  try {
+    const results = await Promise.all(tasks);
+    const summary = results
+      .map(r => r.error ? `${r.table}=ERR(${r.error})` : `${r.table}=${r.updated}/${r.requested}`)
+      .join(' ');
+    console.log(`📎 [${jobId}] Persisted Message-ID to documents: ${summary}`);
+  } catch (err) {
+    // Should never hit because each promise catches internally, but guard
+    // anyway so the email job doesn't get re-queued over an audit write.
+    console.warn(`⚠️  [${jobId}] Failed to persist Message-ID onto documents:`, err.message);
+  }
+}
 const {
   EMAIL_RATE_MAX_OFFICE365,
   EMAIL_RATE_DURATION_MS_OFFICE365,
@@ -262,11 +334,12 @@ async function processEmailJob(job) {
     }, emailSettings));
     
     // Update EmailLog on success
+    const sentAt = new Date();
     if (emailLogId) {
       await EmailLog.update({
         status: 'SENT',
         messageId: result.messageId,
-        sentAt: new Date(),
+        sentAt,
         provider: result.provider,
         lastError: null,
         errorCode: null,
@@ -274,7 +347,17 @@ async function processEmailJob(job) {
         recipientCount: isBatch ? (recipients.length + (ccRecipients.length || 0)) : (ccRecipients.length > 0 ? 1 + ccRecipients.length : null)
       }, { where: { id: emailLogId } });
     }
-    
+
+    // Persist Message-ID directly onto every document this email covered
+    // (Invoice / CreditNote / Statement). This is intentionally best-effort:
+    // if the Message-ID header isn't present (some providers omit it on
+    // very first-attempt success) we still consider the email sent — the
+    // EmailLog row and activity log are the primary audit records, this
+    // just keeps a per-document copy for support workflows.
+    if (result.messageId) {
+      await backfillDocumentMessageId(metadata, result.messageId, sentAt, job.id);
+    }
+
     // Log to Activity Logs (visible at /activity-logs)
     const recipientDisplay = isBatch ? `${recipients.length} recipients` : recipients[0];
     await logActivity({

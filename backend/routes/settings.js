@@ -499,6 +499,22 @@ router.put('/', globalAdmin, async (req, res) => {
       }
       settings.activityLogPurgeSchedule = value;
     }
+
+    // Update activity log retention days (1–3650). Empty / null falls back
+    // to the model default of 14 so operators can never accidentally set
+    // the auto-prune to "keep 0 days" (which would nuke everything).
+    if (req.body.activityLogRetentionDays !== undefined) {
+      const raw = req.body.activityLogRetentionDays;
+      if (raw === '' || raw === null) {
+        settings.activityLogRetentionDays = 14;
+      } else {
+        const parsed = parseInt(raw, 10);
+        if (!Number.isFinite(parsed) || parsed < 1 || parsed > 3650) {
+          return res.status(400).json({ message: 'Activity log retention days must be an integer between 1 and 3650' });
+        }
+        settings.activityLogRetentionDays = parsed;
+      }
+    }
     
     // Update inactivity timeout (session logout after idle; null = disabled)
     if (req.body.inactivityTimeoutMinutes !== undefined) {
@@ -2412,29 +2428,84 @@ router.get('/email-logs', auth, globalAdmin, async (req, res) => {
 });
 
 /**
- * Clear all email logs
+ * Clear all email logs.
+ *
  * DELETE /api/settings/email-logs
+ *
+ * Gated by:
+ *   1. auth + globalAdmin middleware (existing).
+ *   2. A body confirmation token: `confirmation: "CLEAR"` and a non-empty
+ *      `reason`. Both are enforced server-side so an over-eager CLI/curl
+ *      caller can't wipe the audit trail with an empty body — this was the
+ *      most likely cause of the 4-month email history disappearing in one
+ *      shot when SMTP was reconfigured.
+ *   3. An audit ActivityType.LOGS_CLEARED entry is written with who cleared,
+ *      why, and how many rows went. That audit entry lives in Redis (activity
+ *      log stream) and is preserved by the retention prune, so even after
+ *      email_logs itself is truncated we retain a record of the truncation.
  */
 router.delete('/email-logs', auth, globalAdmin, async (req, res) => {
   try {
     const { EmailLog } = require('../models');
-    
-    // Delete all email logs
-    const deletedCount = await EmailLog.destroy({
+    const { logActivity, ActivityType } = require('../services/activityLogger');
+
+    const confirmation = typeof req.body?.confirmation === 'string' ? req.body.confirmation.trim() : '';
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+
+    if (confirmation !== 'CLEAR') {
+      return res.status(400).json({
+        success: false,
+        message: 'Confirmation phrase required. Send { "confirmation": "CLEAR", "reason": "…" } in the request body to acknowledge that this permanently wipes the entire email audit trail.'
+      });
+    }
+    if (!reason) {
+      return res.status(400).json({
+        success: false,
+        message: 'A non-empty reason is required for clearing email logs (audit).'
+      });
+    }
+
+    const beforeCount = await EmailLog.count();
+
+    await EmailLog.destroy({
       where: {},
-      truncate: true // Faster than delete for clearing all records
+      truncate: true // TRUNCATE is faster than a bulk DELETE for wipe-all.
     });
-    
+
+    // Persistent audit record — survives the email_logs wipe because it
+    // lives in the Redis activity log stream (protected by LOGS_CLEARED
+    // preservation rules in activityLogger).
+    try {
+      await logActivity({
+        type: ActivityType.LOGS_CLEARED,
+        userId: req.user?.id || null,
+        userEmail: req.user?.email || null,
+        userRole: req.user?.role || null,
+        action: `Cleared email_logs table (${beforeCount} row${beforeCount === 1 ? '' : 's'} deleted)`,
+        details: {
+          scope: 'email_logs',
+          rowsBefore: beforeCount,
+          reason,
+          isClearLog: true
+        },
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || null,
+        userAgent: req.headers['user-agent'] || null
+      });
+    } catch (auditErr) {
+      // Don't fail the response over an audit write; log server-side and continue.
+      console.error('Failed to write LOGS_CLEARED audit for email_logs wipe:', auditErr);
+    }
+
     res.json({
       success: true,
-      message: `Cleared ${deletedCount} email log entries`,
-      deletedCount
+      message: `Cleared ${beforeCount} email log entr${beforeCount === 1 ? 'y' : 'ies'}`,
+      deletedCount: beforeCount
     });
   } catch (error) {
     console.error('Error clearing email logs:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: error.message || 'Failed to clear email logs' 
+      message: error.message || 'Failed to clear email logs'
     });
   }
 });

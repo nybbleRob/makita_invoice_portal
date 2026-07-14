@@ -66,6 +66,15 @@ const Settings = () => {
   const [emailPerformance, setEmailPerformance] = useState(null);
   const [clearingLogs, setClearingLogs] = useState(false);
 
+  // "Clear Email Logs" confirmation modal state. This wipes the entire email
+  // audit trail (the email_logs table is TRUNCATE'd server-side), which is
+  // why we now gate it behind a modal that requires typing the exact phrase
+  // "CLEAR" plus a reason — a stray click here previously nuked ~4 months
+  // of send history in a single command.
+  const [showClearEmailLogsModal, setShowClearEmailLogsModal] = useState(false);
+  const [clearEmailLogsConfirmation, setClearEmailLogsConfirmation] = useState('');
+  const [clearEmailLogsReason, setClearEmailLogsReason] = useState('');
+
   useEffect(() => {
     if (user?.role === 'global_admin') {
       fetchSettings();
@@ -172,17 +181,33 @@ const Settings = () => {
     }
   };
 
-  // Clear email logs
+  // Clear email logs. The user must have typed the exact phrase "CLEAR"
+  // and provided a non-empty reason in the confirmation modal — both are
+  // also revalidated server-side; this UI check is just to fail fast and
+  // give an obvious message.
   const handleClearEmailLogs = async () => {
-    if (!window.confirm('Are you sure you want to clear all email logs? This action cannot be undone.')) {
+    if (clearEmailLogsConfirmation.trim() !== 'CLEAR') {
+      toast.error('Type CLEAR (in capitals) to confirm.');
       return;
     }
-    
+    if (!clearEmailLogsReason.trim()) {
+      toast.error('Please provide a reason for clearing the email audit trail.');
+      return;
+    }
+
     setClearingLogs(true);
     try {
-      await api.delete('/api/settings/email-logs');
-      toast.success('Email logs cleared successfully');
+      const response = await api.delete('/api/settings/email-logs', {
+        data: {
+          confirmation: 'CLEAR',
+          reason: clearEmailLogsReason.trim()
+        }
+      });
+      toast.success(response.data?.message || 'Email logs cleared successfully');
       setEmailLogs([]);
+      setShowClearEmailLogsModal(false);
+      setClearEmailLogsConfirmation('');
+      setClearEmailLogsReason('');
     } catch (error) {
       console.error('Error clearing email logs:', error);
       toast.error('Error clearing email logs: ' + (error.response?.data?.message || error.message));
@@ -1080,11 +1105,17 @@ const Settings = () => {
 
                       <div className="row g-3 mt-3">
                         <div className="col-12">
-                          <h3 className="mb-3">Activity Log Auto-Purge</h3>
-                          <p className="text-muted mb-3">Configure automatic clearing of activity logs at midnight. When due, all activity logs are cleared; one audit entry is kept.</p>
+                          <h3 className="mb-3">Activity Log Retention</h3>
+                          <p className="text-muted mb-3">
+                            The scheduled auto-prune keeps the last N days of activity logs
+                            (login events, email sends, file operations, etc.). It no longer
+                            wipes everything — only entries older than the retention window
+                            are removed. Manual "clear all" from the log viewer remains
+                            available.
+                          </p>
                         </div>
-                        <div className="col-md-6">
-                          <label className="form-label">Schedule</label>
+                        <div className="col-md-4">
+                          <label className="form-label">Prune schedule</label>
                           <select
                             className="form-select"
                             value={settings.activityLogPurgeSchedule || 'off'}
@@ -1096,7 +1127,33 @@ const Settings = () => {
                             <option value="monthly">Monthly</option>
                             <option value="quarterly">Every 3 months</option>
                           </select>
-                          <small className="form-hint">Runs at midnight. When due, all activity logs are cleared; one audit entry is kept. Off = no automatic purge.</small>
+                          <small className="form-hint">How often the prune job runs (at midnight). Off = no automatic prune.</small>
+                        </div>
+                        <div className="col-md-4">
+                          <label className="form-label">Retention (days)</label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            min="1"
+                            max="3650"
+                            value={settings.activityLogRetentionDays ?? 14}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              if (raw === '') {
+                                handleInputChange('activityLogRetentionDays', 14);
+                                return;
+                              }
+                              const parsed = parseInt(raw, 10);
+                              if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 3650) {
+                                handleInputChange('activityLogRetentionDays', parsed);
+                              }
+                            }}
+                            disabled={(settings.activityLogPurgeSchedule || 'off') === 'off'}
+                          />
+                          <small className="form-hint">
+                            Keep entries newer than this. Older entries are pruned when the
+                            job runs. Default: 14 days.
+                          </small>
                         </div>
                       </div>
                       
@@ -2795,8 +2852,13 @@ const Settings = () => {
                           <div className="card-actions">
                             <button
                               className="btn btn-outline-danger btn-sm"
-                              onClick={handleClearEmailLogs}
+                              onClick={() => {
+                                setClearEmailLogsConfirmation('');
+                                setClearEmailLogsReason('');
+                                setShowClearEmailLogsModal(true);
+                              }}
                               disabled={clearingLogs || emailLogs.length === 0}
+                              title="Wipes the entire email audit trail — requires typing CLEAR to confirm"
                             >
                               {clearingLogs ? (
                                 <>
@@ -3012,6 +3074,113 @@ const Settings = () => {
           </div>
         </div>
       </div>
+
+      {/* Clear Email Logs Confirmation Modal.
+          Wipes the entire email_logs table server-side. Requires typing CLEAR
+          verbatim and providing a reason — both are also enforced by the
+          backend, this UI is defence in depth. */}
+      {showClearEmailLogsModal && (
+        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} tabIndex="-1">
+          <div className="modal-dialog modal-lg">
+            <div className="modal-content">
+              <div className="modal-header bg-danger text-white">
+                <h5 className="modal-title">
+                  <i className="fas fa-exclamation-triangle me-2"></i>
+                  Clear Email Audit Trail
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => {
+                    setShowClearEmailLogsModal(false);
+                    setClearEmailLogsConfirmation('');
+                    setClearEmailLogsReason('');
+                  }}
+                  disabled={clearingLogs}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <div className="alert alert-danger">
+                  <strong>This permanently deletes every row in <code>email_logs</code>.</strong>{' '}
+                  You will lose all delivery status, SMTP Message-IDs, error
+                  history, and bounce diagnostics for every email the portal
+                  has ever sent. This cannot be undone.
+                </div>
+                <p className="mb-2">You almost certainly do not want this. Consider first:</p>
+                <ul className="mb-3">
+                  <li>Individual failed emails can be inspected and retried without wiping the whole table.</li>
+                  <li>Search/filter the log viewer above instead of clearing it.</li>
+                  <li>Customer support queries ("did we email invoice X?") rely on this data.</li>
+                </ul>
+                <div className="mb-3">
+                  <label className="form-label">
+                    <strong>Type <code>CLEAR</code> (in capitals) to confirm <span className="text-danger">*</span></strong>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="CLEAR"
+                    value={clearEmailLogsConfirmation}
+                    onChange={(e) => setClearEmailLogsConfirmation(e.target.value)}
+                    disabled={clearingLogs}
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">
+                    <strong>Reason <span className="text-danger">*</span></strong>
+                  </label>
+                  <textarea
+                    className="form-control"
+                    rows="3"
+                    placeholder="Why is this being cleared? Stored in the activity log for audit."
+                    value={clearEmailLogsReason}
+                    onChange={(e) => setClearEmailLogsReason(e.target.value)}
+                    disabled={clearingLogs}
+                  />
+                  <small className="form-hint">The reason is written to the activity log stream so we can trace who wiped the table and why after the fact.</small>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setShowClearEmailLogsModal(false);
+                    setClearEmailLogsConfirmation('');
+                    setClearEmailLogsReason('');
+                  }}
+                  disabled={clearingLogs}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={handleClearEmailLogs}
+                  disabled={
+                    clearingLogs ||
+                    clearEmailLogsConfirmation.trim() !== 'CLEAR' ||
+                    !clearEmailLogsReason.trim()
+                  }
+                >
+                  {clearingLogs ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Clearing...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-trash me-2"></i>
+                      Permanently Clear Email Logs
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Purge Documents Confirmation Modal */}
       {showPurgeDocumentsModal && (

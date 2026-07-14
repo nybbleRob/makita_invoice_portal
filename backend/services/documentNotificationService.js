@@ -485,6 +485,14 @@ async function queueBatchSummaryEmail(options) {
         creditNotes: creditNotes.length,
         statements: statements.length
       },
+      // Explicit per-type IDs so the email job can back-fill
+      // lastNotificationMessageId/lastNotifiedAt on every document included
+      // in the summary once the SMTP send succeeds. Without these, summary
+      // emails would leave the source documents with no persisted evidence
+      // of send.
+      invoiceIds: invoices.map(d => d.id).filter(Boolean),
+      creditNoteIds: creditNotes.map(d => d.id).filter(Boolean),
+      statementIds: statements.map(d => d.id).filter(Boolean),
       recipientCount: recipients.length
     }
   });
@@ -626,7 +634,13 @@ async function queueSummaryEmail(options) {
         invoices: invoices.length,
         creditNotes: creditNotes.length,
         statements: statements.length
-      }
+      },
+      // See queueBatchSummaryEmail — pass IDs through so the email job can
+      // back-fill lastNotificationMessageId/lastNotifiedAt on the underlying
+      // documents once the SMTP send succeeds.
+      invoiceIds: invoices.map(d => d.id).filter(Boolean),
+      creditNoteIds: creditNotes.map(d => d.id).filter(Boolean),
+      statementIds: statements.map(d => d.id).filter(Boolean)
     }
   });
   

@@ -536,6 +536,116 @@ async function clearActivityLogs(userId, userEmail, reason, userRole, ipAddress,
 }
 
 /**
+ * Prune activity logs older than a rolling window (used by the scheduled
+ * auto-prune job). This replaces the previous "wipe everything on a schedule"
+ * behaviour with a retention window: entries newer than `daysToKeep` are left
+ * alone, older ones are deleted.
+ *
+ * LOGS_CLEARED audit entries are still preserved regardless of age, matching
+ * the invariant enforced by `clearActivityLogs` — they are the only permanent
+ * record that a manual clear ever happened.
+ *
+ * @param {number} daysToKeep - How many days of history to retain (>= 1).
+ * @param {Object} [opts]
+ * @param {string} [opts.userId] - Actor for the audit trail (default 'system').
+ * @param {string} [opts.userEmail]
+ * @param {string} [opts.userRole]
+ * @param {string} [opts.ipAddress]
+ * @param {string} [opts.userAgent]
+ * @returns {Promise<{success: boolean, deleted?: number, preserved?: number, daysKept?: number, message?: string}>}
+ */
+async function pruneActivityLogsOlderThan(daysToKeep, opts = {}) {
+  try {
+    if (!redis) {
+      return { success: false, message: 'Redis not available' };
+    }
+
+    const days = Number(daysToKeep);
+    if (!Number.isFinite(days) || days < 1) {
+      return { success: false, message: `Invalid retention days: ${daysToKeep}` };
+    }
+
+    const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000;
+
+    // Sorted set score is Date.now() at insert time, so we can bound directly.
+    // Inclusive upper bound would remove logs written exactly on the cutoff
+    // ms; using `(cutoffMs` (exclusive) keeps the window strictly "older than".
+    const oldLogIds = await redis.zrangebyscore(ACTIVITY_LOG_INDEX, 0, `(${cutoffMs}`);
+    if (oldLogIds.length === 0) {
+      return { success: true, message: `No logs older than ${days} days`, deleted: 0, preserved: 0, daysKept: days };
+    }
+
+    const toDelete = [];
+    const toPreserve = [];
+    for (const logId of oldLogIds) {
+      try {
+        const logData = await redis.hgetall(`${ACTIVITY_LOG_KEY}:${logId}`);
+        if (logData && logData.type === ActivityType.LOGS_CLEARED) {
+          toPreserve.push(logId);
+        } else {
+          toDelete.push(logId);
+        }
+      } catch (err) {
+        // Can't classify — treat as deletable rather than accumulate zombies
+        toDelete.push(logId);
+      }
+    }
+
+    if (toDelete.length === 0) {
+      return { success: true, message: `Only LOGS_CLEARED entries were older than ${days} days; preserved`, deleted: 0, preserved: toPreserve.length, daysKept: days };
+    }
+
+    const pipeline = redis.pipeline();
+    toDelete.forEach(logId => {
+      pipeline.del(`${ACTIVITY_LOG_KEY}:${logId}`);
+      pipeline.zrem(ACTIVITY_LOG_INDEX, logId);
+    });
+    await pipeline.exec();
+
+    // Reconcile counter with actual index cardinality (safer than arithmetic
+    // on the pre-existing counter which can drift if writers race with us).
+    const remaining = await redis.zcard(ACTIVITY_LOG_INDEX);
+    await redis.set(ACTIVITY_LOG_COUNT, remaining.toString());
+
+    // Write an audit entry so operators can see the prune happened in the
+    // logs UI. Tagged with isRetentionPrune so it's distinguishable from a
+    // manual "Clear all" event.
+    try {
+      await logActivity({
+        type: ActivityType.LOGS_CLEARED,
+        userId: opts.userId || 'system',
+        userEmail: opts.userEmail || 'auto-purge@system',
+        userRole: opts.userRole || 'global_admin',
+        action: `Auto-pruned ${toDelete.length} activity log${toDelete.length === 1 ? '' : 's'} older than ${days} days (${toPreserve.length} LOGS_CLEARED audit entr${toPreserve.length === 1 ? 'y' : 'ies'} preserved)`,
+        details: {
+          deleted: toDelete.length,
+          preserved: toPreserve.length,
+          daysKept: days,
+          cutoffMs,
+          cutoffIso: new Date(cutoffMs).toISOString(),
+          isRetentionPrune: true,
+          isClearLog: true
+        },
+        companyId: null,
+        companyName: null,
+        ipAddress: opts.ipAddress || null,
+        userAgent: opts.userAgent || 'scheduled-job'
+      });
+    } catch (auditErr) {
+      // Don't fail the prune just because the audit write blew up.
+      logger.warn('Activity log retention prune audit entry failed:', auditErr.message);
+    }
+
+    logger.info(`Activity log retention prune: kept last ${days} days, deleted ${toDelete.length}, preserved ${toPreserve.length}.`);
+    return { success: true, deleted: toDelete.length, preserved: toPreserve.length, daysKept: days };
+  } catch (error) {
+    console.error('Error pruning activity logs:', error);
+    logger.error('Error pruning activity logs:', error);
+    return { success: false, message: error.message };
+  }
+}
+
+/**
  * Purge ALL activity logs including protected ones (DANGEROUS - only for Global Admin)
  * This completely wipes all logs with NO record preserved
  */
@@ -724,6 +834,7 @@ module.exports = {
   logActivity,
   getActivityLogs,
   clearActivityLogs,
+  pruneActivityLogsOlderThan,
   purgeAllActivityLogs,
   deleteActivityLog,
   getActivityStats,
