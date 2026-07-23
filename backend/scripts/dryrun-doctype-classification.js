@@ -37,21 +37,35 @@ function classifyOld(textUpper) {
   return 'invoice';
 }
 
-// ---- NEW logic: earliest match wins, top of document first ----
+// ---- NEW logic: the document's own reference label, then headings ----
 // Keep in step with jobs/invoiceImport.js
+//   invoice     " INVOICE NO.80007908 PAGE NO.1 INVOICE TO:..."
+//   credit note " CREDIT NO.90103648 PAGE NO.1 INVOICE TO:..."
+// Both carry "INVOICE TO:", so the bare word INVOICE cannot discriminate.
 const HEADER_WINDOW = 400;
-const TYPE_PATTERNS = [
+const IDENTIFIER_PATTERNS = [
+  { type: 'credit_note', re: /\bCREDIT\s*(?:NOTE\s*)?NO\b/ },
+  { type: 'invoice',     re: /\bINVOICE\s*NO\b/ },
+  { type: 'statement',   re: /\bSTATEMENT\b/ },
+];
+const HEADING_PATTERNS = [
   { type: 'credit_note', re: /\bCREDIT\s*NOTE\b/ },
   { type: 'statement',   re: /\bSTATEMENT\b/ },
   { type: 'invoice',     re: /\bINVOICE\b/ },
 ];
-function classify(text) {
+function earliest(text, patterns) {
   let best = null;
-  for (const { type, re } of TYPE_PATTERNS) {
+  for (const { type, re } of patterns) {
     const m = re.exec(text);
     if (m && (!best || m.index < best.at)) best = { type, at: m.index };
   }
-  if (best) return best.type;
+  return best ? best.type : null;
+}
+function classify(text) {
+  const byIdentifier = earliest(text, IDENTIFIER_PATTERNS);
+  if (byIdentifier) return byIdentifier;
+  const byHeading = earliest(text, HEADING_PATTERNS);
+  if (byHeading) return byHeading;
   if (/\bCREDIT\b/.test(text) && /\bCN\b/.test(text)) return 'credit_note';
   return null;
 }

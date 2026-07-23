@@ -374,23 +374,38 @@ async function processInvoiceImport(job) {
             const HEADER_WINDOW = 400;
             const headerUpper = textUpper.slice(0, HEADER_WINDOW);
 
-            // Whichever indicator appears EARLIEST wins. A document prints its
-            // own heading before it can reference any other document, so
-            // position is a far better signal than keyword "specificity" - the
-            // old order made "CREDIT NOTE" beat "INVOICE" no matter where each
-            // appeared, so one mention in the small print decided the type.
-            const TYPE_PATTERNS = [
+            // Prefer the document's OWN reference label, which is printed top
+            // left/right before anything else. Makita credit notes read
+            // "CREDIT NO.90103648" and reuse the invoice layout's "INVOICE TO:"
+            // label, so matching on the bare word INVOICE misfiles every credit
+            // note; and they only spell out "CREDIT NOTE" further down the page,
+            // so matching that anywhere misfiles invoices that cite one.
+            // Note \bNO\b will not match inside "NOTE", so "CONTRA CREDIT NOTE
+            // 90106524" in an invoice body is not read as a credit reference.
+            const IDENTIFIER_PATTERNS = [
+              { type: 'credit_note', re: /\bCREDIT\s*(?:NOTE\s*)?NO\b/ },
+              { type: 'invoice',     re: /\bINVOICE\s*NO\b/ },
+              { type: 'statement',   re: /\bSTATEMENT\b/ },
+            ];
+            // Fallback for documents that carry no recognisable reference label
+            const HEADING_PATTERNS = [
               { type: 'credit_note', re: /\bCREDIT\s*NOTE\b/ },
               { type: 'statement',   re: /\bSTATEMENT\b/ },
               { type: 'invoice',     re: /\bINVOICE\b/ },
             ];
-            const classify = (text) => {
+            const earliest = (text, patterns) => {
               let best = null;
-              for (const { type, re } of TYPE_PATTERNS) {
+              for (const { type, re } of patterns) {
                 const m = re.exec(text);
                 if (m && (!best || m.index < best.at)) best = { type, at: m.index };
               }
-              if (best) return best.type;
+              return best ? best.type : null;
+            };
+            const classify = (text) => {
+              const byIdentifier = earliest(text, IDENTIFIER_PATTERNS);
+              if (byIdentifier) return byIdentifier;
+              const byHeading = earliest(text, HEADING_PATTERNS);
+              if (byHeading) return byHeading;
               // Last resort, as before: a bare "CREDIT" alongside a CN reference
               if (/\bCREDIT\b/.test(text) && /\bCN\b/.test(text)) return 'credit_note';
               return null;
