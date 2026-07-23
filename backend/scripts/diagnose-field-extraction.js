@@ -44,9 +44,9 @@ async function findFile() {
   if (invoiceRef) {
     const invoice = await Invoice.findOne({ where: { invoiceNumber: invoiceRef } });
     if (!invoice) throw new Error(`No invoice found with number "${invoiceRef}"`);
-    console.log(`Invoice ${invoice.id} -> fileId=${invoice.fileId || '(none)'}`);
-    if (invoice.fileId) return File.findByPk(invoice.fileId);
-    // Placeholder numbers embed the file-hash prefix: INV-<ms>-<hash8>
+    console.log(`Invoice ${invoice.id}`);
+    // Invoice has no fileId column - placeholder numbers embed the file-hash
+    // prefix instead: INV-<ms>-<hash8>
     const m = /^INV-\d+-([0-9a-f]{8})$/i.exec(invoiceRef);
     if (m) {
       console.log(`Falling back to hash prefix from placeholder: ${m[1]}`);
