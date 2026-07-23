@@ -473,23 +473,10 @@ const UserManagement = () => {
     return labels[type] || type || 'N/A';
   };
   
-  // Load user's assigned companies when editing
-  useEffect(() => {
-    if (selectedUser && selectedUser.companies) {
-      setFormData(prev => ({
-        ...prev,
-        companyIds: selectedUser.companies.map(c => c.id),
-        allCompanies: selectedUser.allCompanies || false,
-        sendInvoiceEmail: selectedUser.sendInvoiceEmail || false,
-        sendInvoiceAttachment: selectedUser.sendInvoiceAttachment || false,
-        sendStatementEmail: selectedUser.sendStatementEmail || false,
-        sendStatementPdfAttachment: selectedUser.sendStatementPdfAttachment || false,
-        sendStatementXlsAttachment: selectedUser.sendStatementXlsAttachment || false,
-        sendEmailAsSummary: selectedUser.sendEmailAsSummary || false,
-        sendImportSummaryReport: selectedUser.sendImportSummaryReport || false
-      }));
-    }
-  }, [selectedUser]);
+  // NOTE: the form is populated by openEditModal() alone. Do not re-derive it from
+  // selectedUser in an effect - the users list sends a placeholder companies array
+  // (see the companyCount subquery in GET /api/users), so mapping it yields null ids,
+  // and any setSelectedUser() call from inside the open modal would clobber the form.
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
