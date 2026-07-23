@@ -58,7 +58,9 @@ const UserView = () => {
       if (response.data.companies) {
         setAssignedCompanies(response.data.companies);
       } else {
-        const companiesResponse = await api.get(`/api/users/${id}/companies`);
+        const companiesResponse = await api.get(`/api/users/${id}/companies`, {
+          params: { limit: 'all' }
+        });
         setAssignedCompanies(companiesResponse.data.companies || []);
       }
     } catch (error) {

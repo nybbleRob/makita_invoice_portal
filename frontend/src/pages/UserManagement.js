@@ -883,9 +883,13 @@ const UserManagement = () => {
       companyIds: []
     });
     
-    // Fetch user's assigned companies (for ALL roles)
+    // Fetch user's assigned companies (for ALL roles).
+    // limit: 'all' is required - the default page size would truncate the assignment
+    // set, understating the count and dropping the rest on save.
     try {
-      const response = await api.get(`/api/users/${user.id}/companies`);
+      const response = await api.get(`/api/users/${user.id}/companies`, {
+        params: { limit: 'all' }
+      });
       const assignedCompanyList = response.data.companies || [];
       setFormData(prev => ({
         ...prev,

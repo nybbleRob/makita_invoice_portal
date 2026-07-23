@@ -2660,10 +2660,13 @@ router.get('/:id/companies', canManageUsers, async (req, res) => {
     }
     
     const { page = 1, limit = 50 } = req.query;
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
-    const offset = (pageNum - 1) * limitNum;
-    
+    // limit=all returns every assigned company (used by the edit-user modal, which
+    // must load the full assignment set rather than just the first page)
+    const fetchAll = limit === 'all' || parseInt(limit) === 0;
+    const pageNum = fetchAll ? 1 : (parseInt(page) || 1);
+    const limitNum = fetchAll ? 0 : (parseInt(limit) || 50);
+    const offset = fetchAll ? 0 : (pageNum - 1) * limitNum;
+
     // First check if user exists and get allCompanies status
     const user = await User.findByPk(userId, {
       attributes: ['id', 'name', 'role', 'allCompanies']
@@ -2694,17 +2697,17 @@ router.get('/:id/companies', canManageUsers, async (req, res) => {
     
     // Apply pagination to companies array (since Sequelize doesn't paginate through associations easily)
     const allCompanies = userWithCompanies.companies || [];
-    const paginatedCompanies = allCompanies.slice(offset, offset + limitNum);
-    
+    const paginatedCompanies = fetchAll ? allCompanies : allCompanies.slice(offset, offset + limitNum);
+
     res.json({
       allCompanies: user.allCompanies,
       companies: paginatedCompanies,
       total: allCompanies.length,
       pagination: {
         page: pageNum,
-        limit: limitNum,
+        limit: fetchAll ? allCompanies.length : limitNum,
         total: allCompanies.length,
-        pages: Math.ceil(allCompanies.length / limitNum)
+        pages: fetchAll ? 1 : Math.ceil(allCompanies.length / limitNum)
       }
     });
   } catch (error) {
