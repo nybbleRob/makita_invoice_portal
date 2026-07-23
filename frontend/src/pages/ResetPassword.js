@@ -58,11 +58,20 @@ const ResetPassword = () => {
       return;
     }
 
-    if (password.length < 6) {
-      errors.password = 'Password must be at least 6 characters';
+    // Must mirror the rules enforced by POST /api/auth/reset-password,
+    // otherwise the form accepts a password the server then rejects.
+    const passwordError =
+      password.length < 8 ? 'Password must be at least 8 characters'
+      : !/[A-Z]/.test(password) ? 'Password must contain at least one uppercase letter'
+      : !/[a-z]/.test(password) ? 'Password must contain at least one lowercase letter'
+      : !/[0-9]/.test(password) ? 'Password must contain at least one number'
+      : null;
+
+    if (passwordError) {
+      errors.password = passwordError;
       setFieldErrors(errors);
-      setError('Password must be at least 6 characters');
-      toast.error('Password must be at least 6 characters');
+      setError(passwordError);
+      toast.error(passwordError);
       return;
     }
 

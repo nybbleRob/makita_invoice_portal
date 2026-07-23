@@ -6,6 +6,7 @@ const { Op } = Sequelize;
 const auth = require('../middleware/auth');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const recaptchaMiddleware = require('../middleware/recaptcha');
+const { rateLimiters } = require('../middleware/rateLimiter');
 const router = express.Router();
 
 // Register
@@ -587,7 +588,8 @@ router.get('/validate-reset-token', async (req, res) => {
 });
 
 // Reset password
-router.post('/reset-password', async (req, res) => {
+// Limited per reset token rather than per IP - see rateLimiters.passwordResetSubmit.
+router.post('/reset-password', rateLimiters.passwordResetSubmit, async (req, res) => {
   try {
     const { token, password } = req.body;
 

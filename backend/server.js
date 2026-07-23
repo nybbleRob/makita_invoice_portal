@@ -303,6 +303,19 @@ This is an automated notification from ${settings.siteTitle || settings.companyN
 
 const app = express();
 
+// Trust the reverse proxy (nginx/Cloudflare) sitting in front of PM2 so that
+// req.ip is the real client address rather than the proxy's. Without this every
+// visitor collapses into a single rate-limit bucket and locks each other out.
+// Set TRUST_PROXY to the number of proxy hops (usually 1), an IP/CIDR list, or
+// leave it unset when Node is exposed directly.
+if (process.env.TRUST_PROXY) {
+  const trustProxy = /^\d+$/.test(process.env.TRUST_PROXY)
+    ? parseInt(process.env.TRUST_PROXY, 10)
+    : process.env.TRUST_PROXY;
+  app.set('trust proxy', trustProxy);
+  console.log(`✅ trust proxy enabled: ${trustProxy}`);
+}
+
 // Security middleware - Helmet for comprehensive security headers
 app.use(helmet({
   contentSecurityPolicy: {
