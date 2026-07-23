@@ -364,41 +364,52 @@ async function processInvoiceImport(job) {
           const quickText = quickTextResult.text || quickTextResult;
           if (quickText && quickText.length > 0) {
             const textUpper = quickText.toUpperCase();
-            
-            // Most specific first: "CREDIT NOTE" (two words together)
-            if (textUpper.includes('CREDIT NOTE') || textUpper.includes('CREDITNOTE')) {
-              quickDetectedDocType = 'credit_note';
-              console.log(`📄 [Import ${importId}] Detected as CREDIT NOTE (found "CREDIT NOTE" in text)`);
-            }
-            // Check for statement indicators
-            else if (textUpper.includes('STATEMENT') || textUpper.includes('ACCOUNT STATEMENT') || textUpper.includes('STATEMENT OF ACCOUNT')) {
-              quickDetectedDocType = 'statement';
-              console.log(`📄 [Import ${importId}] Detected as STATEMENT (found "STATEMENT" in text)`);
-            }
-            // Check for invoice indicators (explicit check)
-            else if (textUpper.includes('INVOICE') || textUpper.includes('TAX INVOICE') || textUpper.includes('INVOICE NUMBER')) {
-              quickDetectedDocType = 'invoice';
-              console.log(`📄 [Import ${importId}] Detected as INVOICE (found "INVOICE" in text)`);
-            }
-            // Less specific: standalone "CREDIT" (but only if not already detected as invoice)
-            // This is less reliable, so we check it after invoice
-            else if (textUpper.includes('CREDIT') && !textUpper.includes('INVOICE')) {
-              // Additional check: if it has "CN" or "CREDIT NOTE" pattern
-              if (textUpper.includes(' CN ') || textUpper.match(/\bCN\b/) || textUpper.includes('CREDIT NOTE')) {
-                quickDetectedDocType = 'credit_note';
-                console.log(`📄 [Import ${importId}] Detected as CREDIT NOTE (found "CREDIT" with CN pattern)`);
+
+            // Decide the type from the TOP of the document only. The heading is
+            // printed there, whereas references to OTHER documents live down in
+            // the line items - an invoice reading "CONTRA CREDIT NOTE 90106524"
+            // against a part was classified as a credit note, which loaded the
+            // credit-note template and filed its number under creditNumber, so
+            // invoice creation found no invoiceNumber and minted a placeholder.
+            const HEADER_WINDOW = 400;
+            const headerUpper = textUpper.slice(0, HEADER_WINDOW);
+
+            // Whichever indicator appears EARLIEST wins. A document prints its
+            // own heading before it can reference any other document, so
+            // position is a far better signal than keyword "specificity" - the
+            // old order made "CREDIT NOTE" beat "INVOICE" no matter where each
+            // appeared, so one mention in the small print decided the type.
+            const TYPE_PATTERNS = [
+              { type: 'credit_note', re: /\bCREDIT\s*NOTE\b/ },
+              { type: 'statement',   re: /\bSTATEMENT\b/ },
+              { type: 'invoice',     re: /\bINVOICE\b/ },
+            ];
+            const classify = (text) => {
+              let best = null;
+              for (const { type, re } of TYPE_PATTERNS) {
+                const m = re.exec(text);
+                if (m && (!best || m.index < best.at)) best = { type, at: m.index };
+              }
+              if (best) return best.type;
+              // Last resort, as before: a bare "CREDIT" alongside a CN reference
+              if (/\bCREDIT\b/.test(text) && /\bCN\b/.test(text)) return 'credit_note';
+              return null;
+            };
+
+            quickDetectedDocType = classify(headerUpper);
+            if (quickDetectedDocType) {
+              console.log(`📄 [Import ${importId}] Detected as ${quickDetectedDocType.toUpperCase()} from document heading`);
+            } else {
+              // Nothing conclusive up top - fall back to the whole page as before
+              quickDetectedDocType = classify(textUpper);
+              if (quickDetectedDocType) {
+                console.log(`📄 [Import ${importId}] No indicator in heading - detected as ${quickDetectedDocType.toUpperCase()} from full text`);
               } else {
-                // Ambiguous - default to invoice (most common)
                 quickDetectedDocType = 'invoice';
-                console.log(`📄 [Import ${importId}] Ambiguous detection (found "CREDIT" but no clear indicator) - defaulting to INVOICE`);
+                console.log(`📄 [Import ${importId}] No clear document type indicator found - defaulting to INVOICE`);
               }
             }
-            // Default to invoice (most common document type)
-            else {
-              quickDetectedDocType = 'invoice';
-              console.log(`📄 [Import ${importId}] No clear document type indicator found - defaulting to INVOICE`);
-            }
-            
+
             console.log(`📄 [Import ${importId}] Final detected document type: ${quickDetectedDocType} (from quick text scan)`);
           }
         } catch (detectError) {
@@ -477,6 +488,42 @@ async function processInvoiceImport(job) {
           // Warn if document type mismatch
           if (quickDetectedDocType && template.templateType !== quickDetectedDocType) {
             console.warn(`⚠️  [Import ${importId}] Document type mismatch: Detected ${quickDetectedDocType} but using ${template.templateType} template`);
+          }
+
+          // SELF-CORRECTION: the template was chosen from a keyword scan of the
+          // raw text, which is a guess. The template's Document Type zone reads
+          // the heading actually printed on the page, which is authoritative -
+          // but it is only available AFTER parsing. If the two disagree we
+          // parsed with the wrong field mappings, so re-parse with the right
+          // template rather than carrying on and silently dropping fields whose
+          // names differ between types (invoiceNumber vs creditNumber).
+          const canonicalDocType = (raw) => {
+            if (!raw || typeof raw !== 'string') return null;
+            const v = raw.toUpperCase();
+            if (v.includes('CREDIT NOTE') || v.includes('CREDITNOTE') || v.includes('CREDIT_NOTE')) return 'credit_note';
+            if (v.includes('STATEMENT')) return 'statement';
+            if (v.includes('INVOICE')) return 'invoice';
+            return null;
+          };
+
+          const zoneDocType = canonicalDocType(parsedData?.documentType);
+          if (zoneDocType && zoneDocType !== template.templateType) {
+            console.warn(`⚠️  [Import ${importId}] TEMPLATE CORRECTION: parsed with the "${template.templateType}" template, but the document's Document Type field reads "${zoneDocType}".`);
+
+            let correctedTemplate = await Template.findDefaultTemplate('pdf', zoneDocType);
+            if (!correctedTemplate || correctedTemplate.templateType !== zoneDocType) {
+              correctedTemplate = await Template.findTemplateByFileType('pdf', zoneDocType);
+            }
+
+            if (correctedTemplate && correctedTemplate.templateType === zoneDocType && correctedTemplate.id !== template.id) {
+              template = correctedTemplate;
+              parsedData = await Template.extractFieldsFromCoordinates(fileBuffer, template);
+              processingMethod = `local_coordinates_${template.code}_corrected`;
+              quickDetectedDocType = zoneDocType;
+              console.log(`✅ [Import ${importId}] Re-parsed with "${template.name}" (${template.templateType}). Fields: ${Object.keys(parsedData).filter(k => k !== 'templateId' && k !== 'templateName' && k !== 'fieldLabels').length}`);
+            } else {
+              console.error(`❌ [Import ${importId}] No usable "${zoneDocType}" template available to re-parse with - keeping the original result. Fields named differently between types will be missing.`);
+            }
           }
         } else if (isExcel) {
           console.log(`📊 [Import ${importId}] Extracting from Excel using template: ${template.name}`);
