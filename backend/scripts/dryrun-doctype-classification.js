@@ -59,10 +59,30 @@ function classifyNew(textUpper) {
   return classify(textUpper.slice(0, HEADER_WINDOW)) || classify(textUpper) || 'invoice';
 }
 
+// Recurse - documents are filed under <type>/<year>/<month>/<day>/, so a
+// non-recursive read of the type folder finds nothing at all.
 function collect(p) {
   const st = fs.statSync(p);
   if (st.isFile()) return [p];
-  return fs.readdirSync(p).filter(f => f.toLowerCase().endsWith('.pdf')).map(f => path.join(p, f)).sort();
+  const out = [];
+  for (const entry of fs.readdirSync(p, { withFileTypes: true })) {
+    const full = path.join(p, entry.name);
+    if (entry.isDirectory()) out.push(...collect(full));
+    else if (entry.name.toLowerCase().endsWith('.pdf')) out.push(full);
+  }
+  return out.sort();
+}
+
+// pdf.js prints font warnings ("TT: undefined function: 32") per file, which
+// buries the actual result. Silence them around extraction only.
+async function quietly(fn) {
+  const { log, warn, error } = console;
+  console.log = console.warn = console.error = () => {};
+  try {
+    return await fn();
+  } finally {
+    console.log = log; console.warn = warn; console.error = error;
+  }
 }
 
 (async () => {
@@ -72,12 +92,13 @@ function collect(p) {
 
   const counts = { same: 0, changed: 0, error: 0 };
   const byTransition = new Map();
+  const byNewType = new Map();
   const changed = [];
 
   for (const file of files) {
     let textUpper;
     try {
-      const r = await extractTextFromPDF(file);
+      const r = await quietly(() => extractTextFromPDF(file));
       textUpper = ((r && r.text) || r || '').toUpperCase();
     } catch (e) {
       counts.error++;
@@ -92,6 +113,7 @@ function collect(p) {
 
     const oldType = classifyOld(textUpper);
     const newType = classifyNew(textUpper);
+    byNewType.set(newType, (byNewType.get(newType) || 0) + 1);
 
     if (oldType === newType) {
       counts.same++;
@@ -109,6 +131,13 @@ function collect(p) {
   console.log(`  unchanged: ${counts.same}`);
   console.log(`  changed:   ${counts.changed}`);
   console.log(`  errors:    ${counts.error}`);
+
+  console.log(`\n=== NEW CLASSIFIER SAYS ===`);
+  for (const [t, n] of [...byNewType.entries()].sort((a, b) => b[1] - a[1])) {
+    console.log(`  ${String(n).padStart(4)}  ${t}`);
+  }
+  console.log(`  (run this against a folder of known documents - everything in`);
+  console.log(`   creditnotes/ should say credit_note, and so on)`);
 
   if (byTransition.size) {
     console.log(`\n=== TRANSITIONS ===`);
