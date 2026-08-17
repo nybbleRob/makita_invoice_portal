@@ -1420,20 +1420,22 @@ router.post('/bulk-download', async (req, res) => {
       });
     }
     
-    // If only one file, download directly
-    if (creditNotesWithFiles.length === 1) {
-      const creditNote = creditNotesWithFiles[0];
-      const filePath = path.isAbsolute(creditNote.fileUrl) 
-        ? creditNote.fileUrl 
-        : path.join(__dirname, '..', creditNote.fileUrl);
-      const fileName = path.basename(filePath);
-      return res.download(filePath, fileName);
-    }
-    
-    // Multiple files - create zip
+    // Always stream a real zip, even for a single file. The frontend saves the
+    // response as credit-notes-<ts>.zip unconditionally, so the old single-file
+    // shortcut (returning the bare PDF) produced a .zip that was actually a PDF,
+    // which Windows rejects as an "invalid compressed folder".
     const archiver = require('archiver');
     const archive = archiver('zip', { zlib: { level: 9 } });
-    
+
+    // Surface archive problems instead of silently sending a truncated zip.
+    archive.on('warning', (err) => {
+      console.warn('Bulk download archive warning:', err);
+    });
+    archive.on('error', (err) => {
+      console.error('Bulk download archive error:', err);
+      res.destroy(err);
+    });
+
     res.attachment(`credit-notes-${Date.now()}.zip`);
     archive.pipe(res);
     
