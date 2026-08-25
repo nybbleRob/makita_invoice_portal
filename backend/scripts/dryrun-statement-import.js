@@ -460,7 +460,11 @@ async function classifyCustomer(customer, opts = {}) {
 
   const existing = await Statement.findOne({
     where: { companyId: company.id, periodEnd: stmtDate },
-    attributes: ['id', 'metadata', 'source', 'fileUrl', 'pdfFileUrl', 'xlsFileUrl', 'documentStatus']
+    // `source` is inside metadata JSONB, NOT a top-level column, so it
+    // must not appear in `attributes`. The classification below reads
+    // `existing.metadata.source` — that's the authoritative location per
+    // utils/statementImport.js (line 148: `existingMeta.source || 'manual_upload'`).
+    attributes: ['id', 'metadata', 'fileUrl', 'pdfFileUrl', 'xlsFileUrl', 'documentStatus']
   });
 
   const base = {
@@ -468,7 +472,7 @@ async function classifyCustomer(customer, opts = {}) {
     contentHash, statementDate: stmtDateIso,
     companyId: company.id, companyName: company.name,
     existingStatementId: existing ? existing.id : null,
-    existingSource: existing?.metadata?.source || existing?.source || null,
+    existingSource: existing?.metadata?.source || null,
     existingHash: existing?.metadata?.contentHash || null
   };
 
@@ -477,7 +481,7 @@ async function classifyCustomer(customer, opts = {}) {
   }
 
   const existingHash = existing.metadata?.contentHash || null;
-  const existingSource = existing.metadata?.source || existing.source || 'manual_upload';
+  const existingSource = existing.metadata?.source || 'manual_upload';
 
   if (existingHash && existingHash === contentHash) {
     return { ...base, classification: 'unchanged', wouldNotify: false, reason: 'contentHash matches existing row — will short-circuit before generation' };
