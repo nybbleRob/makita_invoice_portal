@@ -268,23 +268,35 @@ async function runEnvironmentPreflight() {
     push('Database reachable', false, e.message);
   }
 
-  // 2. Statements table shape (looks for the new columns from the recent migrations).
+  // 2. Statements table shape.
+  //
+  // NOTE: contentHash is NOT a top-level column. It lives inside the JSONB
+  // `metadata` column at `metadata.contentHash` and is populated by
+  // jobs/statementGenerate.js at write time. So the schema check only needs to
+  // confirm `metadata` (JSONB) and the two top-level Message-ID columns exist.
   try {
     const [rows] = await sequelize.query(`
-      SELECT column_name
+      SELECT column_name, data_type
       FROM information_schema.columns
       WHERE table_name = 'statements'
     `);
-    const cols = new Set(rows.map(r => r.column_name));
-    const need = ['contentHash', 'lastNotificationMessageId', 'lastNotifiedAt'];
-    const missing = need.filter(c => !cols.has(c) && !cols.has(c.toLowerCase()));
-    push(
-      'Statements schema: recent migrations applied',
-      missing.length === 0,
-      missing.length === 0
-        ? `all ${need.length} expected columns present`
-        : `MISSING: ${missing.join(', ')}. Run backend/scripts/add-notification-message-id.js and related migrations.`
-    );
+    const cols = new Map(rows.map(r => [r.column_name, r.data_type]));
+    const need = [
+      { name: 'metadata',                   type: /json/i, migration: '(part of original Statement model)' },
+      { name: 'lastNotificationMessageId',  type: null,    migration: 'backend/scripts/add-notification-message-id.js' },
+      { name: 'lastNotifiedAt',             type: null,    migration: 'backend/scripts/add-notification-message-id.js' }
+    ];
+    const missing = need.filter(n => !cols.has(n.name));
+    const wrongType = need.filter(n => !missing.includes(n) && n.type && !n.type.test(cols.get(n.name)));
+
+    if (missing.length === 0 && wrongType.length === 0) {
+      push('Statements schema: recent migrations applied', true, `metadata (JSONB) + Message-ID columns all present`);
+    } else {
+      const details = [];
+      for (const m of missing) details.push(`MISSING column "${m.name}" — ${m.migration}`);
+      for (const w of wrongType) details.push(`column "${w.name}" has type ${cols.get(w.name)}, expected JSON/JSONB`);
+      push('Statements schema: recent migrations applied', false, details.join('; '));
+    }
   } catch (e) {
     push('Statements schema check', false, e.message);
   }
@@ -332,14 +344,23 @@ async function runEnvironmentPreflight() {
       `provider=${provider}, isEmailEnabled=${emailOn}, testMode=${testMode}${testMode ? ' (redirects to ' + redirect + ')' : ''}`
     );
 
-    // Statement flag — is customer-facing UI turned on?
+    // Statement flag — is customer-facing UI turned on? This is a state
+    // report, not a pass/fail — the flag being OFF while the pipeline is
+    // being tested is the desired state, so we mark both branches as
+    // OK/INFO and let the operator judge from the value itself.
     try {
       const flagPath = path.resolve(__dirname, '..', '..', 'frontend', 'src', 'config', 'featureFlags.js');
       const flagSrc = fs.readFileSync(flagPath, 'utf8');
       const on = /STATEMENTS_ENABLED\s*=\s*true/.test(flagSrc);
-      push('Frontend STATEMENTS_ENABLED', on, on ? 'true — customers see Statements page' : 'false — Statements page is hidden');
+      push(
+        'Frontend STATEMENTS_ENABLED (informational)',
+        true,
+        on
+          ? 'true — customers CAN see the Statements page and any generated statements'
+          : 'false — Statements page is hidden from customers (expected during pilot)'
+      );
     } catch (_) {
-      push('Frontend STATEMENTS_ENABLED', false, 'could not read featureFlags.js');
+      push('Frontend STATEMENTS_ENABLED (informational)', false, 'could not read featureFlags.js');
     }
 
     // Import scanner enabled?
@@ -646,10 +667,29 @@ async function main() {
     console.error('Usage: node backend/scripts/dryrun-statement-import.js <path-to-txt> [options]');
     console.error('       node backend/scripts/dryrun-statement-import.js --check-env-only');
     console.error('       node backend/scripts/dryrun-statement-import.js --help');
-    process.exit(2);
+    await cleanShutdown(report);
+    return;
+  }
+
+  // Catch the "pasted the placeholder verbatim" case with a friendly message
+  // rather than an ENOENT crash. `/path/to/ACR11P.TXT` in the help text is
+  // documentation, not a real path.
+  if (args.inputPath.startsWith('/path/to/')) {
+    console.error(`\nThe path "${args.inputPath}" looks like the placeholder from --help, not a real file.`);
+    console.error(`Replace it with the actual path to your ACR11P export, e.g.:\n`);
+    console.error(`  node backend/scripts/dryrun-statement-import.js /var/www/makita-invportal/data/ftp-upload/ACR11P.TXT\n`);
+    await cleanShutdown(report);
+    return;
   }
 
   const abs = path.resolve(args.inputPath);
+  if (!fs.existsSync(abs)) {
+    console.error(`\nInput file not found: ${abs}`);
+    console.error(`Check the path, then re-run. If you don't have an ACR11P export to hand yet,`);
+    console.error(`the --check-env-only mode confirms the server is ready without one.\n`);
+    await cleanShutdown(report);
+    return;
+  }
   const stat = fs.statSync(abs);
   const buffer = fs.readFileSync(abs);
   const sha = crypto.createHash('sha256').update(buffer).digest('hex');
