@@ -302,12 +302,30 @@ async function runEnvironmentPreflight() {
   }
 
   // 3. ACR11P XLSX template on disk.
-  const templatePath = path.resolve(__dirname, '..', 'services', 'statementGenerator', 'templates', 'ACR11P.xlsx');
+  //
+  // Path resolution mirrors backend/services/statementGenerator/pdf.js:
+  //   1. STATEMENT_TEMPLATE_PATH env var if set
+  //   2. backend/assets/statement-template/ACR11P.xlsx (default)
+  //
+  // The template is deliberately NOT committed to the repo (branded asset:
+  // bank details, VAT/WEEE numbers), so it must be scp'd onto each server
+  // after deploy. Missing template = hard fail at generation time, so we
+  // surface it clearly here.
+  const defaultTemplatePath = path.resolve(__dirname, '..', 'assets', 'statement-template', 'ACR11P.xlsx');
+  const templatePath = process.env.STATEMENT_TEMPLATE_PATH || defaultTemplatePath;
   try {
     const st = fs.statSync(templatePath);
     push('ACR11P template on disk', st.size > 0, `${templatePath} (${st.size} bytes)`);
   } catch (e) {
-    push('ACR11P template on disk', false, `${templatePath} not readable: ${e.message}`);
+    push(
+      'ACR11P template on disk',
+      false,
+      `MISSING: ${templatePath}. ` +
+      `The template is not in git (branded/confidential asset). ` +
+      `scp it onto the server: ` +
+      `\`scp ACR11P.xlsx user@server:${templatePath}\`. ` +
+      `See backend/assets/statement-template/README.md.`
+    );
   }
 
   // 4. Python venv + Pillow + openpyxl.
