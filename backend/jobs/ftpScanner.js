@@ -5,8 +5,23 @@ const { fileImportQueue } = require('../config/queue');
 const { Op } = require('sequelize');
 
 /**
- * Scheduled job to scan FTP folders and queue files for import
- * This should be run periodically (e.g., every 5-15 minutes)
+ * ⚠️  MANUAL-ONLY, NOT ON A SCHEDULE.
+ *
+ * This scanner talks to a REMOTE FTP server (via utils/ftp.js) using the
+ * FTP credentials in settings.ftp.*. It is only fired by the admin
+ * button in routes/ftp.js ("Import from FTP now"); it is NOT registered
+ * in workers/scheduler.js and never runs automatically.
+ *
+ * The scheduled production ingestion path is:
+ *   jobs/localFolderScanner.js (scans a LOCAL directory — FTP_UPLOAD_PATH)
+ *     → invoiceImportQueue → jobs/invoiceImport.js
+ * That path handles PDF / XLSX invoices, credit notes, statements, AND
+ * ACR11P .TXT exports. Anything you add here needs to be replicated in
+ * localFolderScanner.js + invoiceImport.js to run in production.
+ *
+ * The old header ("every 5-15 minutes") was aspirational; the file was
+ * never actually scheduled. Leaving the code in place because the
+ * manual FTP button still uses it.
  */
 
 async function scanFTPFolders() {

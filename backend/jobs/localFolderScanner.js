@@ -29,8 +29,14 @@ const {
   getUnprocessedFilePath
 } = require('../config/storage');
 
-// Supported file extensions
-const SUPPORTED_EXTENSIONS = ['.pdf', '.xlsx', '.xls'];
+// Supported file extensions. `.txt` covers the ACR11P monthly statement
+// export from BPCS — a tab-delimited file per month covering every
+// customer's aging + invoice lines. Detection of the ACR11P shape and
+// fan-out to per-customer `statement-generate` jobs happens inside
+// `invoiceImport.js` (early branch), not here — the scanner stays a dumb
+// "queue every supported file" loop so all files go through the same
+// dedup + batch-tracking pipeline.
+const SUPPORTED_EXTENSIONS = ['.pdf', '.xlsx', '.xls', '.txt'];
 
 /**
  * Calculate file hash (SHA-256) for duplicate detection

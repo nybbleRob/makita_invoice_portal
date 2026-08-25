@@ -226,15 +226,22 @@ async function processFileImport(job) {
     const isExcel = ['.xlsx', '.xls'].includes(fileExtLower);
     const isText = ['.txt', '.csv'].includes(fileExtLower);
 
-    // Handle tab-delimited ACR11P statement exports (production monthly feed).
+    // Handle tab-delimited ACR11P statement exports.
     //
-    // BPCS drops one .TXT / .csv per month containing every customer's aging
-    // and invoice lines. We sniff the shape (26 tab-delimited fields on the
-    // first non-blank line) to filter out random text files a customer might
-    // accidentally drop in an FTP folder, then hand off to the shared ACR11P
-    // importer which parses, archives, and enqueues one `statement-generate`
-    // job per customer. Notifications fire normally (silent=false) — this
-    // is the counterpart to the always-silent admin sandbox route.
+    // ⚠️  NOT the primary production path.
+    //   fileImport.js is only reached via the manual "Import from FTP"
+    //   admin trigger (routes/ftp.js) which downloads from a remote FTP
+    //   server. The scheduled production feed for Makita is a local
+    //   watched folder scanned by jobs/localFolderScanner.js →
+    //   jobs/invoiceImport.js, and the ACR11P .TXT branch there is what
+    //   actually processes the monthly export in production.
+    //
+    // This block stays as a manual-path convenience: if a global admin
+    // fires the FTP puller against a remote server that also holds
+    // ACR11P exports, we sniff, hand off to the same shared importer,
+    // and get identical behaviour. Notifications fire normally
+    // (silent=false) — this is the counterpart to the always-silent
+    // admin sandbox route in routes/statements.js.
     if (isText) {
       console.log(`📝 Processing text file (candidate ACR11P export): ${fileName}`);
 

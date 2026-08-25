@@ -334,12 +334,339 @@ async function processInvoiceImport(job) {
     const fileExt = path.extname(fileName).toLowerCase();
     const isExcel = ['.xlsx', '.xls', '.csv'].includes(fileExt);
     const isPDF = fileExt === '.pdf';
-    
+    const isText = fileExt === '.txt';
+
+    // ─────────────────────────────────────────────────────────────────
+    // ACR11P statement export (.TXT) fast-path.
+    //
+    // A .TXT arriving via the local FTP scan folder is (in the Makita
+    // integration) the tab-delimited ACR11P monthly export from BPCS —
+    // one file per month covering every customer's aging + invoice
+    // lines. It's fundamentally a different shape from the single-doc
+    // invoice/CN/statement flow below: one .TXT fans out to N per-
+    // customer `statement-generate` jobs. We short-circuit here so
+    // template detection, PDF text extraction, and Company matching
+    // (all of which assume a single-doc PDF or Excel) never see it.
+    //
+    // Silent stays false here — this IS the production path that
+    // notifies customers with `sendStatementEmail = true`. The sandbox
+    // route (POST /api/statements/generate) still forces silent=true
+    // and calls runAcr11pImport directly, bypassing this queue.
+    // ─────────────────────────────────────────────────────────────────
+    if (isText) {
+      const {
+        looksLikeAcr11pExport,
+        runAcr11pImport
+      } = require('../services/statementGenerator/acr11pImporter');
+      const nowIso = new Date().toISOString().substring(0, 10);
+
+      // Single exit point for the whole .TXT branch. Whatever `acr11pResult`
+      // ends up as, we do: importStore.addResult → recordJobCompletion →
+      // activity log → return. This matches the invoice happy-path shape at
+      // ~line 1960 so the scanner's batch-notification tracking counts every
+      // job, not just the ones that hit the invoice-side return.
+      let acr11pResult = null;
+      let branchFile = null;
+      let branchActivity = { type: null, action: null, error: null };
+
+      // Duplicate .TXT: if a File row with this hash already exists AND
+      // that File was successfully parsed as an ACR11P export, skip.
+      // (isDuplicate + existingFile were populated by the block above.)
+      if (isDuplicate && existingFile?.metadata?.acr11pImportId) {
+        console.log(`⚠️  [Import ${importId}] ACR11P export already imported (fileHash match, File ID ${existingFile.id}, importId ${existingFile.metadata.acr11pImportId}). Skipping to avoid re-fanning-out customer jobs.`);
+
+        // Move source out of the watched folder so the next scan tick
+        // doesn't try to re-queue it. Scanner's own hash check catches
+        // hashes already in DB, but the file was picked up before that
+        // guard on this tick.
+        try {
+          const dupDir = path.join(FTP_UPLOAD_PATH, '..', 'unprocessed', 'duplicates');
+          ensureDir(dupDir);
+          const dupPath = path.join(dupDir, `${path.basename(fileName, fileExt)}-${Date.now()}${fileExt}`);
+          if (fs.existsSync(filePath) && filePath.startsWith(path.resolve(FTP_UPLOAD_PATH))) {
+            fs.renameSync(filePath, dupPath);
+          }
+        } catch (mvErr) {
+          console.warn(`⚠️  [Import ${importId}] Failed to move duplicate .TXT out of watch folder: ${mvErr.message}`);
+        }
+
+        acr11pResult = {
+          success: false,
+          fileName: originalName || fileName,
+          fileId: existingFile.id,
+          isDuplicate: true,
+          duplicateFileId: existingFile.id,
+          documentType: 'statement',
+          skipNotification: true, // Prevent batch dispatcher from double-notifying.
+          error: 'Duplicate ACR11P export (same file hash already imported)',
+          processingTime: Date.now() - startTime,
+          timestamp: new Date().toISOString()
+        };
+        branchFile = existingFile;
+        branchActivity = {
+          type: ActivityType.FILE_IMPORT,
+          action: `Skipped duplicate ACR11P export: ${originalName || fileName}`,
+          error: null
+        };
+      } else {
+        // Sniff the shape. If a .TXT arrives that isn't tab-delimited or
+        // doesn't have the ACR11P column count, we don't guess — we mark
+        // it unallocated for staff review rather than blow up mid-parse.
+        const textContent = fileBuffer.toString('utf8');
+        if (!looksLikeAcr11pExport(textContent)) {
+          console.log(`⚠️  [Import ${importId}] .TXT file does not look like an ACR11P export. Marking unallocated.`);
+
+          let unallocatedPath = filePath;
+          try {
+            const failedDir = path.join(UNPROCESSED_FAILED, nowIso);
+            ensureDir(failedDir);
+            unallocatedPath = path.join(failedDir, `${path.basename(fileName, fileExt)}-${Date.now()}${fileExt}`);
+            if (fs.existsSync(filePath) && filePath.startsWith(path.resolve(FTP_UPLOAD_PATH))) {
+              fs.renameSync(filePath, unallocatedPath);
+            }
+            fs.writeFileSync(
+              unallocatedPath + '.error.txt',
+              `Failed at: ${new Date().toISOString()}\nError: .TXT file does not match the ACR11P shape (expected >=25 tab-separated columns on the first non-blank line).\n`
+            );
+          } catch (mvErr) {
+            console.warn(`⚠️  [Import ${importId}] Failed to move unallocated .TXT: ${mvErr.message}`);
+          }
+
+          try {
+            branchFile = await File.create({
+              fileName: originalName || fileName,
+              fileHash,
+              filePath: unallocatedPath,
+              fileSize: fileBuffer.length,
+              fileType: 'unknown',
+              status: 'unallocated',
+              failureReason: 'unallocated',
+              processingMethod: 'local_folder_scan',
+              uploadedById: userId,
+              metadata: {
+                source: 'ftp_import',
+                importId,
+                originalFileName: originalName || fileName,
+                specificFailureReason: 'not_acr11p_shape',
+                detected: '.txt file, but tab-delimited shape did not match ACR11P (25+ columns expected on first non-blank line)'
+              }
+            });
+          } catch (createErr) {
+            console.error(`❌ [Import ${importId}] Failed to create File row for unallocated .TXT: ${createErr.message}`);
+          }
+
+          acr11pResult = {
+            success: false,
+            fileName: originalName || fileName,
+            fileId: branchFile?.id || null,
+            documentType: null,
+            error: 'File appears to be plain text but does not match the ACR11P statement-export shape',
+            processingTime: Date.now() - startTime,
+            timestamp: new Date().toISOString()
+          };
+          branchActivity = {
+            type: ActivityType.FILE_IMPORT_FAILED,
+            action: `Rejected non-ACR11P .TXT: ${originalName || fileName}`,
+            error: 'not_acr11p_shape'
+          };
+        } else {
+          // Real ACR11P — parse + archive + fan out.
+          await job.updateProgress(50);
+          try {
+            const imported = await runAcr11pImport({
+              buffer: fileBuffer,
+              fileHash,
+              originalFileName: originalName || fileName,
+              source: 'ftp_import_statement_generate',
+              silent: false, // Production path: opted-in customers WILL be notified.
+              forceOverwrite: false,
+              actor: {
+                userId: userId || null,
+                userEmail: 'ftp@system',
+                userRole: 'global_admin',
+                ipAddress: 'ftp',
+                userAgent: `local-folder-scan job ${job.id}`
+              },
+              extraJobData: {
+                uploadMethod: 'ftp',
+                ftpImportId: importId
+              }
+            });
+
+            // runAcr11pImport() already copied the .TXT to
+            // processed/statements/YYYY/MM/DD/ via getDatedFolder(). All we
+            // need to do now is remove the source from the watch folder so
+            // the next scan tick doesn't re-pick it up.
+            try {
+              if (fs.existsSync(filePath) && filePath.startsWith(path.resolve(FTP_UPLOAD_PATH))) {
+                fs.unlinkSync(filePath);
+              }
+            } catch (unlinkErr) {
+              console.warn(`⚠️  [Import ${importId}] Failed to remove source .TXT from watch folder after archive: ${unlinkErr.message}`);
+            }
+
+            try {
+              branchFile = await File.create({
+                fileName: originalName || fileName,
+                fileHash,
+                filePath: imported.archivePath || null,
+                fileSize: fileBuffer.length,
+                fileType: 'statement',
+                status: 'parsed',
+                processingMethod: 'acr11p_ftp_import',
+                uploadedById: userId,
+                metadata: {
+                  source: 'ftp_import',
+                  importId,
+                  originalFileName: originalName || fileName,
+                  acr11pImportId: imported.importId,
+                  statementDate: imported.statementDate,
+                  totalCustomers: imported.totalCustomers,
+                  parsedLines: imported.validation.parsedLines,
+                  malformedLinesCount: imported.validation.malformedLines.length,
+                  unknownTermsCount: imported.validation.unknownTerms.length,
+                  archivePath: imported.archivePath
+                }
+              });
+            } catch (createErr) {
+              console.error(`❌ [Import ${importId}] Failed to create File row for ACR11P export: ${createErr.message}`);
+            }
+
+            await job.updateProgress(100);
+
+            acr11pResult = {
+              success: true,
+              fileName: originalName || fileName,
+              fileId: branchFile?.id || null,
+              documentType: 'statement',
+              // ACR11P importer registers its OWN notification batch (one per
+              // customer) so this outer scanner-batch entry must NOT trigger
+              // a summary dispatch of its own.
+              skipNotification: true,
+              acr11pImportId: imported.importId,
+              totalCustomers: imported.totalCustomers,
+              statementDate: imported.statementDate,
+              processingTime: Date.now() - startTime,
+              timestamp: new Date().toISOString()
+            };
+            branchActivity = {
+              type: ActivityType.FILE_IMPORT,
+              action: `Imported ACR11P export: ${originalName || fileName} → ${imported.totalCustomers} customer(s), importId=${imported.importId}`,
+              error: null
+            };
+          } catch (acr11pErr) {
+            console.error(`❌ [Import ${importId}] ACR11P import failed: ${acr11pErr.message}`);
+
+            let failedPath = filePath;
+            try {
+              const failedDir = path.join(UNPROCESSED_FAILED, nowIso);
+              ensureDir(failedDir);
+              failedPath = path.join(failedDir, `${path.basename(fileName, fileExt)}-${Date.now()}${fileExt}`);
+              if (fs.existsSync(filePath) && filePath.startsWith(path.resolve(FTP_UPLOAD_PATH))) {
+                fs.renameSync(filePath, failedPath);
+              }
+              fs.writeFileSync(
+                failedPath + '.error.txt',
+                `Failed at: ${new Date().toISOString()}\nError: ${acr11pErr.message}\nCode: ${acr11pErr.code || 'unknown'}\n`
+              );
+            } catch (mvErr) {
+              console.warn(`⚠️  [Import ${importId}] Failed to move failed .TXT: ${mvErr.message}`);
+            }
+
+            try {
+              branchFile = await File.create({
+                fileName: originalName || fileName,
+                fileHash,
+                filePath: failedPath,
+                fileSize: fileBuffer.length,
+                fileType: 'statement',
+                status: 'failed',
+                failureReason: 'validation_error',
+                processingMethod: 'acr11p_ftp_import',
+                uploadedById: userId,
+                metadata: {
+                  source: 'ftp_import',
+                  importId,
+                  originalFileName: originalName || fileName,
+                  specificFailureReason: acr11pErr.code || acr11pErr.message,
+                  errorMessage: acr11pErr.message
+                }
+              });
+            } catch (createErr) {
+              console.error(`❌ [Import ${importId}] Failed to create File row for failed ACR11P: ${createErr.message}`);
+            }
+
+            acr11pResult = {
+              success: false,
+              fileName: originalName || fileName,
+              fileId: branchFile?.id || null,
+              documentType: 'statement',
+              error: acr11pErr.message,
+              errorCode: acr11pErr.code || null,
+              processingTime: Date.now() - startTime,
+              timestamp: new Date().toISOString()
+            };
+            branchActivity = {
+              type: ActivityType.FILE_IMPORT_FAILED,
+              action: `Failed ACR11P import: ${originalName || fileName}`,
+              error: acr11pErr.message
+            };
+          }
+        }
+      }
+
+      // Single-exit tail: mirror the invoice happy-path so batch tracking
+      // counts this job.
+      if (importId) {
+        try {
+          const importStore = require('../utils/importStore');
+          await importStore.addResult(importId, acr11pResult);
+        } catch (storeErr) {
+          console.warn(`⚠️  [Import ${importId}] Failed to add ACR11P result to import store: ${storeErr.message}`);
+        }
+        try {
+          const { recordJobCompletion } = require('../services/batchNotificationService');
+          await recordJobCompletion(importId, acr11pResult);
+        } catch (batchErr) {
+          console.warn(`⚠️  [Import ${importId}] Failed to record ACR11P batch completion: ${batchErr.message}`);
+        }
+      }
+      try {
+        let actorUser = null;
+        if (userId) actorUser = await User.findByPk(userId);
+        await logActivity({
+          type: branchActivity.type,
+          userId: userId || null,
+          userEmail: actorUser?.email || 'system',
+          userRole: actorUser?.role || 'system',
+          action: branchActivity.action,
+          details: {
+            importId,
+            fileName: originalName || fileName,
+            fileId: branchFile?.id,
+            documentType: acr11pResult.documentType,
+            acr11pImportId: acr11pResult.acr11pImportId,
+            totalCustomers: acr11pResult.totalCustomers,
+            statementDate: acr11pResult.statementDate,
+            error: branchActivity.error,
+            processingTime: acr11pResult.processingTime
+          },
+          companyId: null,
+          companyName: null,
+          ipAddress: null,
+          userAgent: 'system_queue'
+        });
+      } catch (logError) {
+        console.error(`⚠️  [Import ${importId}] Failed to log ACR11P activity:`, logError.message);
+      }
+      return acr11pResult;
+    }
+
     if (!isPDF && !isExcel) {
       const errorResult = {
         success: false,
         fileName: originalName || fileName,
-        error: 'Unsupported file type. Only PDF and Excel files are supported.',
+        error: 'Unsupported file type. Only PDF, Excel, and ACR11P .TXT exports are supported.',
         processingTime: Date.now() - startTime,
         timestamp: new Date().toISOString()
       };
