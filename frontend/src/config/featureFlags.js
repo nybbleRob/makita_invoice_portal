@@ -10,8 +10,16 @@
  */
 
 // Customer-facing Statements (list, view, edit, uploads, imports).
-// The Statement Generator Sandbox in Settings → Admin Tools also uses the
-// same backend but forces silent=true so it never emails customers — it
-// stays useful as a smoke-test surface for global_admin regardless of this
-// flag. The production feed is the FTP ACR11P .TXT importer.
-export const STATEMENTS_ENABLED = true;
+// The Statement Generator Sandbox in Settings → Admin Tools remains visible
+// to global_admin regardless of this flag; it calls the same backend routes
+// (which stay online) and is intended for internal test runs only.
+//
+// TEMPORARILY OFF: the FTP wiring for the ACR11P .TXT feed was landed in
+// the wrong scanner in commit dc51189 — the production scheduler runs
+// localFolderScanner (not ftpScanner) and that scanner's extension
+// whitelist filters out .TXT before it can reach the ACR11P importer.
+// Flag stays off until localFolderScanner is wired to route .TXT to the
+// ACR11P importer AND the sandbox has been re-run + PDF eyeballed end-to-end
+// on the current stack (last confirmed-good render pre-dates the Pillow
+// fix). See the go-live checklist for the exact re-enable sequence.
+export const STATEMENTS_ENABLED = false;
