@@ -657,130 +657,64 @@ router.post('/generate',
         console.warn('Duplicate check failed (non-fatal):', dupErr.message);
       }
 
-      const { parseExportText } = require('../services/statementGenerator/parse');
-      const text = buffer.toString('utf8');
-      let parsed;
+      // Delegate the parse+archive+enqueue steps to the shared importer so
+      // this route and the FTP importer stay bit-for-bit compatible. Silent
+      // stays hardcoded true here (sandbox invariant).
+      const { runAcr11pImport } = require('../services/statementGenerator/acr11pImporter');
+      let importResult;
       try {
-        parsed = parseExportText(text);
-      } catch (parseErr) {
-        return res.status(400).json({
-          success: false,
-          message: `Failed to parse export: ${parseErr.message}`,
-          error: parseErr.message
-        });
-      }
-
-      const customers = parsed.customerList;
-      if (customers.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Export contained no valid customer rows.',
-          error: 'No customers parsed',
-          validation: parsed.validation
-        });
-      }
-
-      const importId = uuidv4();
-      const statementDateIso = parsed.statementDate; // YYYY-MM-DD
-
-      await logActivity({
-        type: ActivityType.FILE_UPLOAD,
-        userId,
-        userEmail: req.user.email,
-        userRole: req.user.role,
-        action: (() => {
-          const suffix = forceOverwrite ? ' (forceOverwrite)' : '';
-          return `Admin sandbox: generated statements from ACR11P export${suffix} (${customers.length} customers, no notifications)`;
-        })(),
-        details: {
-          importId,
-          fileName: req.file.originalname,
+        importResult = await runAcr11pImport({
+          buffer,
           fileHash,
-          customerCount: customers.length,
-          statementDate: statementDateIso,
-          malformedLines: parsed.validation.malformedLines.length,
-          unknownTermsCount: parsed.validation.unknownTerms.length,
-          uploadMethod: 'admin-sandbox',
-          documentType: 'statement',
+          originalFileName: req.file.originalname,
           source: 'admin-sandbox-statement-generate',
-          forceOverwrite,
           silent,
-          clientRequestedSilent
-        },
-        companyId: null,
-        companyName: null,
-        ipAddress: req.ip || req.connection.remoteAddress,
-        userAgent: req.get('user-agent')
-      });
-
-      const importStore = require('../utils/importStore');
-      const { registerBatch } = require('../services/batchNotificationService');
-
-      // One "import session" tracking per-customer results, and one batch for
-      // notification fan-out. Both keyed by importId so the existing
-      // /import/:importId status + results endpoints work unchanged.
-      await importStore.createImport(importId, customers.length, [tempFilePath], userId);
-      try {
-        await registerBatch(importId, customers.length, {
-          userId,
-          userEmail: req.user.email,
-          source: 'admin-sandbox-statement-generate'
-        });
-      } catch (batchError) {
-        console.warn('Failed to register batch:', batchError.message);
-      }
-
-      // Move the source TXT to processed/statements/YYYY/MM/DD so per-customer
-      // jobs all reference the same archived export, not the temp file (which
-      // would be tidied up before the slowest job finishes).
-      const { PROCESSED_STATEMENTS, getDatedFolder } = require('../config/storage');
-      const archiveDate = statementDateIso ? new Date(statementDateIso) : new Date();
-      const archiveDir = getDatedFolder(PROCESSED_STATEMENTS, archiveDate);
-      const archiveName = `${path.basename(req.file.originalname, path.extname(req.file.originalname))}_${importId}${path.extname(req.file.originalname)}`;
-      const archivePath = path.join(archiveDir, archiveName);
-      try {
-        fs.copyFileSync(tempFilePath, archivePath);
-      } catch (copyErr) {
-        console.warn(`Could not archive export to ${archivePath}: ${copyErr.message}`);
-      }
-
-      const enqueuedAt = new Date().toISOString();
-      for (const cust of customers) {
-        await statementGenerateQueue.add('statement-generate', {
-          importId,
-          userId,
-          source: 'admin-sandbox-statement-generate',
-          enqueuedAt,
-          exportFileHash: fileHash,
-          exportFileName: req.file.originalname,
-          exportArchivePath: archivePath,
-          statementDateIso,
           forceOverwrite,
-          silent,
-          customer: cust
-        }, {
-          priority: 1,
-          attempts: 2,
-          backoff: { type: 'exponential', delay: 5000 },
-          removeOnComplete: true,
-          removeOnFail: false
+          actor: {
+            userId,
+            userEmail: req.user.email,
+            userRole: req.user.role,
+            ipAddress: req.ip || req.connection.remoteAddress,
+            userAgent: req.get('user-agent')
+          },
+          extraJobData: {
+            uploadMethod: 'admin-sandbox',
+            clientRequestedSilent
+          }
         });
+      } catch (importErr) {
+        if (importErr.code === 'ACR11P_PARSE_ERROR') {
+          return res.status(400).json({
+            success: false,
+            message: importErr.message,
+            error: importErr.cause?.message || importErr.message
+          });
+        }
+        if (importErr.code === 'ACR11P_EMPTY') {
+          return res.status(400).json({
+            success: false,
+            message: importErr.message,
+            error: 'No customers parsed',
+            validation: importErr.validation
+          });
+        }
+        throw importErr;
       }
 
-      // Tidy the temp upload now - we archived it above and the worker uses
-      // the in-memory customer payload, not the source file.
+      // Tidy the temp upload now - the helper has archived it and the worker
+      // uses the in-memory customer payload, not the source file.
       try { fs.unlinkSync(tempFilePath); } catch (_) { /* best effort */ }
       tempFilePath = null;
 
       res.json({
         success: true,
-        importId,
-        totalCustomers: customers.length,
-        statementDate: statementDateIso,
+        importId: importResult.importId,
+        totalCustomers: importResult.totalCustomers,
+        statementDate: importResult.statementDate,
         validation: {
-          parsedLines: parsed.validation.parsedLines,
-          malformedLines: parsed.validation.malformedLines.length,
-          unknownTerms: parsed.validation.unknownTerms.length
+          parsedLines: importResult.validation.parsedLines,
+          malformedLines: importResult.validation.malformedLines.length,
+          unknownTerms: importResult.validation.unknownTerms.length
         },
         isDuplicate,
         duplicateFileId,
@@ -789,7 +723,7 @@ router.post('/generate',
         sandbox: true,
         message: (() => {
           const suffix = forceOverwrite ? ' [forceOverwrite]' : '';
-          return `Sandbox generation queued for ${customers.length} customer(s)${suffix}. No customer emails will be sent.`;
+          return `Sandbox generation queued for ${importResult.totalCustomers} customer(s)${suffix}. No customer emails will be sent.`;
         })()
       });
     } catch (error) {

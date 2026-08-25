@@ -10,7 +10,8 @@
  */
 
 // Customer-facing Statements (list, view, edit, uploads, imports).
-// The Statement Generator Sandbox in Settings → Admin Tools remains visible
-// to global_admin regardless of this flag; it calls the same backend routes
-// (which stay online) and is intended for internal test runs only.
-export const STATEMENTS_ENABLED = false;
+// The Statement Generator Sandbox in Settings → Admin Tools also uses the
+// same backend but forces silent=true so it never emails customers — it
+// stays useful as a smoke-test surface for global_admin regardless of this
+// flag. The production feed is the FTP ACR11P .TXT importer.
+export const STATEMENTS_ENABLED = true;

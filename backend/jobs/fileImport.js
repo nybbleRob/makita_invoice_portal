@@ -221,10 +221,189 @@ async function processFileImport(job) {
     // Update job progress
     await job.updateProgress(25);
     
-    // Check if file is Excel (reuse fileExt from above, just convert to lowercase)
+    // Check file type by extension (reuse fileExt from above, just convert to lowercase)
     const fileExtLower = fileExt.toLowerCase();
     const isExcel = ['.xlsx', '.xls'].includes(fileExtLower);
-    
+    const isText = ['.txt', '.csv'].includes(fileExtLower);
+
+    // Handle tab-delimited ACR11P statement exports (production monthly feed).
+    //
+    // BPCS drops one .TXT / .csv per month containing every customer's aging
+    // and invoice lines. We sniff the shape (26 tab-delimited fields on the
+    // first non-blank line) to filter out random text files a customer might
+    // accidentally drop in an FTP folder, then hand off to the shared ACR11P
+    // importer which parses, archives, and enqueues one `statement-generate`
+    // job per customer. Notifications fire normally (silent=false) — this
+    // is the counterpart to the always-silent admin sandbox route.
+    if (isText) {
+      console.log(`📝 Processing text file (candidate ACR11P export): ${fileName}`);
+
+      const { looksLikeAcr11pExport, runAcr11pImport } = require('../services/statementGenerator/acr11pImporter');
+      const buffer = fs.readFileSync(localPath);
+      const text = buffer.toString('utf8');
+
+      const folderStructure = settings.ftp?.folderStructure || {
+        unprocessed: '/Unprocessed',
+        processed: '/Processed',
+        failed: '/Failed'
+      };
+      const relativeSourcePath = ftpFolder ? `${ftpFolder}/${fileName}` : fileName;
+      const dateFolder = new Date().toISOString().split('T')[0];
+
+      if (!looksLikeAcr11pExport(text)) {
+        console.warn(`⚠️  Text file ${fileName} does not look like an ACR11P export (first non-blank line has < 25 tabs). Routing to Failed.`);
+
+        await file.update({
+          status: 'unallocated',
+          fileType: 'unknown',
+          failureReason: 'unallocated',
+          errorMessage: 'Text file did not match the ACR11P shape (< 25 tabs on first non-blank line).',
+          metadata: {
+            ...file.metadata,
+            specificFailureReason: 'unknown_text_file',
+            processingMethod: 'acr11p_sniff_rejected'
+          }
+        });
+
+        const failedDest = `${folderStructure.failed}/${dateFolder}/${fileName}`;
+        try {
+          await moveFile(ftpConfig, relativeSourcePath, failedDest);
+          await file.update({
+            metadata: {
+              ...file.metadata,
+              specificFailureReason: 'unknown_text_file',
+              processingMethod: 'acr11p_sniff_rejected',
+              ftpFailedPath: failedDest,
+              movedAt: new Date().toISOString()
+            }
+          });
+        } catch (mvErr) {
+          console.error(`⚠️  Could not move unknown text file: ${mvErr.message}`);
+        }
+
+        return {
+          success: false,
+          status: 'unallocated',
+          fileId: file.id,
+          message: `File ${fileName} is not an ACR11P statement export`,
+          movedTo: failedDest
+        };
+      }
+
+      // Real ACR11P — parse + fan out per-customer jobs.
+      try {
+        const result = await runAcr11pImport({
+          buffer,
+          fileHash,
+          originalFileName: fileName,
+          source: 'ftp_import_statement_generate',
+          silent: false, // Production path: customers WITH sendStatementEmail=true will be notified.
+          forceOverwrite: false,
+          actor: {
+            userId: systemUser?.id || null,
+            userEmail: systemUser?.email || 'ftp@system',
+            userRole: 'global_admin', // FTP jobs run as system with GA-equivalent privileges
+            ipAddress: 'ftp',
+            userAgent: `ftp-import job ${job.id}`
+          },
+          extraJobData: {
+            sourceFileId: file.id,
+            ftpFolder,
+            uploadMethod: 'ftp'
+          }
+        });
+
+        fileType = 'statement';
+        await file.update({
+          status: 'parsed',
+          fileType,
+          metadata: {
+            ...file.metadata,
+            acr11pImportId: result.importId,
+            statementDate: result.statementDate,
+            totalCustomers: result.totalCustomers,
+            parsedLines: result.validation.parsedLines,
+            malformedLinesCount: result.validation.malformedLines.length,
+            unknownTermsCount: result.validation.unknownTerms.length,
+            archivePath: result.archivePath,
+            processingMethod: 'acr11p_ftp_import'
+          }
+        });
+
+        // Move source .TXT to Processed on FTP so the scanner won't
+        // re-pick it up next tick. We already archived the buffer via
+        // runAcr11pImport(), so this remote move is safe.
+        const processedDest = `${folderStructure.processed}/${dateFolder}/${fileName}`;
+        try {
+          await moveFile(ftpConfig, relativeSourcePath, processedDest);
+          console.log(`✅ Moved ACR11P source to Processed: ${processedDest}`);
+          await file.update({
+            metadata: {
+              ...file.metadata,
+              ftpProcessedPath: processedDest,
+              movedAt: new Date().toISOString()
+            }
+          });
+        } catch (mvErr) {
+          console.error(`⚠️  Could not move ACR11P source file on FTP: ${mvErr.message}`);
+        }
+
+        console.log(
+          `✅ ACR11P import enqueued: ${result.totalCustomers} customer(s), ` +
+          `importId=${result.importId}, statementDate=${result.statementDate || 'unknown'}`
+        );
+
+        return {
+          success: true,
+          status: 'parsed',
+          fileId: file.id,
+          fileType,
+          documentType: 'statement',
+          acr11pImportId: result.importId,
+          totalCustomers: result.totalCustomers,
+          statementDate: result.statementDate
+        };
+      } catch (importErr) {
+        console.error(`❌ ACR11P import failed for ${fileName}:`, importErr.message);
+
+        await file.update({
+          status: 'failed',
+          fileType: 'statement',
+          failureReason: importErr.code === 'ACR11P_EMPTY' ? 'validation_error' : 'parsing_error',
+          errorMessage: importErr.message,
+          metadata: {
+            ...file.metadata,
+            specificFailureReason: importErr.code || 'acr11p_error',
+            processingMethod: 'acr11p_ftp_import'
+          }
+        });
+
+        const failedDest = `${folderStructure.failed}/${dateFolder}/${fileName}`;
+        try {
+          await moveFile(ftpConfig, relativeSourcePath, failedDest);
+          await file.update({
+            metadata: {
+              ...file.metadata,
+              specificFailureReason: importErr.code || 'acr11p_error',
+              processingMethod: 'acr11p_ftp_import',
+              ftpFailedPath: failedDest,
+              movedAt: new Date().toISOString()
+            }
+          });
+        } catch (mvErr) {
+          console.error(`⚠️  Could not move failed ACR11P file: ${mvErr.message}`);
+        }
+
+        return {
+          success: false,
+          status: 'failed',
+          fileId: file.id,
+          error: importErr.message,
+          movedTo: failedDest
+        };
+      }
+    }
+
     // Handle Excel files
     if (isExcel) {
       console.log(`📊 Processing Excel file: ${fileName}`);
