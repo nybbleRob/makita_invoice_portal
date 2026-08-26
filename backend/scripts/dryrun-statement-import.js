@@ -362,24 +362,51 @@ async function runEnvironmentPreflight() {
       `provider=${provider}, isEmailEnabled=${emailOn}, testMode=${testMode}${testMode ? ' (redirects to ' + redirect + ')' : ''}`
     );
 
-    // Statement flag — is customer-facing UI turned on? This is a state
-    // report, not a pass/fail — the flag being OFF while the pipeline is
-    // being tested is the desired state, so we mark both branches as
-    // OK/INFO and let the operator judge from the value itself.
+    // Who can see the customer-facing Statements area? State report, not
+    // pass/fail — 'global_admin' during the pilot is the desired value, so
+    // we let the operator judge from the value itself.
     try {
       const flagPath = path.resolve(__dirname, '..', '..', 'frontend', 'src', 'config', 'featureFlags.js');
       const flagSrc = fs.readFileSync(flagPath, 'utf8');
-      const on = /STATEMENTS_ENABLED\s*=\s*true/.test(flagSrc);
+      const m = /STATEMENTS_VISIBILITY\s*=\s*['\"]([a-z_]+)['\"]/.exec(flagSrc);
+      const mode = m ? m[1] : 'unknown';
+      const describe = {
+        all: "'all' — EVERY portal role can see the Statements page and any generated statements",
+        global_admin: "'global_admin' — only global admins can see the Statements page (expected during pilot)",
+        off: "'off' — nobody can see the Statements page, including global admins"
+      };
       push(
-        'Frontend STATEMENTS_ENABLED (informational)',
-        true,
-        on
-          ? 'true — customers CAN see the Statements page and any generated statements'
-          : 'false — Statements page is hidden from customers (expected during pilot)'
+        'Frontend STATEMENTS_VISIBILITY (informational)',
+        mode !== 'unknown',
+        describe[mode] || `could not parse a known mode (found '${mode}')`
       );
     } catch (_) {
-      push('Frontend STATEMENTS_ENABLED (informational)', false, 'could not read featureFlags.js');
+      push('Frontend STATEMENTS_VISIBILITY (informational)', false, 'could not read featureFlags.js');
     }
+
+    // Backend counterpart. The frontend constant only hides the nav item; this
+    // env var is what actually stops a non-admin calling /api/statements.
+    const apiMode = String(process.env.STATEMENTS_VISIBILITY || 'global_admin').trim().toLowerCase();
+    push(
+      'Backend STATEMENTS_VISIBILITY (API access)',
+      true,
+      apiMode === 'all'
+        ? "'all' — every portal role can call /api/statements directly"
+        : `'${apiMode}' — /api/statements returns 403 to anyone who is not a global admin`
+    );
+
+    // THE safety control for the pilot. Everything else can be wrong and the
+    // worst case is a confusing dry run; if this is on by mistake, real
+    // customers get emailed.
+    const notifyOn =
+      String(process.env.STATEMENT_NOTIFICATIONS_ENABLED || '').trim().toLowerCase() === 'true';
+    push(
+      'STATEMENT_NOTIFICATIONS_ENABLED',
+      true,
+      notifyOn
+        ? 'true — CUSTOMERS WILL BE EMAILED for new or corrected statements. Do not run a pilot in this mode.'
+        : 'false/unset — no customer email can be sent by any statement path (expected during pilot)'
+    );
 
     // Import scanner enabled?
     const importEnabled = settings?.importSettings?.enabled === true;

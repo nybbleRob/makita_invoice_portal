@@ -24,6 +24,18 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+// Master notification kill switch covering EVERY statement generation path.
+//
+// The per-run `silent` flag is an operator convenience; this is the
+// environment-level guarantee that no customer can be emailed at all, whatever
+// any caller passes. It defaults to OFF, so a fresh deploy - or one where
+// someone forgot to set it - generates statements and notifies nobody.
+//
+// Set STATEMENT_NOTIFICATIONS_ENABLED=true in backend/.env only once the pilot
+// is signed off and customer emails are genuinely wanted.
+const STATEMENT_NOTIFICATIONS_ENABLED =
+  String(process.env.STATEMENT_NOTIFICATIONS_ENABLED || '').trim().toLowerCase() === 'true';
+
 const {
   File, Settings, User
 } = require('../models');
@@ -182,7 +194,8 @@ async function processStatementGenerate(job) {
     `contentHash=${contentHash ? contentHash.slice(0, 12) : 'none'} ` +
     `unoPool=[${UNOSERVER_PORTS.join(',') || 'default'}]` +
     `${forceOverwrite ? ' forceOverwrite=true' : ''}` +
-    `${silent ? ' silent=true' : ''}`
+    `${silent ? ' silent=true' : ''}` +
+    `${STATEMENT_NOTIFICATIONS_ENABLED ? '' : ' notifications=DISABLED'}`
   );
 
   const dateForName = stmtDateIso || new Date().toISOString().slice(0, 10);
@@ -553,10 +566,21 @@ async function processStatementGenerate(job) {
     // customer notification. Built for cutover normalisation runs where we
     // want every statement on the new renderer without spamming inboxes
     // about a render-engine swap that didn't change any values.
-    const shouldNotify = matched
+    const shouldNotify = STATEMENT_NOTIFICATIONS_ENABLED
+      && matched
       && (isNew || anyReplaced)
       && !anySuppressedByAuthority
       && !silent;
+
+    // Make the master-switch suppression visible in pm2 logs, so an operator
+    // can tell "nobody was emailed because the switch is off" apart from
+    // "nobody was emailed because nothing changed".
+    if (!STATEMENT_NOTIFICATIONS_ENABLED && matched && (isNew || anyReplaced) && !silent) {
+      console.log(
+        `🔕 [StmtGen ${importId}] custNo=${custNo} would have notified, but ` +
+        `STATEMENT_NOTIFICATIONS_ENABLED is not 'true' - no customer email sent.`
+      );
+    }
     const skipNotificationFlag = !shouldNotify;
 
     await job.updateProgress(100);

@@ -7,7 +7,7 @@ import { getRoleLabel } from '../../utils/roleLabels';
 import { getInitials, getAvatarColorClass } from '../../utils/avatar';
 import PageTitle from '../PageTitle';
 import { API_BASE_URL } from '../../services/api';
-import { STATEMENTS_ENABLED } from '../../config/featureFlags';
+import { canSeeStatements } from '../../config/featureFlags';
 
 const Layout = () => {
   const { user, logout } = useAuth();
@@ -69,7 +69,7 @@ const Layout = () => {
           <span className="nav-link-title">Credit Notes</span>
         </Link>
       </li>
-      {STATEMENTS_ENABLED && (
+      {canSeeStatements(user?.role) && (
         <li className={`nav-item ${location.pathname === '/statements' ? 'active' : ''}`}>
           <Link to="/statements" className="nav-link">
             <span className="nav-link-icon">

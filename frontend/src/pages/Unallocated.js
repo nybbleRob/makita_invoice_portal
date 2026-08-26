@@ -5,7 +5,7 @@ import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../context/PermissionContext';
 import { useDebounce } from '../hooks/useDebounce';
-import { STATEMENTS_ENABLED } from '../config/featureFlags';
+import { canSeeStatements } from '../config/featureFlags';
 
 const Unallocated = () => {
   const navigate = useNavigate();
@@ -677,7 +677,7 @@ const Unallocated = () => {
                       <option value="all">All Types</option>
                       <option value="invoice">Invoices</option>
                       <option value="credit_note">Credit Notes</option>
-                      {STATEMENTS_ENABLED && <option value="statement">Statements</option>}
+                      {canSeeStatements(currentUser?.role) && <option value="statement">Statements</option>}
                       <option value="unknown">Unknown</option>
                     </select>
                     {/* Reset - only when something is filtered */}

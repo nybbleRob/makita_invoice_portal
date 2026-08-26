@@ -48,7 +48,7 @@ import InactivityLogout from './components/InactivityLogout';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
 import { PermissionProvider, usePermissions } from './context/PermissionContext';
-import { STATEMENTS_ENABLED } from './config/featureFlags';
+import { canSeeStatements } from './config/featureFlags';
 import './App.css';
 
 // Protected Route Component
@@ -140,6 +140,12 @@ const PermissionRoute = ({ children, permission, anyOf, allOf }) => {
 };
 
 function AppRoutes() {
+  const { user, loading } = useAuth();
+  // Statements visibility depends on role, so the route table is rebuilt when
+  // auth resolves. While loading we render neither the routes nor the redirect,
+  // otherwise a global admin refreshing /statements is bounced to the dashboard
+  // before their role is known.
+  const statementsVisible = canSeeStatements(user?.role);
   return (
     <Routes>
       {/* Public auth routes */}
@@ -209,13 +215,14 @@ function AppRoutes() {
         <Route path="credit-notes/:id/view" element={<CreditNoteView />} />
         <Route path="credit-notes/:id/edit" element={<PermissionRoute permission="CREDIT_NOTES_EDIT"><CreditNoteEdit /></PermissionRoute>} />
         
-        {/* Statements - gated by STATEMENTS_ENABLED. When off, any bookmarked
-            /statements URL redirects to the dashboard so users don't land on
-            a blank layout outlet. Backend routes stay online for the sandbox. */}
-        {STATEMENTS_ENABLED && <Route path="statements" element={<Statements />} />}
-        {STATEMENTS_ENABLED && <Route path="statements/:id/view" element={<StatementView />} />}
-        {STATEMENTS_ENABLED && <Route path="statements/:id/edit" element={<PermissionRoute permission="STATEMENTS_EDIT"><StatementEdit /></PermissionRoute>} />}
-        {!STATEMENTS_ENABLED && <Route path="statements/*" element={<Navigate to="/" replace />} />}
+        {/* Statements - gated by STATEMENTS_VISIBILITY (see config/featureFlags).
+            Anyone the mode excludes is redirected to the dashboard rather than
+            landing on a blank layout outlet, bookmarked URLs included. The
+            backend enforces the same rule independently, so this is UX only. */}
+        {statementsVisible && <Route path="statements" element={<Statements />} />}
+        {statementsVisible && <Route path="statements/:id/view" element={<StatementView />} />}
+        {statementsVisible && <Route path="statements/:id/edit" element={<PermissionRoute permission="STATEMENTS_EDIT"><StatementEdit /></PermissionRoute>} />}
+        {!loading && !statementsVisible && <Route path="statements/*" element={<Navigate to="/" replace />} />}
         
         {/* Unallocated - GA, Admin, Manager */}
         <Route path="unallocated" element={<PermissionRoute permission="UNALLOCATED_VIEW"><Unallocated /></PermissionRoute>} />

@@ -116,6 +116,33 @@ async function markStatementAccess(statement, kind, req) {
 router.use(auth);
 router.use(checkDocumentAccess);
 
+// Statements API exposure, enforced independently of the frontend feature
+// flag. Hiding the nav item does not stop a portal user calling this API
+// directly, and STATEMENTS_VIEW includes external_user - which is how test
+// statements generated against live CORP companies became reachable in the
+// July 2026 incident even before anyone noticed the page was up.
+//
+//   STATEMENTS_VISIBILITY=global_admin  (default) - global_admin only
+//   STATEMENTS_VISIBILITY=all                     - every portal role,
+//                                                   company-scoped as usual
+//
+// The admin sandbox route (POST /generate) carries its own global_admin guard
+// and is unaffected either way. Keep this in sync with STATEMENTS_VISIBILITY
+// in frontend/src/config/featureFlags.js.
+const STATEMENTS_VISIBILITY = String(process.env.STATEMENTS_VISIBILITY || 'global_admin')
+  .trim()
+  .toLowerCase();
+
+router.use((req, res, next) => {
+  if (STATEMENTS_VISIBILITY === 'all') return next();
+  if (req.user && req.user.role === 'global_admin') return next();
+  return res.status(403).json({
+    success: false,
+    message: 'Statements are not available on this account yet.',
+    error: 'Forbidden'
+  });
+});
+
 // Get all statements (filtered by user's accessible companies)
 router.get('/', async (req, res) => {
   try {
