@@ -116,26 +116,27 @@ async function markStatementAccess(statement, kind, req) {
 router.use(auth);
 router.use(checkDocumentAccess);
 
-// Statements API exposure, enforced independently of the frontend feature
-// flag. Hiding the nav item does not stop a portal user calling this API
-// directly, and STATEMENTS_VIEW includes external_user - which is how test
-// statements generated against live CORP companies became reachable in the
-// July 2026 incident even before anyone noticed the page was up.
+// Statements API exposure, enforced independently of the frontend. Hiding the
+// nav item does not stop a portal user calling this API directly, and
+// STATEMENTS_VIEW includes external_user - which is how test statements
+// generated against live CORP companies stayed reachable in the July 2026
+// incident even with the page dark.
 //
-//   STATEMENTS_VISIBILITY=global_admin  (default) - global_admin only
-//   STATEMENTS_VISIBILITY=all                     - every portal role,
-//                                                   company-scoped as usual
-//
-// The admin sandbox route (POST /generate) carries its own global_admin guard
-// and is unaffected either way. Keep this in sync with STATEMENTS_VISIBILITY
-// in frontend/src/config/featureFlags.js.
-const STATEMENTS_VISIBILITY = String(process.env.STATEMENTS_VISIBILITY || 'global_admin')
-  .trim()
-  .toLowerCase();
+// While Statement Sandbox Mode is ON the whole area is global_admin only.
+// Turning sandbox off is what makes Statements a customer-facing feature.
+const { isStatementSandboxMode } = require('../utils/statementSandbox');
 
-router.use((req, res, next) => {
-  if (STATEMENTS_VISIBILITY === 'all') return next();
+router.use(async (req, res, next) => {
+  // Global admins always pass, checked first so a settings read failure can
+  // never lock an administrator out of their own diagnostic tooling.
   if (req.user && req.user.role === 'global_admin') return next();
+
+  try {
+    if (!(await isStatementSandboxMode())) return next();
+  } catch (err) {
+    console.warn(`Statements access check failed (${err.message}); denying.`);
+  }
+
   return res.status(403).json({
     success: false,
     message: 'Statements are not available on this account yet.',
@@ -767,6 +768,144 @@ router.post('/generate',
   });
 
 // Statement import status (declared before /:id)
+// ─────────────────────────────────────────────────────────────────────────
+// Statement Sandbox: manual processing of ACR11P .TXT exports.
+//
+// While Statement Sandbox Mode is ON the scheduled folder scanner leaves .TXT
+// files alone, so an export dropped on the FTP folder sits untouched until a
+// global admin processes it here. Processing enqueues the file through the
+// SAME invoice-import path the scanner uses, so what gets exercised is the
+// production pipeline rather than a parallel one. The worker's own sandbox
+// check is what guarantees no customer email goes out.
+//
+// Declared after requireGlobalAdmin (const arrow fn) and before /:id, so
+// 'sandbox' is never matched as a statement id.
+// ─────────────────────────────────────────────────────────────────────────
+
+router.get('/sandbox/pending', requireGlobalAdmin, async (req, res) => {
+  try {
+    const { FTP_UPLOAD_PATH } = require('../config/storage');
+    const uploadDir = path.resolve(FTP_UPLOAD_PATH);
+    const sandboxMode = await isStatementSandboxMode();
+
+    if (!fs.existsSync(uploadDir)) {
+      return res.json({ success: true, uploadDir, sandboxMode, files: [] });
+    }
+
+    const files = fs.readdirSync(uploadDir)
+      .filter((name) => path.extname(name).toLowerCase() === '.txt')
+      .map((name) => {
+        try {
+          const stat = fs.statSync(path.join(uploadDir, name));
+          if (!stat.isFile()) return null;
+          return { fileName: name, sizeBytes: stat.size, modifiedAt: stat.mtime.toISOString() };
+        } catch (_) {
+          return null; // Vanished between readdir and stat; just skip it.
+        }
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
+
+    res.json({ success: true, uploadDir, sandboxMode, files });
+  } catch (error) {
+    console.error('Error listing pending statement exports:', error);
+    res.status(500).json({ success: false, message: 'Could not read the upload folder', error: error.message });
+  }
+});
+
+router.post('/sandbox/process', requireGlobalAdmin, async (req, res) => {
+  try {
+    const { FTP_UPLOAD_PATH } = require('../config/storage');
+    const uploadDir = path.resolve(FTP_UPLOAD_PATH);
+
+    // Basename only. Never let a client walk out of the upload folder.
+    const requested = String(req.body.fileName || '');
+    const safeName = path.basename(requested);
+    if (!safeName || safeName !== requested) {
+      return res.status(400).json({ success: false, message: 'Invalid file name.', error: 'Invalid file name' });
+    }
+    if (path.extname(safeName).toLowerCase() !== '.txt') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only .TXT ACR11P exports can be processed from the sandbox.',
+        error: 'Not a .txt file'
+      });
+    }
+
+    const filePath = path.join(uploadDir, safeName);
+    if (!filePath.startsWith(uploadDir + path.sep) || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+      return res.status(404).json({
+        success: false,
+        message: `"${safeName}" is no longer in the upload folder. Refresh the list and try again.`,
+        error: 'File not found'
+      });
+    }
+
+    const buffer = fs.readFileSync(filePath);
+    const fileHash = crypto.createHash('sha256').update(buffer).digest('hex');
+    const importId = `sandbox-manual-${Date.now()}-${uuidv4().slice(0, 8)}`;
+    const sandboxMode = await isStatementSandboxMode();
+
+    // Register the batch before queueing, same ordering the scanner uses, so
+    // the job can never complete against a batch that does not exist yet.
+    try {
+      const { registerBatch } = require('../services/batchNotificationService');
+      await registerBatch(importId, 1, {
+        userId: req.user.userId,
+        userEmail: req.user.email,
+        source: 'statement-sandbox-manual'
+      });
+    } catch (batchError) {
+      console.warn('Failed to register sandbox batch:', batchError.message);
+    }
+
+    await invoiceImportQueue.add('invoice-import', {
+      filePath,
+      fileName: safeName,
+      originalName: safeName,
+      importId,
+      userId: req.user.userId || null,
+      source: 'statement-sandbox-manual',
+      fileHash,
+      documentType: 'auto',
+      priority: 1
+    }, {
+      jobId: `stmt-sandbox-${Date.now()}-${fileHash.substring(0, 8)}`,
+      priority: 1,
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 2000 },
+      removeOnComplete: true,
+      removeOnFail: false
+    });
+
+    await logActivity({
+      userId: req.user.userId,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      type: ActivityType.FILE_IMPORT,
+      action: `Statement sandbox: manually queued ACR11P export ${safeName}`,
+      details: { importId, fileName: safeName, fileHash, sandboxMode, source: 'statement-sandbox-manual' },
+      companyId: null,
+      companyName: null,
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    });
+
+    res.json({
+      success: true,
+      importId,
+      fileName: safeName,
+      sandboxMode,
+      message: sandboxMode
+        ? `Queued ${safeName}. Statements will be generated per customer; no customer emails will be sent while Sandbox Mode is on.`
+        : `Queued ${safeName}. Sandbox Mode is OFF, so opted-in customers WILL be notified.`
+    });
+  } catch (error) {
+    console.error('Error queueing statement export from sandbox:', error);
+    res.status(500).json({ success: false, message: 'Could not queue the export', error: error.message });
+  }
+});
+
 router.get('/import/:importId', async (req, res) => {
   try {
     const importStore = require('../utils/importStore');

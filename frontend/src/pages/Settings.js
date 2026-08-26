@@ -44,6 +44,20 @@ const Settings = () => {
   const [sandboxStatus, setSandboxStatus] = useState(null);
   const [sandboxResults, setSandboxResults] = useState(null);
   const [sandboxError, setSandboxError] = useState(null);
+
+  // Statement Sandbox Mode. The single switch deciding whether Statements is a
+  // private admin test area (no customer visibility, no emails, .TXT exports
+  // wait for manual processing) or a live customer feature. Read from the
+  // loaded settings; toggled through its own guarded endpoint rather than the
+  // general settings save, so an unrelated edit can never take Statements live.
+  const [pendingExports, setPendingExports] = useState([]);
+  const [pendingExportsDir, setPendingExportsDir] = useState('');
+  const [loadingPendingExports, setLoadingPendingExports] = useState(false);
+  const [processingExport, setProcessingExport] = useState(null);
+  const [showGoLiveModal, setShowGoLiveModal] = useState(false);
+  const [goLiveConfirmation, setGoLiveConfirmation] = useState('');
+  const [goLiveReason, setGoLiveReason] = useState('');
+  const [togglingSandbox, setTogglingSandbox] = useState(false);
   
   // Import Settings state
   const [importSettings, setImportSettings] = useState(null);
@@ -560,6 +574,66 @@ const Settings = () => {
       toast.error('Error clearing import history: ' + (error.response?.data?.message || error.message));
     } finally {
       setClearingImportHistory(false);
+    }
+  };
+
+  // ── Statement Sandbox Mode ────────────────────────────────────────────
+  const statementSandboxOn = settings?.statementSandboxMode !== false;
+
+  // Lists ACR11P .TXT exports sitting in the watched folder. While sandbox is
+  // on the scheduled scanner ignores them, so this is the only way they move.
+  const fetchPendingExports = async () => {
+    setLoadingPendingExports(true);
+    try {
+      const res = await api.get('/api/statements/sandbox/pending');
+      setPendingExports(res.data.files || []);
+      setPendingExportsDir(res.data.uploadDir || '');
+    } catch (error) {
+      toast.error('Could not read the upload folder: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setLoadingPendingExports(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPendingExports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Queues one export through the SAME pipeline the scheduled scanner uses, so
+  // the sandbox exercises the production path rather than a parallel one.
+  const processPendingExport = async (fileName) => {
+    setProcessingExport(fileName);
+    try {
+      const res = await api.post('/api/statements/sandbox/process', { fileName });
+      toast.success(res.data.message || ('Queued ' + fileName));
+      await fetchPendingExports();
+    } catch (error) {
+      toast.error('Could not queue ' + fileName + ': ' + (error.response?.data?.message || error.message));
+    } finally {
+      setProcessingExport(null);
+    }
+  };
+
+  // Returning to sandbox is always safe and needs no confirmation. Going live
+  // is guarded by the modal below, which supplies confirmation + reason.
+  const updateSandboxMode = async (enabled, confirmation, reason) => {
+    setTogglingSandbox(true);
+    try {
+      const res = await api.put('/api/settings/statement-sandbox', { enabled, confirmation, reason });
+      setSettings((prev) => (prev ? { ...prev, statementSandboxMode: enabled } : prev));
+      toast.success(res.data.message || 'Sandbox Mode updated.');
+      setShowGoLiveModal(false);
+      setGoLiveConfirmation('');
+      setGoLiveReason('');
+      // Nav items and route access elsewhere read the shared settings context,
+      // so pull it fresh rather than leaving a stale Statements link behind.
+      if (refreshSettings) await refreshSettings();
+      await fetchPendingExports();
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message);
+    } finally {
+      setTogglingSandbox(false);
     }
   };
 
@@ -1734,6 +1808,114 @@ const Settings = () => {
                       {/* Testing & Diagnostics */}
                       <h4 className="mb-3">Testing &amp; Diagnostics</h4>
                       <p className="text-muted mb-3">Admin-only tools for validating internal pipelines. None of these tools send customer emails.</p>
+
+                      {/* Statement Sandbox Mode */}
+                      <div className="card mb-3">
+                        <div className="card-header">
+                          <h3 className="card-title">Statement Sandbox Mode</h3>
+                          <div className="card-actions">
+                            <span className={statementSandboxOn ? 'badge bg-yellow text-dark' : 'badge bg-green text-white'}>
+                              {statementSandboxOn ? 'SANDBOX' : 'LIVE'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="card-body">
+                          {statementSandboxOn ? (
+                            <div className="alert alert-warning">
+                              <strong>Sandbox is ON.</strong> Statements are visible to global admins only,
+                              no customer email can be sent by any statement path, and the scheduled scanner
+                              leaves ACR11P <code>.TXT</code> exports untouched so you can process them by hand below.
+                            </div>
+                          ) : (
+                            <div className="alert alert-success">
+                              <strong>Statements are LIVE.</strong> Every portal user can see their own
+                              company&apos;s statements, the scheduled scanner picks up <code>.TXT</code> exports on
+                              its normal run, and opted-in customers are notified by email.
+                            </div>
+                          )}
+
+                          <div className="mb-3">
+                            {statementSandboxOn ? (
+                              <button
+                                type="button"
+                                className="btn btn-danger"
+                                onClick={() => setShowGoLiveModal(true)}
+                                disabled={togglingSandbox}
+                              >
+                                Take Statements Live
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                onClick={() => updateSandboxMode(true)}
+                                disabled={togglingSandbox}
+                              >
+                                {togglingSandbox ? 'Returning to Sandbox...' : 'Return to Sandbox Mode'}
+                              </button>
+                            )}
+                          </div>
+
+                          <h4 className="mb-1">ACR11P exports waiting in the upload folder</h4>
+                          <p className="text-muted small mb-2">
+                            {pendingExportsDir
+                              ? <>Watched folder: <code>{pendingExportsDir}</code></>
+                              : 'Watched folder unavailable.'}
+                            {statementSandboxOn
+                              ? ' Files listed here are ignored by the scheduled scanner until you process them.'
+                              : ' Sandbox is off, so the scheduled scanner will also pick these up on its next run.'}
+                          </p>
+
+                          <div className="mb-2">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-secondary"
+                              onClick={fetchPendingExports}
+                              disabled={loadingPendingExports}
+                            >
+                              {loadingPendingExports ? 'Refreshing...' : 'Refresh list'}
+                            </button>
+                          </div>
+
+                          {pendingExports.length === 0 ? (
+                            <p className="text-muted mb-0">
+                              No <code>.TXT</code> files in the upload folder right now.
+                            </p>
+                          ) : (
+                            <div className="table-responsive">
+                              <table className="table table-sm table-vcenter">
+                                <thead>
+                                  <tr>
+                                    <th>File</th>
+                                    <th>Size</th>
+                                    <th>Dropped</th>
+                                    <th className="w-1"></th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {pendingExports.map((f) => (
+                                    <tr key={f.fileName}>
+                                      <td><code>{f.fileName}</code></td>
+                                      <td>{(f.sizeBytes / 1024).toFixed(0)} KB</td>
+                                      <td>{new Date(f.modifiedAt).toLocaleString('en-GB')}</td>
+                                      <td>
+                                        <button
+                                          type="button"
+                                          className="btn btn-sm btn-primary"
+                                          onClick={() => processPendingExport(f.fileName)}
+                                          disabled={processingExport === f.fileName}
+                                        >
+                                          {processingExport === f.fileName ? 'Queueing...' : 'Process'}
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </div>
 
                       {/* Statement Generator Sandbox */}
                       <div className="card mb-3">
@@ -3079,6 +3261,83 @@ const Settings = () => {
           Wipes the entire email_logs table server-side. Requires typing CLEAR
           verbatim and providing a reason — both are also enforced by the
           backend, this UI is defence in depth. */}
+      {showGoLiveModal && (
+        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} tabIndex="-1">
+          <div className="modal-dialog modal-lg">
+            <div className="modal-content">
+              <div className="modal-header bg-danger text-white">
+                <h5 className="modal-title">Take Statements Live</h5>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => {
+                    setShowGoLiveModal(false);
+                    setGoLiveConfirmation('');
+                    setGoLiveReason('');
+                  }}
+                  disabled={togglingSandbox}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <div className="alert alert-danger">
+                  <strong>This is customer-facing.</strong> Turning Sandbox Mode off will immediately:
+                  <ul className="mb-0 mt-2">
+                    <li>Show the Statements page to <strong>every portal user</strong>, including external users, scoped to their own company.</li>
+                    <li>Make <strong>every statement already in the system</strong> visible to the customer it belongs to.</li>
+                    <li>Allow <strong>customer emails</strong> to be sent for new and corrected statements.</li>
+                    <li>Let the scheduled scanner pick up <code>.TXT</code> exports automatically.</li>
+                  </ul>
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Type <strong>GO LIVE</strong> to confirm</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={goLiveConfirmation}
+                    onChange={(e) => setGoLiveConfirmation(e.target.value)}
+                    placeholder="GO LIVE"
+                    disabled={togglingSandbox}
+                  />
+                </div>
+                <div className="mb-0">
+                  <label className="form-label">Reason (recorded in the activity log)</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={goLiveReason}
+                    onChange={(e) => setGoLiveReason(e.target.value)}
+                    placeholder="e.g. Pilot signed off by Credit Control, 6 months validated"
+                    disabled={togglingSandbox}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={() => {
+                    setShowGoLiveModal(false);
+                    setGoLiveConfirmation('');
+                    setGoLiveReason('');
+                  }}
+                  disabled={togglingSandbox}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={() => updateSandboxMode(false, goLiveConfirmation, goLiveReason)}
+                  disabled={togglingSandbox || goLiveConfirmation !== 'GO LIVE' || !goLiveReason.trim()}
+                >
+                  {togglingSandbox ? 'Going live...' : 'Take Statements Live'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showClearEmailLogsModal && (
         <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} tabIndex="-1">
           <div className="modal-dialog modal-lg">

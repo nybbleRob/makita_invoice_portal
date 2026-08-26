@@ -46,7 +46,7 @@ import SupplierCreditNotes from './pages/SupplierCreditNotes';
 import SupplierStatements from './pages/SupplierStatements';
 import InactivityLogout from './components/InactivityLogout';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { SettingsProvider } from './context/SettingsContext';
+import { SettingsProvider, useSettings } from './context/SettingsContext';
 import { PermissionProvider, usePermissions } from './context/PermissionContext';
 import { canSeeStatements } from './config/featureFlags';
 import './App.css';
@@ -141,11 +141,13 @@ const PermissionRoute = ({ children, permission, anyOf, allOf }) => {
 
 function AppRoutes() {
   const { user, loading } = useAuth();
-  // Statements visibility depends on role, so the route table is rebuilt when
-  // auth resolves. While loading we render neither the routes nor the redirect,
-  // otherwise a global admin refreshing /statements is bounced to the dashboard
-  // before their role is known.
-  const statementsVisible = canSeeStatements(user?.role);
+  const { settings, loading: settingsLoading } = useSettings();
+  // Statements visibility follows role + Statement Sandbox Mode, so the route
+  // table is rebuilt once auth and settings resolve. While either is still
+  // loading we render neither the routes nor the redirect: otherwise a global
+  // admin refreshing /statements, or a customer following a bookmark once
+  // sandbox is off, gets bounced to the dashboard before we know any better.
+  const statementsVisible = canSeeStatements(user?.role, settings);
   return (
     <Routes>
       {/* Public auth routes */}
@@ -215,14 +217,15 @@ function AppRoutes() {
         <Route path="credit-notes/:id/view" element={<CreditNoteView />} />
         <Route path="credit-notes/:id/edit" element={<PermissionRoute permission="CREDIT_NOTES_EDIT"><CreditNoteEdit /></PermissionRoute>} />
         
-        {/* Statements - gated by STATEMENTS_VISIBILITY (see config/featureFlags).
-            Anyone the mode excludes is redirected to the dashboard rather than
-            landing on a blank layout outlet, bookmarked URLs included. The
-            backend enforces the same rule independently, so this is UX only. */}
+        {/* Statements - gated by role + Statement Sandbox Mode (see
+            config/featureFlags). Anyone excluded is redirected to the dashboard
+            rather than landing on a blank layout outlet, bookmarked URLs
+            included. The backend enforces the same rule independently on
+            /api/statements, so this is UX rather than the access control. */}
         {statementsVisible && <Route path="statements" element={<Statements />} />}
         {statementsVisible && <Route path="statements/:id/view" element={<StatementView />} />}
         {statementsVisible && <Route path="statements/:id/edit" element={<PermissionRoute permission="STATEMENTS_EDIT"><StatementEdit /></PermissionRoute>} />}
-        {!loading && !statementsVisible && <Route path="statements/*" element={<Navigate to="/" replace />} />}
+        {!loading && !settingsLoading && !statementsVisible && <Route path="statements/*" element={<Navigate to="/" replace />} />}
         
         {/* Unallocated - GA, Admin, Manager */}
         <Route path="unallocated" element={<PermissionRoute permission="UNALLOCATED_VIEW"><Unallocated /></PermissionRoute>} />

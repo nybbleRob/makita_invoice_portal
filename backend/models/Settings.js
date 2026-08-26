@@ -301,6 +301,12 @@ module.exports = (sequelize) => {
       defaultValue: true,
       comment: 'Enable/disable the suppliers feature system-wide. When disabled, all supplier features are hidden.'
     },
+    statementSandboxMode: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      allowNull: false,
+      comment: 'Statement Sandbox Mode. TRUE: Statements are visible to global admins only, no statement email can be sent by any path, and the scheduled scanner leaves ACR11P .TXT exports for manual processing from the sandbox. FALSE: Statements are live for all portal roles and notifications fire normally. Defaults to TRUE so a fresh install is never live by accident.'
+    },
     importSettings: {
       type: DataTypes.JSONB,
       defaultValue: {

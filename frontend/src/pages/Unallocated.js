@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import toast from '../utils/toast';
 import { useAuth } from '../context/AuthContext';
+import { useSettings } from '../context/SettingsContext';
 import { usePermissions } from '../context/PermissionContext';
 import { useDebounce } from '../hooks/useDebounce';
 import { canSeeStatements } from '../config/featureFlags';
@@ -11,6 +12,7 @@ const Unallocated = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user: currentUser } = useAuth();
+  const { settings: portalSettings } = useSettings();
   const { hasPermission } = usePermissions();
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -677,7 +679,7 @@ const Unallocated = () => {
                       <option value="all">All Types</option>
                       <option value="invoice">Invoices</option>
                       <option value="credit_note">Credit Notes</option>
-                      {canSeeStatements(currentUser?.role) && <option value="statement">Statements</option>}
+                      {canSeeStatements(currentUser?.role, portalSettings) && <option value="statement">Statements</option>}
                       <option value="unknown">Unknown</option>
                     </select>
                     {/* Reset - only when something is filtered */}

@@ -1,44 +1,43 @@
 /**
- * Frontend feature flags. These gate whole product areas out of the
- * customer-facing UI (nav + routes) without touching the backend, DB schema,
- * or worker code, so changing exposure is a one-line edit and a rebuild.
+ * Frontend feature flags and visibility helpers.
  *
- * These are compile-time constants intentionally, with no runtime toggle from
- * Settings, because the areas they gate are pre-production and we don't want
- * a stray admin click to expose them.
+ * Statements visibility is no longer a compile-time constant. It follows
+ * Statement Sandbox Mode (Settings.statementSandboxMode), so a global admin
+ * can move between test and live from Settings -> Admin Tools without a
+ * rebuild and without touching the server.
+ *
+ * The backend enforces the same rule independently on /api/statements, so
+ * everything here is UX. Hiding a nav item is not access control: STATEMENTS_VIEW
+ * includes external_user, which is why the July 2026 test statements stayed
+ * reachable through the API even while the page was dark.
  */
 
 /**
- * Who can see the customer-facing Statements area (list, view, edit, uploads).
+ * True while Statement Sandbox Mode is active. In sandbox:
+ *   - Statements are a global-admin-only test area.
+ *   - No statement email can be sent by any path.
+ *   - ACR11P .TXT exports sit in the watched folder until an admin processes
+ *     them from the sandbox, rather than being swept up on the scan tick.
  *
- *   'off'          - nobody, including global_admin. Bookmarked URLs redirect.
- *   'global_admin' - global_admin only. Everyone else is redirected, and the
- *                    nav item is hidden for them.
- *   'all'          - every portal role, subject to the usual company scoping.
- *
- * Currently 'global_admin' for the ACR11P FTP pilot: a real monthly export is
- * dropped in the watched folder and a global admin verifies the generated
- * statements in the UI before any customer sees the area. This is deliberately
- * NOT 'all' because the July 2026 incident was exactly that - test statements
- * generated against live CORP companies were visible to those customers.
- *
- * The backend enforces the same restriction independently via the
- * STATEMENTS_VISIBILITY env var (default 'global_admin'), because hiding the
- * nav item alone leaves /api/statements reachable by any portal role. Keep the
- * two in sync when changing this.
- *
- * The Statement Generator Sandbox in Settings -> Admin Tools is unaffected by
- * this setting; it is always global_admin only and always forces silent=true.
+ * Fails safe: a missing or still-loading settings object reads as sandbox ON.
  */
-export const STATEMENTS_VISIBILITY = 'global_admin';
+export function isStatementSandboxMode(settings) {
+  return !settings || settings.statementSandboxMode !== false;
+}
 
 /**
- * True when the given role may see the Statements area under the current
- * visibility mode. Pass the role from useAuth()'s user object; a missing role
- * (still loading, logged out) resolves to false.
+ * True when this role may see the Statements area.
+ *
+ * Global admins always can, since they are the ones running the sandbox.
+ * Everyone else only once Sandbox Mode has been turned off, which is the
+ * deliberate go-live action.
+ *
+ * While settings are still loading this returns false for non-admins, so pair
+ * it with the settings `loading` flag before redirecting anyone. Otherwise a
+ * customer following a /statements bookmark gets bounced to the dashboard in
+ * the moment before settings arrive.
  */
-export function canSeeStatements(role) {
-  if (STATEMENTS_VISIBILITY === 'all') return true;
-  if (STATEMENTS_VISIBILITY === 'global_admin') return role === 'global_admin';
-  return false;
+export function canSeeStatements(role, settings) {
+  if (role === 'global_admin') return true;
+  return !isStatementSandboxMode(settings);
 }

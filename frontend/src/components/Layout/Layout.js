@@ -69,7 +69,7 @@ const Layout = () => {
           <span className="nav-link-title">Credit Notes</span>
         </Link>
       </li>
-      {canSeeStatements(user?.role) && (
+      {canSeeStatements(user?.role, settings) && (
         <li className={`nav-item ${location.pathname === '/statements' ? 'active' : ''}`}>
           <Link to="/statements" className="nav-link">
             <span className="nav-link-icon">

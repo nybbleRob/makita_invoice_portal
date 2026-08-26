@@ -15,6 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const { File, Settings, User } = require('../models');
 const { invoiceImportQueue, emailQueue } = require('../config/queue');
+const { isStatementSandboxMode } = require('../utils/statementSandbox');
 const { Op } = require('sequelize');
 const crypto = require('crypto');
 const importLogger = require('../services/importLogger');
@@ -177,9 +178,20 @@ async function scanLocalFolder() {
       console.log(`🔍 DEBUG: First 5 files: ${files.slice(0, 5).join(', ')}`);
     }
 
+    // Statement Sandbox Mode leaves ACR11P .TXT exports where they are. The
+    // operator picks the file in Settings -> Admin Tools and clicks Process,
+    // which enqueues it through this very pipeline - so the sandbox exercises
+    // the production path rather than a parallel one. Once sandbox is off,
+    // .TXT is swept up on the normal tick like any other supported file.
+    const statementSandbox = await isStatementSandboxMode();
+
     // Filter for supported file types
     const supportedFiles = files.filter(file => {
       const ext = path.extname(file).toLowerCase();
+      if (ext === '.txt' && statementSandbox) {
+        console.log(`⏭️  Statement Sandbox Mode is ON - leaving "${file}" for manual processing`);
+        return false;
+      }
       const isSupported = SUPPORTED_EXTENSIONS.includes(ext);
       if (!isSupported && files.length <= 10) {
         console.log(`🔍 DEBUG: File "${file}" has extension "${ext}" - not supported`);

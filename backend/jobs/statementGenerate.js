@@ -24,17 +24,11 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-// Master notification kill switch covering EVERY statement generation path.
-//
-// The per-run `silent` flag is an operator convenience; this is the
-// environment-level guarantee that no customer can be emailed at all, whatever
-// any caller passes. It defaults to OFF, so a fresh deploy - or one where
-// someone forgot to set it - generates statements and notifies nobody.
-//
-// Set STATEMENT_NOTIFICATIONS_ENABLED=true in backend/.env only once the pilot
-// is signed off and customer emails are genuinely wanted.
-const STATEMENT_NOTIFICATIONS_ENABLED =
-  String(process.env.STATEMENT_NOTIFICATIONS_ENABLED || '').trim().toLowerCase() === 'true';
+// Statement Sandbox Mode is the master notification gate for EVERY generation
+// path. The per-run `silent` flag is an operator convenience on top; sandbox
+// mode is the guarantee that no customer can be emailed at all, whatever any
+// caller passes. See backend/utils/statementSandbox.js.
+const { isStatementSandboxMode } = require('../utils/statementSandbox');
 
 const {
   File, Settings, User
@@ -188,6 +182,8 @@ async function processStatementGenerate(job) {
   // file bytes are NOT reliable here because of embedded creation timestamps).
   const contentHash = computeStatementContentHash(customer);
 
+  const sandboxMode = await isStatementSandboxMode();
+
   console.log(
     `📄 [StmtGen ${importId}] custNo=${custNo} ` +
     `pages=${(customer.pages || []).length} ` +
@@ -195,7 +191,7 @@ async function processStatementGenerate(job) {
     `unoPool=[${UNOSERVER_PORTS.join(',') || 'default'}]` +
     `${forceOverwrite ? ' forceOverwrite=true' : ''}` +
     `${silent ? ' silent=true' : ''}` +
-    `${STATEMENT_NOTIFICATIONS_ENABLED ? '' : ' notifications=DISABLED'}`
+    `${sandboxMode ? ' sandbox=ON(no emails)' : ''}`
   );
 
   const dateForName = stmtDateIso || new Date().toISOString().slice(0, 10);
@@ -566,7 +562,7 @@ async function processStatementGenerate(job) {
     // customer notification. Built for cutover normalisation runs where we
     // want every statement on the new renderer without spamming inboxes
     // about a render-engine swap that didn't change any values.
-    const shouldNotify = STATEMENT_NOTIFICATIONS_ENABLED
+    const shouldNotify = !sandboxMode
       && matched
       && (isNew || anyReplaced)
       && !anySuppressedByAuthority
@@ -575,10 +571,10 @@ async function processStatementGenerate(job) {
     // Make the master-switch suppression visible in pm2 logs, so an operator
     // can tell "nobody was emailed because the switch is off" apart from
     // "nobody was emailed because nothing changed".
-    if (!STATEMENT_NOTIFICATIONS_ENABLED && matched && (isNew || anyReplaced) && !silent) {
+    if (sandboxMode && matched && (isNew || anyReplaced) && !silent) {
       console.log(
         `🔕 [StmtGen ${importId}] custNo=${custNo} would have notified, but ` +
-        `STATEMENT_NOTIFICATIONS_ENABLED is not 'true' - no customer email sent.`
+        `Statement Sandbox Mode is ON - no customer email sent.`
       );
     }
     const skipNotificationFlag = !shouldNotify;

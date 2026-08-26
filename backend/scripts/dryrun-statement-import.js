@@ -363,49 +363,25 @@ async function runEnvironmentPreflight() {
     );
 
     // Who can see the customer-facing Statements area? State report, not
-    // pass/fail — 'global_admin' during the pilot is the desired value, so
-    // we let the operator judge from the value itself.
-    try {
-      const flagPath = path.resolve(__dirname, '..', '..', 'frontend', 'src', 'config', 'featureFlags.js');
-      const flagSrc = fs.readFileSync(flagPath, 'utf8');
-      const m = /STATEMENTS_VISIBILITY\s*=\s*['\"]([a-z_]+)['\"]/.exec(flagSrc);
-      const mode = m ? m[1] : 'unknown';
-      const describe = {
-        all: "'all' — EVERY portal role can see the Statements page and any generated statements",
-        global_admin: "'global_admin' — only global admins can see the Statements page (expected during pilot)",
-        off: "'off' — nobody can see the Statements page, including global admins"
-      };
-      push(
-        'Frontend STATEMENTS_VISIBILITY (informational)',
-        mode !== 'unknown',
-        describe[mode] || `could not parse a known mode (found '${mode}')`
-      );
-    } catch (_) {
-      push('Frontend STATEMENTS_VISIBILITY (informational)', false, 'could not read featureFlags.js');
-    }
-
-    // Backend counterpart. The frontend constant only hides the nav item; this
-    // env var is what actually stops a non-admin calling /api/statements.
-    const apiMode = String(process.env.STATEMENTS_VISIBILITY || 'global_admin').trim().toLowerCase();
+    // pass/fail — sandbox ON during the pilot is the desired value, so we let
+    // the operator judge from the value itself.
+    const sandboxOn = settings?.statementSandboxMode !== false;
     push(
-      'Backend STATEMENTS_VISIBILITY (API access)',
+      'Statement Sandbox Mode',
       true,
-      apiMode === 'all'
-        ? "'all' — every portal role can call /api/statements directly"
-        : `'${apiMode}' — /api/statements returns 403 to anyone who is not a global admin`
+      sandboxOn
+        ? 'ON — Statements are global-admin only, NO customer email can be sent by any path, and the scheduled scanner leaves .TXT exports for manual processing (expected during pilot)'
+        : 'OFF — STATEMENTS ARE LIVE: visible to every portal user, scheduled scanner picks up .TXT automatically, and opted-in customers WILL be emailed'
     );
 
-    // THE safety control for the pilot. Everything else can be wrong and the
-    // worst case is a confusing dry run; if this is on by mistake, real
-    // customers get emailed.
-    const notifyOn =
-      String(process.env.STATEMENT_NOTIFICATIONS_ENABLED || '').trim().toLowerCase() === 'true';
+    // Sandbox deliberately changes scanner behaviour, so spell it out rather
+    // than leaving the operator to wonder why a dropped file did nothing.
     push(
-      'STATEMENT_NOTIFICATIONS_ENABLED',
+      'ACR11P .TXT pickup',
       true,
-      notifyOn
-        ? 'true — CUSTOMERS WILL BE EMAILED for new or corrected statements. Do not run a pilot in this mode.'
-        : 'false/unset — no customer email can be sent by any statement path (expected during pilot)'
+      sandboxOn
+        ? 'manual — drop the export in FTP_UPLOAD_PATH, then Settings -> Admin Tools -> Statement Sandbox Mode -> Process'
+        : 'automatic — the scheduled folder scan will pick up .TXT exports on its next run'
     );
 
     // Import scanner enabled?

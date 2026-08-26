@@ -364,6 +364,11 @@ router.put('/', globalAdmin, async (req, res) => {
     }
     
     // Update suppliers enabled setting
+    // statementSandboxMode is intentionally NOT handled here. The Settings
+    // page PUTs the whole settings object on every save, so accepting it would
+    // let an unrelated edit take Statements live. It has its own guarded
+    // endpoint: PUT /api/settings/statement-sandbox.
+
     if (req.body.suppliersEnabled !== undefined) {
       settings.suppliersEnabled = req.body.suppliersEnabled === true || req.body.suppliersEnabled === 'true';
     }
@@ -2444,6 +2449,80 @@ router.get('/email-logs', auth, globalAdmin, async (req, res) => {
  *      log stream) and is preserved by the retention prune, so even after
  *      email_logs itself is truncated we retain a record of the truncation.
  */
+/**
+ * Statement Sandbox Mode toggle.
+ *
+ * Deliberately NOT part of the general settings PUT. The Settings page sends
+ * the entire settings object on every save, so folding this in would mean a
+ * routine SMTP edit could take Statements live as a side effect. It lives here
+ * on its own, and the general PUT ignores the field entirely.
+ *
+ * Turning sandbox OFF is the dangerous direction: it exposes Statements to
+ * every portal role and switches customer notifications on. That requires the
+ * typed phrase GO LIVE plus a reason, matching the Clear Email Logs and Purge
+ * Documents pattern. Turning it back ON needs no confirmation - re-entering
+ * sandbox is always safe.
+ */
+router.put('/statement-sandbox', auth, globalAdmin, async (req, res) => {
+  try {
+    const { logActivity, ActivityType } = require('../services/activityLogger');
+    const enabled = req.body.enabled === true || req.body.enabled === 'true';
+
+    if (!enabled) {
+      const confirmation = String(req.body.confirmation || '').trim();
+      const reason = String(req.body.reason || '').trim();
+      if (confirmation !== 'GO LIVE') {
+        return res.status(400).json({
+          success: false,
+          message: 'Type GO LIVE to confirm. Turning Sandbox Mode off makes Statements visible to every portal user and allows customer emails to be sent.',
+          error: 'Confirmation phrase required'
+        });
+      }
+      if (!reason) {
+        return res.status(400).json({
+          success: false,
+          message: 'A reason is required when taking Statements live.',
+          error: 'Reason required'
+        });
+      }
+    }
+
+    const settings = await Settings.getSettingsForUpdate();
+    const previous = settings.statementSandboxMode !== false;
+    settings.statementSandboxMode = enabled;
+    await settings.save();
+
+    await logActivity({
+      userId: req.user.userId,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      type: ActivityType.SETTINGS_UPDATED,
+      action: enabled
+        ? 'Statement Sandbox Mode turned ON (Statements hidden from customers, no statement emails)'
+        : 'Statement Sandbox Mode turned OFF - STATEMENTS ARE NOW LIVE for all portal users and customer emails are enabled',
+      details: {
+        setting: 'statementSandboxMode',
+        previous,
+        current: enabled,
+        reason: enabled ? null : String(req.body.reason || '').trim()
+      },
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    });
+
+    res.json({
+      success: true,
+      statementSandboxMode: enabled,
+      message: enabled
+        ? 'Sandbox Mode is ON. Statements are visible to global admins only, no customer emails will be sent, and .TXT exports wait for manual processing.'
+        : 'Sandbox Mode is OFF. Statements are live for all portal users, the scheduled scanner will pick up .TXT exports automatically, and opted-in customers will be notified.'
+    });
+  } catch (error) {
+    console.error('Error updating Statement Sandbox Mode:', error);
+    res.status(500).json({ success: false, message: 'Could not update Sandbox Mode', error: error.message });
+  }
+});
+
 router.delete('/email-logs', auth, globalAdmin, async (req, res) => {
   try {
     const { EmailLog } = require('../models');
