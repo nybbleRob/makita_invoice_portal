@@ -147,12 +147,43 @@ async function main() {
   heading('5. Who created them');
   table(await q(`
     SELECT COALESCE(u.email, '(system / no user recorded)') AS created_by,
-           COALESCE(u.role, '-')                            AS role,
+           COALESCE(u.role::text, '-')                      AS role,
            COUNT(*)                                         AS statements
     FROM statements s
     LEFT JOIN users u ON u.id = s."createdById"
     GROUP BY 1, 2
     ORDER BY statements DESC;
+  `));
+
+  // 5b. Reconciliation: which periods still have live statement rows.
+  heading('5b. Files vs live statement rows, per statement period');
+  console.log('  Generated files stay on disk and in the files table even after the');
+  console.log('  nightly retention sweep HARD DELETES the statement row that owned');
+  console.log('  them. A period with files but 0 live statements has been swept.');
+  console.log('');
+  table(await q(`
+    WITH file_periods AS (
+      SELECT (f.metadata->>'statementDate')::date AS period,
+             COUNT(DISTINCT f.id)                 AS statement_files
+      FROM files f
+      WHERE f."fileType" = 'statement'
+        AND f.metadata->>'statementDate' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+      GROUP BY 1
+    ),
+    stmt_periods AS (
+      SELECT "periodEnd"::date          AS period,
+             COUNT(*)                   AS live_statements,
+             MIN("retentionExpiryDate") AS expires
+      FROM statements
+      GROUP BY 1
+    )
+    SELECT COALESCE(fp.period, sp.period)     AS period,
+           COALESCE(fp.statement_files, 0)    AS statement_files,
+           COALESCE(sp.live_statements, 0)    AS live_statements,
+           sp.expires                         AS retention_expiry
+    FROM file_periods fp
+    FULL OUTER JOIN stmt_periods sp ON sp.period = fp.period
+    ORDER BY 1;
   `));
 
   // 6. What customers would see at go-live.
