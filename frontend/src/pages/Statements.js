@@ -308,9 +308,14 @@ const Statements = () => {
     }
   };
 
-  const handleDownloadStatement = async (statement) => {
+  // The caller says which format it wants. Falling back to whichever format
+  // the statement actually has keeps single-format rows working, but an
+  // explicit argument must always win: every generated statement now carries
+  // BOTH a PDF and an XLSX, so inferring the format here made the Excel
+  // unreachable from the UI even though the badge showed it was there.
+  const handleDownloadStatement = async (statement, requestedFormat) => {
     const hasPdf = !!(statement.pdfFileUrl || (statement.fileUrl && /\.pdf$/i.test(statement.fileUrl)));
-    const format = hasPdf ? 'pdf' : 'xls';
+    const format = requestedFormat || (hasPdf ? 'pdf' : 'xls');
     const ext = format === 'pdf' ? 'pdf' : 'xlsx';
     await openAuthenticatedFile(
       `/api/statements/${statement.id}/download?format=${format}`,
@@ -802,10 +807,28 @@ const Statements = () => {
                               >
                                 View
                               </button>
-                              {canDownload && (hasPdf || hasXls) && (
+                              {canDownload && hasPdf && hasXls && (
+                                <div className="btn-group">
+                                  <button
+                                    className="btn btn-sm btn-success"
+                                    onClick={() => handleDownloadStatement(statement, 'pdf')}
+                                    title="Download PDF"
+                                  >
+                                    PDF
+                                  </button>
+                                  <button
+                                    className="btn btn-sm btn-success"
+                                    onClick={() => handleDownloadStatement(statement, 'xls')}
+                                    title="Download Excel"
+                                  >
+                                    XLS
+                                  </button>
+                                </div>
+                              )}
+                              {canDownload && (hasPdf || hasXls) && !(hasPdf && hasXls) && (
                                 <button
                                   className="btn btn-sm btn-success"
-                                  onClick={() => handleDownloadStatement(statement)}
+                                  onClick={() => handleDownloadStatement(statement, hasPdf ? 'pdf' : 'xls')}
                                   title="Download"
                                 >
                                   Download

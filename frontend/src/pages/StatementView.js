@@ -24,7 +24,7 @@ const StatementView = () => {
   const [loading, setLoading] = useState(true);
   const [previewType, setPreviewType] = useState('pdf');
   const [loadingPreview, setLoadingPreview] = useState(false);
-  const [downloading, setDownloading] = useState(false);
+  const [downloading, setDownloading] = useState(null);
 
   const [pdfPages, setPdfPages] = useState([]);
   const [xlsSheets, setXlsSheets] = useState([]);
@@ -128,10 +128,13 @@ const StatementView = () => {
     return labels[status] || 'Ready (New)';
   };
 
-  const handleDownload = async () => {
-    const format = hasPdf ? 'pdf' : 'xls';
+  // An explicit format always wins. Every generated statement now has BOTH a
+  // PDF and an XLSX, so inferring the format here meant the Excel could never
+  // be downloaded from this screen. The fallback covers single-format rows.
+  const handleDownload = async (requestedFormat) => {
+    const format = requestedFormat || (hasPdf ? 'pdf' : 'xls');
     try {
-      setDownloading(true);
+      setDownloading(format);
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/api/statements/${id}/download?format=${format}`, {
         method: 'GET',
@@ -161,7 +164,7 @@ const StatementView = () => {
       console.error('Error downloading statement:', error);
       toast.error(`Error downloading statement: ${error.message}`);
     } finally {
-      setDownloading(false);
+      setDownloading(null);
     }
   };
 
@@ -301,9 +304,22 @@ const StatementView = () => {
               <button className="btn btn-secondary me-2" onClick={() => navigate(`/statements?${returnQuery}`)}>
                 Back to Statements
               </button>
-              {canDownload && (hasPdf || hasXls) && (
-                <button className="btn btn-primary" onClick={handleDownload} disabled={downloading}>
-                  {downloading ? 'Downloading...' : 'Download Statement'}
+              {canDownload && hasPdf && (
+                <button
+                  className="btn btn-primary"
+                  onClick={() => handleDownload('pdf')}
+                  disabled={!!downloading}
+                >
+                  {downloading === 'pdf' ? 'Downloading...' : 'Download PDF'}
+                </button>
+              )}
+              {canDownload && hasXls && (
+                <button
+                  className="btn btn-primary ms-2"
+                  onClick={() => handleDownload('xls')}
+                  disabled={!!downloading}
+                >
+                  {downloading === 'xls' ? 'Downloading...' : 'Download Excel'}
                 </button>
               )}
               {canEdit && (
