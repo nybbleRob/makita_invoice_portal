@@ -161,8 +161,23 @@ async function findOrCreateStatement({
     if (source === 'generated' && contentHash && !forceOverwrite) {
       const existingContentHash = existingMeta.contentHash || null;
 
-      if (existingContentHash && existingContentHash === contentHash) {
-        // True no-op: BPCS data unchanged since the last generated stamp.
+      // A matching hash means the BPCS data is unchanged, but that must NOT
+      // stop us attaching a file to a slot that is still empty.
+      //
+      // statementGenerate calls this helper twice with the SAME contentHash:
+      // once for the PDF, once for the XLSX. On a fresh generation the PDF
+      // call creates the row and stamps the hash, then the XLSX call arrives
+      // here with an identical hash. Returning early at that point left
+      // xlsFileUrl null forever - the XLSX existed on disk with a File row,
+      // but the Statement never pointed at it, so the portal offered no XLS
+      // download and notifications had no XLS attachment to send.
+      //
+      // Requiring the slot to be occupied sends the second format down to
+      // CASE 3 instead, which only fills the empty slot: no overwrite, no
+      // parsed-value refresh, and isNew/replaced both false so it still
+      // cannot fire a notification.
+      if (existingContentHash && existingContentHash === contentHash && slotPreviouslyOccupied) {
+        // True no-op: BPCS data unchanged and this slot is already filled.
         // No file overwrite, no parsed-data refresh, no notification.
         return {
           statement: existing,
@@ -175,7 +190,11 @@ async function findOrCreateStatement({
         };
       }
 
-      if (!existingContentHash) {
+      // Same reasoning as above: never short-circuit past an empty slot.
+      // With the slot empty we fall through to CASE 3, which attaches the
+      // file and stamps the content hash anyway, achieving what the baseline
+      // branch wanted without stranding the second format.
+      if (!existingContentHash && slotPreviouslyOccupied) {
         // BASELINE: existing row was created before content-hash tracking
         // existed (or by the manual-upload path that doesn't compute one).
         // Silently stamp the hash so the *next* generated run can compare
