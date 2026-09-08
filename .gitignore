@@ -67,3 +67,6 @@ backend/credentials/
 
 # Internal engineering handoff docs (kept in working tree, not committed)
 docs/PORTAL_INTEGRATION_GUIDE.md
+# Recovered ACR11P source exports. Customer names, emails and balances:
+# keep a local copy for regeneration, never push to GitHub.
+_source-exports-backup/
