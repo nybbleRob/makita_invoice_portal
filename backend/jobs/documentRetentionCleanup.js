@@ -438,8 +438,19 @@ async function cleanupOrphanedFiles() {
       });
       if (creditNoteMatch) continue;
 
+      // Statements hold up to THREE references to their files: the legacy
+      // fileUrl slot plus pdfFileUrl and xlsFileUrl. Matching only fileUrl
+      // treated every generated XLSX as an orphan and deleted it overnight,
+      // because fileUrl holds the PDF path. That is what removed the XLSX for
+      // the 1 September run, leaving statements with a PDF and nothing else.
       const [statementMatch] = await Statement.findAll({
-        where: { fileUrl: { [Op.like]: pathPattern } },
+        where: {
+          [Op.or]: [
+            { fileUrl: { [Op.like]: pathPattern } },
+            { pdfFileUrl: { [Op.like]: pathPattern } },
+            { xlsFileUrl: { [Op.like]: pathPattern } }
+          ]
+        },
         limit: 1,
         attributes: ['id'],
         paranoid: false
