@@ -421,6 +421,29 @@ async function cleanupOrphanedFiles() {
     for (const file of parsedFiles) {
       if (!file.filePath) continue;
 
+      // Never sweep SOURCE IMPORT files. This job exists to clear document
+      // renditions (the PDF/XLSX a document owns) that were left behind when
+      // their owning document was deleted. A source export is a different
+      // kind of thing: it is the audit record of an import run, no document
+      // will ever reference it, so it looks orphaned on the very night it
+      // arrives. That is how the 1 September ACR11P export was destroyed a
+      // few hours after being archived, leaving no way to regenerate the run.
+      //
+      // Identified three ways so a change to any one of them cannot silently
+      // re-expose these files:
+      //   - metadata.acr11pImportId, stamped by the FTP statement importer
+      //   - processingMethod prefix, e.g. acr11p_ftp_import
+      //   - .txt / .csv extension, which is never a document rendition
+      const fileMeta = file.metadata || {};
+      const fileExt = path.extname(file.filePath).toLowerCase();
+      const isSourceImport =
+        Boolean(fileMeta.acr11pImportId) ||
+        String(file.processingMethod || '').startsWith('acr11p_') ||
+        fileExt === '.txt' ||
+        fileExt === '.csv';
+
+      if (isSourceImport) continue;
+
       const pathPattern = `%${path.basename(file.filePath)}%`;
       const [invoiceMatch] = await Invoice.findAll({
         where: { fileUrl: { [Op.like]: pathPattern } },
