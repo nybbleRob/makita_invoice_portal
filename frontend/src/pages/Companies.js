@@ -123,6 +123,16 @@ const Companies = () => {
   const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [initialUserIds, setInitialUserIds] = useState([]);
   const [inheritedUserIds, setInheritedUserIds] = useState([]);
+  const [userAssignmentsLoading, setUserAssignmentsLoading] = useState(false);
+  const [userAssignmentsError, setUserAssignmentsError] = useState(false);
+  const [inheritedLoading, setInheritedLoading] = useState(false);
+  const [inheritedError, setInheritedError] = useState(false);
+  // Which request each async load belongs to. A response for a company the
+  // form is no longer showing (Edit A, Cancel, Edit B) is ignored rather than
+  // written into B's ticks.
+  const assignmentsRequestRef = useRef(null);
+  const inheritedRequestRef = useRef(null);
+  const userListRequestRef = useRef(0);
 
   // Fetch companies with pagination
   useEffect(() => {
@@ -666,18 +676,23 @@ const Companies = () => {
   };
 
   const fetchUserTabUsers = async (page = 1) => {
+    // Only the latest request may update the list, so a slow response for an
+    // earlier search can't replace the results for the current one.
+    const requestId = ++userListRequestRef.current;
     setUserTabLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page), limit: String(userTabPagination.limit) });
       if (debouncedUserTabSearch.trim()) params.set('search', debouncedUserTabSearch.trim());
       const response = await api.get(`/api/users?${params.toString()}`);
+      if (requestId !== userListRequestRef.current) return;
       setUserTabUsers(response.data.users || []);
       setUserTabPagination(prev => ({ ...prev, ...(response.data.pagination || {}) }));
     } catch (error) {
+      if (requestId !== userListRequestRef.current) return;
       toast.error('Error loading users: ' + (error.response?.data?.message || error.message));
       setUserTabUsers([]);
     } finally {
-      setUserTabLoading(false);
+      if (requestId === userListRequestRef.current) setUserTabLoading(false);
     }
   };
 
@@ -686,25 +701,74 @@ const Companies = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCompanyModal, activeTab, debouncedUserTabSearch]);
 
+  // Users who reach this company through the parent currently picked in the
+  // form: everyone assigned to that parent or any of its own parents. Worked
+  // out from the form, so it is right in Add mode and after the parent is
+  // changed in Edit mode.
+  const formParentId = (companyFormData.type === 'SUB' || companyFormData.type === 'BRANCH')
+    ? (companyFormData.parentId || null)
+    : null;
+  useEffect(() => {
+    if (!showCompanyModal) {
+      inheritedRequestRef.current = null;
+      return;
+    }
+    const requestKey = `${editingCompany?.id || 'new'}|${formParentId || ''}`;
+    inheritedRequestRef.current = requestKey;
+    // Never show the previous parent's users while the new ones load.
+    setInheritedUserIds([]);
+    setInheritedError(false);
+    if (!formParentId) {
+      setInheritedLoading(false);
+      return;
+    }
+    setInheritedLoading(true);
+    api.get(`/api/companies/${formParentId}/user-assignments`)
+      .then((response) => {
+        if (inheritedRequestRef.current !== requestKey) return;
+        setInheritedUserIds([...new Set([...(response.data.direct || []), ...(response.data.inherited || [])])]);
+        setInheritedLoading(false);
+      })
+      .catch((error) => {
+        if (inheritedRequestRef.current !== requestKey) return;
+        setInheritedError(true);
+        setInheritedLoading(false);
+        toast.error('Error loading the parent company\'s users: ' + (error.response?.data?.message || error.message));
+      });
+  }, [showCompanyModal, editingCompany, formParentId]);
+
   const loadCompanyUserAssignments = async (companyId) => {
+    assignmentsRequestRef.current = companyId;
+    setUserAssignmentsLoading(true);
+    setUserAssignmentsError(false);
     try {
       const response = await api.get(`/api/companies/${companyId}/user-assignments`);
+      if (assignmentsRequestRef.current !== companyId) return;
       const direct = response.data.direct || [];
       setInitialUserIds(direct);
       setSelectedUserIds(direct);
-      setInheritedUserIds(response.data.inherited || []);
     } catch (error) {
+      if (assignmentsRequestRef.current !== companyId) return;
+      setUserAssignmentsError(true);
       toast.error('Error loading assigned users: ' + (error.response?.data?.message || error.message));
+    } finally {
+      if (assignmentsRequestRef.current === companyId) setUserAssignmentsLoading(false);
     }
   };
 
   const resetUserTab = () => {
+    assignmentsRequestRef.current = null;
+    userListRequestRef.current += 1;
     setUserTabSearch('');
     setUserTabUsers([]);
     setUserTabPagination(prev => ({ ...prev, page: 1, total: 0, pages: 0 }));
     setSelectedUserIds([]);
     setInitialUserIds([]);
     setInheritedUserIds([]);
+    setUserAssignmentsLoading(false);
+    setUserAssignmentsError(false);
+    setInheritedLoading(false);
+    setInheritedError(false);
   };
 
   const toggleUserSelected = (userId) => {
@@ -821,10 +885,14 @@ const Companies = () => {
         payload.parentId = null;
       }
 
-      const assignUserIds = selectedUserIds.filter(id => !initialUserIds.includes(id));
-      const unassignUserIds = initialUserIds.filter(id => !selectedUserIds.includes(id));
-      if (assignUserIds.length > 0) payload.assignUserIds = assignUserIds;
-      if (editingCompany && unassignUserIds.length > 0) payload.unassignUserIds = unassignUserIds;
+      // If this company's current users (or its parent's) never loaded, the
+      // ticks can't be trusted, so leave assignments alone and save the rest.
+      if (!(editingCompany && userAssignmentsError) && !inheritedError) {
+        const assignUserIds = selectedUserIds.filter(id => !initialUserIds.includes(id));
+        const unassignUserIds = initialUserIds.filter(id => !selectedUserIds.includes(id));
+        if (assignUserIds.length > 0) payload.assignUserIds = assignUserIds;
+        if (editingCompany && unassignUserIds.length > 0) payload.unassignUserIds = unassignUserIds;
+      }
 
       let response;
       if (editingCompany) {
@@ -1243,6 +1311,7 @@ const Companies = () => {
                                 placeholder="Search users by name or email..."
                                 value={userTabSearch}
                                 onChange={(e) => setUserTabSearch(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                               />
                             </div>
                             <span className="text-muted small ms-auto">
@@ -1252,7 +1321,18 @@ const Companies = () => {
                           <p className="text-muted small mb-2">
                             Tick the users who should see this company's invoices, credit notes and statements.
                             {isEditing ? ' Changes are saved when you update the company.' : ' They are assigned when the company is created.'}
+                            {' '}Users of a parent company already have access and are managed on the parent.
                           </p>
+                          {isEditing && userAssignmentsError && (
+                            <div className="alert alert-warning py-2 small">
+                              This company's current users could not be loaded, so saving will not change who is assigned. Close and reopen the company to try again.
+                            </div>
+                          )}
+                          {inheritedError && (
+                            <div className="alert alert-warning py-2 small">
+                              The parent company's users could not be loaded, so it isn't possible to show who already has access through the parent. Saving will not change who is assigned. Close and reopen to try again.
+                            </div>
+                          )}
                           <div className="table-responsive" style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid #e0e0e0' }}>
                             <table className="table table-vcenter table-sm mb-0">
                               <thead>
@@ -1265,7 +1345,7 @@ const Companies = () => {
                                 </tr>
                               </thead>
                               <tbody>
-                                {userTabLoading ? (
+                                {userTabLoading || inheritedLoading || (isEditing && userAssignmentsLoading) ? (
                                   <tr>
                                     <td colSpan="5" className="text-center py-3">
                                       <div className="spinner-border spinner-border-sm" role="status"></div>
@@ -1278,8 +1358,19 @@ const Companies = () => {
                                 ) : (
                                   userTabUsers.map((u) => {
                                     const isSelected = selectedUserIds.includes(u.id);
-                                    const viaParent = !isSelected && inheritedUserIds.includes(u.id);
-                                    const locked = u.allCompanies || viaParent;
+                                    const viaParent = inheritedUserIds.includes(u.id);
+                                    const wasDirect = initialUserIds.includes(u.id);
+                                    // Parent-only users are shown ticked and locked (their
+                                    // access is managed on the parent). A user who is also
+                                    // assigned here directly can still be unticked, and the
+                                    // Access column says plainly that access continues.
+                                    const locked = u.allCompanies || (viaParent && !isSelected && !wasDirect) || (isEditing && userAssignmentsError) || inheritedError;
+                                    const accessText = u.allCompanies ? 'All companies'
+                                      : isSelected && viaParent ? 'Assigned (also via parent company)'
+                                      : isSelected ? 'Assigned'
+                                      : viaParent && wasDirect ? 'Still has access via parent company'
+                                      : viaParent ? 'Via parent company'
+                                      : '';
                                     return (
                                       <tr
                                         key={u.id}
@@ -1291,7 +1382,7 @@ const Companies = () => {
                                           <input
                                             type="checkbox"
                                             className="form-check-input m-0 align-middle"
-                                            checked={isSelected || locked}
+                                            checked={isSelected || u.allCompanies || (viaParent && !wasDirect)}
                                             disabled={locked}
                                             onChange={() => toggleUserSelected(u.id)}
                                             onClick={(e) => e.stopPropagation()}
@@ -1304,8 +1395,8 @@ const Companies = () => {
                                         </td>
                                         <td className="text-muted">{u.email}</td>
                                         <td><span className={`badge ${getRoleBadgeClass(u.role)}`}>{getRoleLabel(u.role)}</span></td>
-                                        <td className="text-muted small">
-                                          {u.allCompanies ? 'All companies' : viaParent ? 'Via parent company' : isSelected ? 'Assigned' : ''}
+                                        <td className={`small ${viaParent && wasDirect && !isSelected ? 'text-warning' : 'text-muted'}`}>
+                                          {accessText}
                                         </td>
                                       </tr>
                                     );
@@ -1344,7 +1435,7 @@ const Companies = () => {
                   <button
                     type="submit"
                     className="btn btn-primary"
-                    disabled={creating}
+                    disabled={creating || inheritedLoading || (isEditing && userAssignmentsLoading)}
                   >
                     {creating 
                       ? (isEditing ? 'Updating...' : 'Creating...') 

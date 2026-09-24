@@ -465,11 +465,13 @@ router.get('/archive', requirePermission('STATEMENTS_ARCHIVE'), async (req, res)
     // The index says which, so the archive is complete on its own.
     const files = [];
     const indexRows = [];
+    // UK date, so it always agrees with the month the statement is filed under.
+    const ukDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' });
     for (const statement of statements) {
       const row = {
         account_number: statement.company?.referenceNo ?? '',
         company: statement.company?.name || '',
-        statement_date: new Date(statement.periodEnd).toISOString().slice(0, 10),
+        statement_date: ukDate.format(new Date(statement.periodEnd)),
         pdf_file: '',
         excel_file: ''
       };

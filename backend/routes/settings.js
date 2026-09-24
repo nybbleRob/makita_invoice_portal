@@ -588,14 +588,15 @@ router.put('/', globalAdmin, async (req, res) => {
     // Invalidate cache after save
     await Settings.invalidateCache();
 
-    // A statement retention change applies to statements already in the
-    // portal, not just future ones (the invoice policy counts too while
+    // A longer statement retention policy also extends statements already in
+    // the portal, not just future ones (the invoice policy counts too while
     // statements inherit it). Otherwise extending retention would still purge
-    // the current month's statements on the old date.
+    // the current month's statements on the old date. Extend-only: see
+    // recalculateStatementRetention.
     let statementRetentionRecalculated = 0;
     if (JSON.stringify(resolveStatementRetentionSettings(settings)) !== statementPolicyBefore) {
       statementRetentionRecalculated = await recalculateStatementRetention(settings);
-      console.log(`🗓️  Statement retention policy changed; re-dated ${statementRetentionRecalculated} existing statement(s).`);
+      console.log(`🗓️  Statement retention policy changed; extended ${statementRetentionRecalculated} existing statement(s).`);
     }
     
     // Don't expose sensitive data in response

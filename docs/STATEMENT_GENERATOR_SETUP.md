@@ -58,7 +58,7 @@ Then point the worker at the venv's Python interpreter by adding to
 STATEMENT_PYTHON_BIN=/opt/makita-stmt-venv/bin/python3
 ```
 
-Then install Calibri (see "Fonts" below) and start one
+Then check the fonts (see "Fonts" below) and start one
 or more unoservers (see "Persistent LibreOffice listener" below).
 
 ### Older systems (Debian 11, Ubuntu 22.04 and earlier)
@@ -86,7 +86,7 @@ sudo pip3 install --upgrade unoserver openpyxl pypdf Pillow
 | `unoserver` (`unoconvert`)   | Persistent LibreOffice listener - no per-page startup cost | strongly recommended |
 | `pdfunite` (poppler-utils)   | Merges per-page PDFs into one statement                    | yes (or pypdf) |
 | `pypdf`                      | Pure-Python merge fallback if `pdfunite` is unavailable    | optional  |
-| Calibri                      | The statement font (PDF and XLSX) since September 2026     | strongly recommended |
+| Carlito (`fonts-crosextra-carlito`) | Stands in for Calibri in the PDF (Calibri not licensed for the server) | yes |
 | `ACR11P.xlsx` template       | The branded layout - holds the logo + bank-details images  | yes       |
 
 ---
@@ -118,18 +118,20 @@ ACR11P.xlsx template is still Arial / Arial Black; `fill_template.py` swaps
 every cell to Calibri on each page (the Arial Black header becomes Calibri
 bold), and the XLSX builder writes Calibri directly.
 
-LibreOffice renders the PDF. If Calibri is not installed it substitutes
-Carlito (`fonts-crosextra-carlito`), which has identical metrics but is a
-different typeface, so install the real Calibri for the requested look.
+LibreOffice renders the PDF. Calibri is a Microsoft font whose licence does
+not cover the Linux server, so by decision (September 2026) it is **not**
+installed. LibreOffice substitutes Carlito (`fonts-crosextra-carlito`),
+which is built to Calibri's metrics, so layout and pagination are identical.
+The XLSX names Calibri and shows real Calibri on the customer's PC. If Calibri
+is ever installed on the server, the PDFs switch to it automatically; no code
+change is needed.
 
-Calibri is not in the Debian/Ubuntu repos (it is not part of
-`ttf-mscorefonts-installer`). Copy the .ttf files from a licensed Office
-install into `/usr/local/share/fonts/` and run `fc-cache -fv`.
-
-Verify after install:
+Check which font the PDFs will use (`fc-match Calibri` names Carlito, or
+Calibri if it has been installed):
 
 ```bash
 fc-list | grep -iE 'calibri|carlito'
+fc-match Calibri
 ```
 
 Restart LibreOffice / unoserver after adding fonts so they pick up the new

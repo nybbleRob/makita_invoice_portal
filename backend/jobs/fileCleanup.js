@@ -1,7 +1,27 @@
-const { File, Settings } = require('../models');
+const { File, Settings, Statement } = require('../models');
 const fs = require('fs');
 const path = require('path');
 const { Op } = require('sequelize');
+
+/**
+ * File names of every rendition a live statement still owns. Statement files
+ * are governed by statement retention, which purges the statement and its
+ * files together. If this job also deleted them whenever fileRetentionDays
+ * was shorter than the statement period (30 against 90 on live in September
+ * 2026), statements would stay listed with their PDF/XLSX gone from disk.
+ * Matched by exact file name, so a stray same-named copy elsewhere is kept
+ * rather than deleted.
+ */
+async function getLiveStatementFileNames() {
+  const rows = await Statement.findAll({ attributes: ['fileUrl', 'pdfFileUrl', 'xlsFileUrl'], raw: true });
+  const names = new Set();
+  for (const row of rows) {
+    for (const stored of [row.fileUrl, row.pdfFileUrl, row.xlsFileUrl]) {
+      if (stored) names.add(path.basename(stored));
+    }
+  }
+  return names;
+}
 
 /**
  * Scheduled job to delete old files based on retention period
@@ -39,8 +59,14 @@ async function cleanupOldFiles() {
     
     let deletedCount = 0;
     let errorCount = 0;
-    
+    let keptForStatements = 0;
+    const liveStatementFiles = await getLiveStatementFileNames();
+
     for (const file of filesToDelete) {
+      if (file.filePath && liveStatementFiles.has(path.basename(file.filePath))) {
+        keptForStatements++;
+        continue;
+      }
       try {
         // Delete physical file if it exists
         if (file.filePath && fs.existsSync(file.filePath)) {
@@ -60,11 +86,12 @@ async function cleanupOldFiles() {
       }
     }
     
-    console.log(`✅ File cleanup completed: ${deletedCount} deleted, ${errorCount} errors`);
-    
+    console.log(`✅ File cleanup completed: ${deletedCount} deleted, ${errorCount} errors, ${keptForStatements} kept for live statements`);
+
     return {
       deleted: deletedCount,
       errors: errorCount,
+      keptForStatements,
       total: filesToDelete.length
     };
   } catch (error) {

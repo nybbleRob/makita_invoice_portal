@@ -3000,9 +3000,11 @@ router.get('/:id/assigned-users', auth, async (req, res) => {
 });
 
 /**
- * IDs of every user assigned to a company (active or not), split into direct
- * assignments and users who reach it through a parent company. Feeds the
- * Users tab of the Edit Company form.
+ * IDs of every user assigned to a company (active or not): `direct` holds
+ * users assigned to this company itself, and `inherited` holds users assigned
+ * to any of its parents. A user can be in both. Feeds the Users tab of the
+ * Add/Edit Company form, which calls it for the company being edited and for
+ * the parent picked in the form.
  * GET /api/companies/:id/user-assignments
  */
 router.get('/:id/user-assignments', requirePermission('COMPANIES_EDIT'), async (req, res) => {
@@ -3025,8 +3027,11 @@ router.get('/:id/user-assignments', requirePermission('COMPANIES_EDIT'), async (
       attributes: ['userId', 'companyId'],
       raw: true
     });
+    // A user can be in both lists. Being assigned to a parent gives access to
+    // this company whatever happens to their direct row, so the Users tab must
+    // know that before it lets someone "remove" them here.
     const direct = new Set(rows.filter(r => r.companyId === company.id).map(r => r.userId));
-    const inherited = new Set(rows.filter(r => !direct.has(r.userId)).map(r => r.userId));
+    const inherited = new Set(rows.filter(r => r.companyId !== company.id).map(r => r.userId));
 
     res.json({ direct: [...direct], inherited: [...inherited] });
   } catch (error) {

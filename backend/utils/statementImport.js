@@ -19,6 +19,7 @@
 const path = require('path');
 const { Statement, Company } = require('../models');
 const { calculateStatementRetentionDates } = require('./documentRetention');
+const { parseDate } = require('./parseDate');
 
 /**
  * Classify a file path or filename as 'pdf', 'xls', or 'unknown'.
@@ -62,8 +63,14 @@ function coerceNumber(raw) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// Strings go through the shared day-first parser. `new Date('01.09.2026')`
+// reads month-first (9 January), which filed manually uploaded statements
+// under the wrong month and, with a statement-date retention trigger, stamped
+// a purge date already in the past. ISO strings parse to the same instant as
+// before, and non-strings keep the old behaviour.
 function parseDateValue(raw) {
   if (!raw) return null;
+  if (typeof raw === 'string') return parseDate(raw);
   const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? null : d;
 }

@@ -200,16 +200,22 @@ function shouldDeleteStatement(statement, settings) {
 }
 
 /**
- * Re-apply the current statement retention policy to every statement already
- * in the portal. Retention dates are stamped when a statement is created, so
- * without this a policy change only reaches future statements: moving from 30
- * days to 90 would still purge the current month's run on the old date.
+ * Apply a longer statement retention policy to statements already in the
+ * portal. Retention dates are stamped when a statement is created, so without
+ * this a policy change only reaches future statements: moving from 30 days to
+ * 90 would still purge the current month's run on the old date.
+ *
+ * EXTEND-ONLY. A purge date is only ever moved later, and a statement that
+ * never expires is never given a date. Shortening the policy therefore
+ * applies to new statements only. Re-dating existing rows earlier could land
+ * them in the past, and the nightly cleanup would hard-delete them with no
+ * undo.
  *
  * Rows are grouped by their new dates so a monthly run (hundreds of rows
  * sharing a statement date) costs one UPDATE rather than one per row.
  *
  * @param {Object} settings - Settings object (already saved)
- * @returns {Promise<number>} - number of statements whose dates changed
+ * @returns {Promise<number>} - number of statements whose purge date was extended
  */
 async function recalculateStatementRetention(settings) {
   const { Statement } = require('../models');
@@ -222,11 +228,11 @@ async function recalculateStatementRetention(settings) {
   const groups = new Map();
   for (const statement of statements) {
     const { retentionStartDate, retentionExpiryDate } = calculateStatementRetentionDates(statement, settings);
-    const sameStart = (statement.retentionStartDate?.getTime() ?? null) === (retentionStartDate?.getTime() ?? null);
-    const sameExpiry = (statement.retentionExpiryDate?.getTime() ?? null) === (retentionExpiryDate?.getTime() ?? null);
-    if (sameStart && sameExpiry) continue;
+    const oldExpiry = statement.retentionExpiryDate ? statement.retentionExpiryDate.getTime() : null;
+    const newExpiry = retentionExpiryDate ? retentionExpiryDate.getTime() : null;
+    if (oldExpiry === null || newExpiry === null || newExpiry <= oldExpiry) continue;
 
-    const key = `${retentionStartDate?.getTime() ?? ''}|${retentionExpiryDate?.getTime() ?? ''}`;
+    const key = `${retentionStartDate?.getTime() ?? ''}|${retentionExpiryDate.getTime()}`;
     if (!groups.has(key)) groups.set(key, { retentionStartDate, retentionExpiryDate, ids: [] });
     groups.get(key).ids.push(statement.id);
   }

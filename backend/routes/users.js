@@ -301,8 +301,7 @@ router.get('/export', canManageUsers, async (req, res) => {
         send_statement_pdf_attachment: user.sendStatementPdfAttachment ? 'TRUE' : 'FALSE',
         send_statement_xls_attachment: user.sendStatementXlsAttachment ? 'TRUE' : 'FALSE',
         send_email_as_summary: user.sendEmailAsSummary ? 'TRUE' : 'FALSE',
-        send_import_summary_report: user.sendImportSummaryReport ? 'TRUE' : 'FALSE',
-        send_registration_notification: user.sendRegistrationNotification ? 'TRUE' : 'FALSE'
+        send_import_summary_report: user.sendImportSummaryReport ? 'TRUE' : 'FALSE'
       };
     });
 
@@ -2488,6 +2487,12 @@ router.post('/import', canManageUsers, upload.single('file'), async (req, res) =
           existingUser.sendStatementXlsAttachment = sendStatementEmail ? sendStatementXlsAttachment : false;
           existingUser.sendEmailAsSummary = (sendInvoiceEmail || sendStatementEmail) ? sendEmailAsSummary : false;
           existingUser.sendImportSummaryReport = sendImportSummaryReport;
+          // The registration toggle is managed in Add/Edit User, not by import,
+          // but a role that can't hold it must drop it (as PUT /:id does), or it
+          // silently comes back if the user is later made a manager again.
+          if (!REGISTRATION_NOTIFICATION_ROLES.includes(role)) {
+            existingUser.sendRegistrationNotification = false;
+          }
 
           // Handle email change
           if (emailChanged) {
