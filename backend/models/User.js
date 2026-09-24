@@ -177,6 +177,12 @@ module.exports = (sequelize) => {
       defaultValue: false,
       comment: 'Receive import summary report emails (for Global Admins and Administrators only)'
     },
+    sendRegistrationNotification: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'Receive new account registration request emails (Global Admins, Administrators and Managers only)'
+    },
     failedLoginAttempts: {
       type: DataTypes.INTEGER,
       defaultValue: 0,

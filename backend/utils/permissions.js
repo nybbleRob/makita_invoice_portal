@@ -66,6 +66,8 @@ const PERMISSIONS = {
   STATEMENTS_EDIT: ['global_admin', 'administrator', 'manager'],
   STATEMENTS_DELETE: ['global_admin', 'administrator'],
   STATEMENTS_DOWNLOAD: PORTAL_ROLES,
+  // Monthly ZIP of every statement for the Credit Team's 7-year archive
+  STATEMENTS_ARCHIVE: STAFF_ROLES,
   
   // =====================
   // UNALLOCATED DOCUMENTS

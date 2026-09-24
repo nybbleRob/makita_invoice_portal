@@ -219,8 +219,10 @@ async function hardDeleteDocument(document, documentType, settings) {
     deletedAt: new Date().toISOString()
   };
   
-  // Delete physical file if exists
-  const filePaths = [document.fileUrl];
+  // Delete physical files. A statement owns up to two renditions besides the
+  // legacy fileUrl slot (which mirrors one of them), so purging only fileUrl
+  // left every statement's XLSX behind on disk.
+  const filePaths = [...new Set([document.fileUrl, document.pdfFileUrl, document.xlsFileUrl].filter(Boolean))];
   
   // Also check for any associated File records
   if (document.fileId) {

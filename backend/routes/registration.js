@@ -78,14 +78,20 @@ router.post('/submit', recaptchaMiddleware({ minScore: 0.5 }), async (req, res) 
     // Get settings for email sending
     const settings = await Settings.getSettings();
     
-    // Get all global admins and administrators to notify
+    // Notify the users who have opted in from Users. The role filter matches
+    // who can open Pending Accounts, so nobody is sent a review link they
+    // cannot use.
     const admins = await User.findAll({
       where: {
-        role: { [Op.in]: ['global_admin', 'administrator'] },
-        isActive: true
+        role: { [Op.in]: ['global_admin', 'administrator', 'manager'] },
+        isActive: true,
+        sendRegistrationNotification: true
       },
       attributes: ['id', 'name', 'email']
     });
+    if (admins.length === 0) {
+      console.warn(`Registration ${registration.id} received but no user has "Receive New Account Registrations" switched on.`);
+    }
     
     // Send notification email to each admin
     const { getFrontendUrl } = require('../utils/urlConfig');

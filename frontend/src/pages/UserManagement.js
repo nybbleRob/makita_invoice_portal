@@ -72,6 +72,7 @@ const UserManagement = () => {
     sendStatementXlsAttachment: false,
     sendEmailAsSummary: false,
     sendImportSummaryReport: false,
+    sendRegistrationNotification: false,
     companyIds: []
   });
   
@@ -543,6 +544,7 @@ const UserManagement = () => {
       sendStatementXlsAttachment: false,
       sendEmailAsSummary: false,
       sendImportSummaryReport: false,
+      sendRegistrationNotification: false,
       companyIds: []
     });
     setPasswordData({
@@ -867,6 +869,7 @@ const UserManagement = () => {
       sendStatementXlsAttachment: user.sendStatementXlsAttachment || false,
       sendEmailAsSummary: user.sendEmailAsSummary || false,
       sendImportSummaryReport: user.sendImportSummaryReport || false,
+      sendRegistrationNotification: user.sendRegistrationNotification || false,
       companyIds: []
     });
     
@@ -2201,6 +2204,29 @@ const UserManagement = () => {
                               </label>
                             </div>
                             <small className="form-hint mt-1">Receive an email summary after each import batch completes (includes: start/finish time, files processed, success/failure counts, unallocated documents)</small>
+                          </div>
+                        )}
+
+                        {/* New Account Registrations - roles that can review Pending Accounts */}
+                        {['global_admin', 'administrator', 'manager'].includes(formData.role) && (
+                          <div className="mb-3">
+                            <div className="form-selectgroup-item">
+                              <label className="row">
+                                <span className="col small">Receive New Account Registrations</span>
+                                <span className="col-auto">
+                                  <label className="form-check form-check-single form-switch mb-0">
+                                    <input
+                                      type="checkbox"
+                                      className="form-check-input"
+                                      name="sendRegistrationNotification"
+                                      checked={formData.sendRegistrationNotification || false}
+                                      onChange={handleInputChange}
+                                    />
+                                  </label>
+                                </span>
+                              </label>
+                            </div>
+                            <small className="form-hint mt-1">Email this user when someone submits a new account registration for review in Pending Accounts</small>
                           </div>
                         )}
                         

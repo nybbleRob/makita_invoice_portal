@@ -43,6 +43,7 @@ import time
 from copy import copy
 
 from openpyxl import load_workbook
+from openpyxl.cell.cell import MergedCell
 from openpyxl.worksheet.properties import PageSetupProperties
 
 # openpyxl needs Pillow installed to round-trip embedded images. Without it,
@@ -80,6 +81,25 @@ def _coerce_int_or_str(v):
     return int(sv) if sv.isdigit() else sv
 
 
+STATEMENT_FONT = "Calibri"
+
+
+def apply_calibri(ws):
+    """Re-set every cell in the used range in STATEMENT_FONT, keeping each
+    cell's size, bold/italic, underline and colour. Merged-cell placeholders
+    are skipped: only the top-left cell of a merge carries text."""
+    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
+        for cell in row:
+            if isinstance(cell, MergedCell) or cell.font is None:
+                continue
+            if cell.font.name == STATEMENT_FONT:
+                continue
+            f = copy(cell.font)
+            f.name = STATEMENT_FONT
+            f.scheme = None  # a theme scheme would override the explicit name
+            cell.font = f
+
+
 def fill_sheet(ws, hdr, page_rows, page_no, is_last):
     """
     Fill one statement page on `ws`. Mirrors the prototype `fill_page` exactly
@@ -109,9 +129,12 @@ def fill_sheet(ws, hdr, page_rows, page_no, is_last):
     ws["A16"] = hdr.get("postcode", "")
     ws["B65"] = hdr.get("terms", "")
 
-    # The header block (B1-B4) is Arial Black in the template. If the font
-    # isn't installed LibreOffice substitutes a light weight; force bold so
-    # the heavy intended weight is preserved either way.
+    # Statements are set in Calibri at Makita's request (September 2026). The
+    # template itself is Arial / Arial Black and lives only on the server, so
+    # the font is swapped here on every page rather than in the template.
+    # Size, colour and style are kept. The header block (B1-B4) was Arial
+    # Black, so it becomes Calibri bold to keep its heavy weight.
+    apply_calibri(ws)
     for ref in ("B1", "B2", "B3", "B4"):
         f = copy(ws[ref].font)
         f.bold = True

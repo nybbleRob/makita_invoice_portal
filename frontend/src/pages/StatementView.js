@@ -16,6 +16,8 @@ const StatementView = () => {
   const location = useLocation();
   const { hasPermission } = usePermissions();
   const { settings } = useSettings();
+  // Statements can override the invoice retention policy; null means inherit.
+  const statementRetentionPeriod = settings?.statementRetentionPeriod ?? settings?.documentRetentionPeriod;
 
   const canDownload = hasPermission('STATEMENTS_DOWNLOAD');
   const canEdit = hasPermission('STATEMENTS_EDIT');
@@ -388,11 +390,11 @@ const StatementView = () => {
               <div className="card">
                 <div className="card-header d-flex justify-content-between align-items-center">
                   <h3 className="card-title">Statement Information</h3>
-                  {settings?.documentRetentionPeriod && (
+                  {statementRetentionPeriod && (
                     <DocumentRetentionTimer
                       expiryDate={statement.retentionExpiryDate}
                       startDate={statement.retentionStartDate}
-                      retentionPeriod={settings?.documentRetentionPeriod}
+                      retentionPeriod={statementRetentionPeriod}
                     />
                   )}
                 </div>

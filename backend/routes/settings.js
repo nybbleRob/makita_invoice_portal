@@ -11,6 +11,7 @@ const router = express.Router();
 
 // Storage configuration
 const { ensureStorageDirs, STORAGE_BASE } = require('../config/storage');
+const { resolveStatementRetentionSettings, recalculateStatementRetention } = require('../utils/documentRetention');
 ensureStorageDirs();
 
 // Configure multer for file uploads
@@ -186,6 +187,7 @@ router.put('/', globalAdmin, async (req, res) => {
   try {
     // Use getSettingsForUpdate to get Sequelize model instance (bypasses cache)
     const settings = await Settings.getSettingsForUpdate();
+    const statementPolicyBefore = JSON.stringify(resolveStatementRetentionSettings(settings));
     
     // Update basic fields
     if (req.body.companyName !== undefined) {
@@ -585,9 +587,20 @@ router.put('/', globalAdmin, async (req, res) => {
     
     // Invalidate cache after save
     await Settings.invalidateCache();
+
+    // A statement retention change applies to statements already in the
+    // portal, not just future ones (the invoice policy counts too while
+    // statements inherit it). Otherwise extending retention would still purge
+    // the current month's statements on the old date.
+    let statementRetentionRecalculated = 0;
+    if (JSON.stringify(resolveStatementRetentionSettings(settings)) !== statementPolicyBefore) {
+      statementRetentionRecalculated = await recalculateStatementRetention(settings);
+      console.log(`🗓️  Statement retention policy changed; re-dated ${statementRetentionRecalculated} existing statement(s).`);
+    }
     
     // Don't expose sensitive data in response
     const settingsObj = settings.toJSON();
+    settingsObj.statementRetentionRecalculated = statementRetentionRecalculated;
     if (settingsObj.smtp && settingsObj.smtp.auth) {
       settingsObj.smtp.auth.password = settingsObj.smtp.auth.password ? '***' : '';
     }
@@ -1115,7 +1128,6 @@ router.post('/test-retention', auth, globalAdmin, async (req, res) => {
     const { cleanupExpiredDocuments } = require('../jobs/documentRetentionCleanup');
     const { Invoice, CreditNote, Statement, Settings } = require('../models');
     const { Op } = require('sequelize');
-    const { resolveStatementRetentionSettings } = require('../utils/documentRetention');
 
     // Get retention settings
     const settings = await Settings.getSettings();
@@ -1175,7 +1187,6 @@ router.get('/retention-status', auth, globalAdmin, async (req, res) => {
   try {
     const { Invoice, CreditNote, Statement, Settings } = require('../models');
     const { Op } = require('sequelize');
-    const { resolveStatementRetentionSettings } = require('../utils/documentRetention');
 
     const settings = await Settings.getSettings();
     const retentionPeriod = settings.documentRetentionPeriod;

@@ -12,6 +12,44 @@ const { requirePermission, requireManager, requireStaff } = require('../middlewa
 const { updateNestedSetIndexes, queueNestedSetUpdate } = require('../utils/nestedSet');
 const { redis } = require('../config/redis');
 const { logActivity, ActivityType } = require('../services/activityLogger');
+const { canManageRole } = require('../utils/roleHierarchy');
+
+// Users can be assigned to a company from the Users tab of the Add/Edit
+// Company form, as well as from each user's own record. Only users the
+// requester is allowed to manage are touched; any others are counted as
+// skipped rather than failing the whole save.
+const USER_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function parseUserIdList(value, field) {
+  if (value === undefined || value === null) return { ids: [] };
+  if (!Array.isArray(value) || value.some(id => !USER_ID_RE.test(String(id)))) {
+    return { error: `${field} must be an array of user IDs` };
+  }
+  return { ids: [...new Set(value.map(String))] };
+}
+
+async function applyCompanyUserAssignments(companyId, assignIds, unassignIds, requesterRole) {
+  const requested = [...new Set([...assignIds, ...unassignIds])];
+  if (requested.length === 0) return { assigned: 0, unassigned: 0, skipped: 0 };
+
+  const users = await User.findAll({ where: { id: { [Op.in]: requested } }, attributes: ['id', 'role'] });
+  const manageable = new Set(users.filter(u => canManageRole(requesterRole, u.role)).map(u => u.id));
+  const toAssign = assignIds.filter(id => manageable.has(id));
+  const toUnassign = unassignIds.filter(id => manageable.has(id) && !toAssign.includes(id));
+
+  if (toAssign.length > 0) {
+    await UserCompany.bulkCreate(toAssign.map(userId => ({ userId, companyId })), { ignoreDuplicates: true });
+  }
+  const unassigned = toUnassign.length > 0
+    ? await UserCompany.destroy({ where: { companyId, userId: { [Op.in]: toUnassign } } })
+    : 0;
+
+  return {
+    assigned: toAssign.length,
+    unassigned,
+    skipped: requested.length - toAssign.length - toUnassign.length
+  };
+}
 const router = express.Router();
 
 // Configure multer for file uploads
@@ -685,6 +723,11 @@ router.post('/', requirePermission('COMPANIES_CREATE'), async (req, res) => {
     if (!name) {
       return res.status(400).json({ message: 'Company name is required' });
     }
+
+    const assignList = parseUserIdList(req.body.assignUserIds, 'assignUserIds');
+    if (assignList.error) {
+      return res.status(400).json({ message: assignList.error });
+    }
     
     if (!referenceNo) {
       return res.status(400).json({ message: 'Account Number / Company Number is required' });
@@ -759,6 +802,8 @@ router.post('/', requirePermission('COMPANIES_CREATE'), async (req, res) => {
     };
     
     const company = await Company.create(companyData);
+
+    const userAssignments = await applyCompanyUserAssignments(company.id, assignList.ids, [], req.user.role);
     
     // Queue nested set update for background processing (non-blocking)
     queueNestedSetUpdate();
@@ -784,7 +829,8 @@ router.post('/', requirePermission('COMPANIES_CREATE'), async (req, res) => {
         companyName: company.name,
         companyType: company.type,
         referenceNo: company.referenceNo,
-        parentId: company.parentId
+        parentId: company.parentId,
+        userAssignments
       },
       companyId: company.id,
       companyName: company.name,
@@ -792,7 +838,7 @@ router.post('/', requirePermission('COMPANIES_CREATE'), async (req, res) => {
       userAgent: req.get('user-agent')
     });
     
-    res.status(201).json(company);
+    res.status(201).json({ ...company.toJSON(), userAssignments });
   } catch (error) {
     console.error('Error creating company:', error);
     if (error.name === 'SequelizeUniqueConstraintError') {
@@ -911,6 +957,12 @@ router.put('/:id', requirePermission('COMPANIES_EDIT'), async (req, res) => {
     
     if (!company) {
       return res.status(404).json({ message: 'Company not found' });
+    }
+
+    const assignList = parseUserIdList(req.body.assignUserIds, 'assignUserIds');
+    const unassignList = parseUserIdList(req.body.unassignUserIds, 'unassignUserIds');
+    if (assignList.error || unassignList.error) {
+      return res.status(400).json({ message: assignList.error || unassignList.error });
     }
     
     const {
@@ -1033,6 +1085,8 @@ router.put('/:id', requirePermission('COMPANIES_EDIT'), async (req, res) => {
     const wasDeactivated = oldIsActive && !company.isActive;
     
     await company.save();
+
+    const userAssignments = await applyCompanyUserAssignments(company.id, assignList.ids, unassignList.ids, req.user.role);
     
     // Queue nested set update if parent changed (non-blocking)
     if (wasMoved) {
@@ -1070,7 +1124,8 @@ router.put('/:id', requirePermission('COMPANIES_EDIT'), async (req, res) => {
           referenceNo: company.changed('referenceNo') ? req.body.referenceNo : undefined,
           parentId: wasMoved ? { from: oldParentId, to: company.parentId } : undefined,
           isActive: company.changed('isActive') ? { from: oldIsActive, to: company.isActive } : undefined
-        }
+        },
+        userAssignments
       },
       companyId: company.id,
       companyName: company.name,
@@ -1091,7 +1146,7 @@ router.put('/:id', requirePermission('COMPANIES_EDIT'), async (req, res) => {
       }]
     });
     
-    res.json(company);
+    res.json({ ...company.toJSON(), userAssignments });
   } catch (error) {
     console.error('Error updating company:', error);
     if (error.name === 'SequelizeUniqueConstraintError') {
@@ -2940,6 +2995,42 @@ router.get('/:id/assigned-users', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching assigned users:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+/**
+ * IDs of every user assigned to a company (active or not), split into direct
+ * assignments and users who reach it through a parent company. Feeds the
+ * Users tab of the Edit Company form.
+ * GET /api/companies/:id/user-assignments
+ */
+router.get('/:id/user-assignments', requirePermission('COMPANIES_EDIT'), async (req, res) => {
+  try {
+    const company = await Company.findByPk(req.params.id, { attributes: ['id', 'parentId'] });
+    if (!company) {
+      return res.status(404).json({ message: 'Company not found' });
+    }
+
+    const ancestorIds = [company.id];
+    let currentParentId = company.parentId;
+    for (let depth = 0; currentParentId && depth < 10; depth++) {
+      ancestorIds.push(currentParentId);
+      const parentCompany = await Company.findByPk(currentParentId, { attributes: ['id', 'parentId'] });
+      currentParentId = parentCompany?.parentId;
+    }
+
+    const rows = await UserCompany.findAll({
+      where: { companyId: { [Op.in]: ancestorIds } },
+      attributes: ['userId', 'companyId'],
+      raw: true
+    });
+    const direct = new Set(rows.filter(r => r.companyId === company.id).map(r => r.userId));
+    const inherited = new Set(rows.filter(r => !direct.has(r.userId)).map(r => r.userId));
+
+    res.json({ direct: [...direct], inherited: [...inherited] });
+  } catch (error) {
+    console.error('Error fetching company user assignments:', error);
     res.status(500).json({ message: error.message });
   }
 });

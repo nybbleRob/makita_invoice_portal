@@ -58,7 +58,7 @@ Then point the worker at the venv's Python interpreter by adding to
 STATEMENT_PYTHON_BIN=/opt/makita-stmt-venv/bin/python3
 ```
 
-Then install Arial / Arial Black / Calibri (see "Fonts" below) and start one
+Then install Calibri (see "Fonts" below) and start one
 or more unoservers (see "Persistent LibreOffice listener" below).
 
 ### Older systems (Debian 11, Ubuntu 22.04 and earlier)
@@ -86,7 +86,7 @@ sudo pip3 install --upgrade unoserver openpyxl pypdf Pillow
 | `unoserver` (`unoconvert`)   | Persistent LibreOffice listener - no per-page startup cost | strongly recommended |
 | `pdfunite` (poppler-utils)   | Merges per-page PDFs into one statement                    | yes (or pypdf) |
 | `pypdf`                      | Pure-Python merge fallback if `pdfunite` is unavailable    | optional  |
-| Arial, Arial Black, Calibri  | Visual parity with the existing Excel-macro output         | strongly recommended |
+| Calibri                      | The statement font (PDF and XLSX) since September 2026     | strongly recommended |
 | `ACR11P.xlsx` template       | The branded layout - holds the logo + bank-details images  | yes       |
 
 ---
@@ -113,28 +113,23 @@ identical to the existing statement run.
 
 ## Fonts
 
-LibreOffice renders the PDF. If the original fonts are not installed it
-substitutes the closest match (typically Carlito for Calibri, Liberation Sans
-for Arial). Metrics are close but not byte-identical, so for the
-"visually identical" requirement you should install:
+Statements are set in **Calibri** at Makita's request (September 2026). The
+ACR11P.xlsx template is still Arial / Arial Black; `fill_template.py` swaps
+every cell to Calibri on each page (the Arial Black header becomes Calibri
+bold), and the XLSX builder writes Calibri directly.
 
-- **Arial**
-- **Arial Black**
-- **Calibri**
+LibreOffice renders the PDF. If Calibri is not installed it substitutes
+Carlito (`fonts-crosextra-carlito`), which has identical metrics but is a
+different typeface, so install the real Calibri for the requested look.
 
-On Debian/Ubuntu these are not in the default repos because of licensing.
-Common routes:
-
-1. `ttf-mscorefonts-installer` (`sudo apt install ttf-mscorefonts-installer`)
-   - Installs Arial, Arial Black, Times New Roman, etc. via Microsoft's
-     freely-redistributable EULA.
-2. Copy the .ttf files from a licensed Office install into
-   `/usr/local/share/fonts/` and run `fc-cache -fv`.
+Calibri is not in the Debian/Ubuntu repos (it is not part of
+`ttf-mscorefonts-installer`). Copy the .ttf files from a licensed Office
+install into `/usr/local/share/fonts/` and run `fc-cache -fv`.
 
 Verify after install:
 
 ```bash
-fc-list | grep -iE 'arial|calibri'
+fc-list | grep -iE 'calibri|carlito'
 ```
 
 Restart LibreOffice / unoserver after adding fonts so they pick up the new

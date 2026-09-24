@@ -1,8 +1,9 @@
 /**
  * Generate the simple-layout XLSX statement (one sheet named after the customer
- * no.) for a parsed customer. Reproduces the existing "{cust} Statement
- * {date}.xlsx" exactly: Arial font, embedded logo, matching column widths/row
- * heights and cell alignment.
+ * no.) for a parsed customer. Reproduces the layout of the existing "{cust}
+ * Statement {date}.xlsx": embedded logo, matching column widths/row heights and
+ * cell alignment. Set in Calibri at Makita's request (September 2026); the
+ * original macro output was Arial.
  *
  * Ported from the validated prototype `Statement Generator/excel.js`.
  */
@@ -28,9 +29,9 @@ async function buildExcel(cust, outPath, opts = {}) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(String(cust.custNo));
 
-  const arial = (size, bold = false) => ({ name: 'Arial', size, bold });
-  const BODY = arial(10);
-  const HEAD = arial(10, true);
+  const calibri = (size, bold = false) => ({ name: 'Calibri', size, bold });
+  const BODY = calibri(10);
+  const HEAD = calibri(10, true);
 
   ws.getColumn('A').width = 15.71;
   ws.getColumn('B').width = 13;
@@ -44,7 +45,7 @@ async function buildExcel(cust, outPath, opts = {}) {
   ws.getRow(3).height = 12.75;
 
   ws.getCell('A1').value = 'STATEMENT';
-  ws.getCell('A1').font = arial(18, true);
+  ws.getCell('A1').font = calibri(18, true);
 
   const logoId = wb.addImage({ filename: logoPath, extension: 'png' });
   ws.addImage(logoId, { tl: { col: 0, row: 3 }, ext: { width: 129, height: 43 } });
@@ -108,9 +109,9 @@ async function buildExcel(cust, outPath, opts = {}) {
     if (i < 5) cell.alignment = C;
   });
 
-  // Force Arial on empty cells in the used range. The original Makita workbook
-  // carries Arial as the latent style on blanks; ExcelJS defaults blanks to
-  // Calibri which makes the file fail a cell-for-cell font diff.
+  // Give empty cells in the used range the body font too, so anything typed
+  // into a blank cell matches the rest of the statement rather than picking up
+  // ExcelJS's Calibri 11 default.
   for (let row = 1; row <= hr + 1; row++) {
     for (let col = 1; col <= 6; col++) {
       const cell = ws.getCell(row, col);

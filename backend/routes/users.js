@@ -12,6 +12,10 @@ const { redis } = require('../config/redis');
 const { logActivity, ActivityType } = require('../services/activityLogger');
 const router = express.Router();
 
+// Roles that can action Pending Accounts, and so the only roles that may opt
+// in to new account registration emails.
+const REGISTRATION_NOTIFICATION_ROLES = ['global_admin', 'administrator', 'manager'];
+
 // Helper function to validate UUID
 const validateUUID = (id, fieldName = 'ID') => {
   // Log for debugging
@@ -256,6 +260,26 @@ router.get('/export', canManageUsers, async (req, res) => {
       order: [['name', 'ASC']]
     });
 
+    // Last login is reported in UK time whatever the server's TZ. The XLSX
+    // gets a real date cell (so the Credit Team can sort and filter on it);
+    // SheetJS converts Dates using the process's local offset, so the Date is
+    // rebuilt from the London wall-clock parts to land on the right time.
+    const londonParts = (date) => {
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+      }).formatToParts(date);
+      const get = (type) => parts.find(p => p.type === type).value;
+      return { y: get('year'), m: get('month'), d: get('day'), hh: get('hour'), mm: get('minute') };
+    };
+    const formatLastLogin = (lastLogin) => {
+      if (!lastLogin) return 'Never';
+      const p = londonParts(new Date(lastLogin));
+      if (format === 'csv') return `${p.y}-${p.m}-${p.d} ${p.hh}:${p.mm}`;
+      return new Date(Number(p.y), Number(p.m) - 1, Number(p.d), Number(p.hh), Number(p.mm));
+    };
+
     // Format data for export
     const exportData = users.map(user => {
       const companyAccountNumbers = user.companies
@@ -268,6 +292,7 @@ router.get('/export', canManageUsers, async (req, res) => {
         email: user.email || '',
         role: user.role || '',
         active: user.isActive ? 'TRUE' : 'FALSE',
+        last_login: formatLastLogin(user.lastLogin),
         all_companies: user.allCompanies ? 'TRUE' : 'FALSE',
         company_account_numbers: companyAccountNumbers,
         send_invoice_email: user.sendInvoiceEmail ? 'TRUE' : 'FALSE',
@@ -276,15 +301,19 @@ router.get('/export', canManageUsers, async (req, res) => {
         send_statement_pdf_attachment: user.sendStatementPdfAttachment ? 'TRUE' : 'FALSE',
         send_statement_xls_attachment: user.sendStatementXlsAttachment ? 'TRUE' : 'FALSE',
         send_email_as_summary: user.sendEmailAsSummary ? 'TRUE' : 'FALSE',
-        send_import_summary_report: user.sendImportSummaryReport ? 'TRUE' : 'FALSE'
+        send_import_summary_report: user.sendImportSummaryReport ? 'TRUE' : 'FALSE',
+        send_registration_notification: user.sendRegistrationNotification ? 'TRUE' : 'FALSE'
       };
     });
 
     if (format === 'csv') {
-      // Generate CSV using Papa.parse
+      // Generate CSV using Papa.parse. Column list is derived from the row
+      // shape so the header can never drift from the data again (it used to
+      // name a non-existent send_statement_attachment column, which exported
+      // blank and dropped the PDF/XLS attachment columns).
       const csv = Papa.unparse(exportData, {
         header: true,
-        columns: ['id', 'name', 'email', 'role', 'active', 'all_companies', 'company_account_numbers', 'send_invoice_email', 'send_invoice_attachment', 'send_statement_email', 'send_statement_attachment', 'send_email_as_summary', 'send_import_summary_report']
+        columns: Object.keys(exportData[0] || { id: '' })
       });
 
       res.setHeader('Content-Type', 'text/csv');
@@ -292,7 +321,7 @@ router.get('/export', canManageUsers, async (req, res) => {
       res.send(csv);
     } else {
       // Generate XLSX using XLSX library
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const worksheet = XLSX.utils.json_to_sheet(exportData, { dateNF: 'dd/mm/yyyy hh:mm' });
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Users');
       
@@ -606,6 +635,7 @@ router.post('/', canManageUsers, async (req, res) => {
       sendStatementXlsAttachment: bodyXlsAttach,
       sendEmailAsSummary,
       sendImportSummaryReport,
+      sendRegistrationNotification,
       companyIds
     } = req.body;
 
@@ -691,7 +721,8 @@ router.post('/', canManageUsers, async (req, res) => {
         sendStatementPdfAttachment: Boolean(sendStatementPdfAttachment),
         sendStatementXlsAttachment: Boolean(sendStatementXlsAttachment),
         sendEmailAsSummary: Boolean(sendEmailAsSummary),
-        sendImportSummaryReport: Boolean(sendImportSummaryReport)
+        sendImportSummaryReport: Boolean(sendImportSummaryReport),
+        sendRegistrationNotification: Boolean(sendRegistrationNotification) && REGISTRATION_NOTIFICATION_ROLES.includes(role)
       }, { transaction });
       
       // Assign companies if provided (for ALL user roles) - already validated above
@@ -1067,6 +1098,7 @@ router.put('/:id', canManageUsers, async (req, res) => {
       sendStatementXlsAttachment: bodyXlsAttach,
       sendEmailAsSummary,
       sendImportSummaryReport,
+      sendRegistrationNotification,
       companyIds
     } = req.body;
 
@@ -1147,6 +1179,8 @@ router.put('/:id', canManageUsers, async (req, res) => {
     if (sendStatementXlsAttachment !== undefined) user.sendStatementXlsAttachment = sendStatementXlsAttachment;
     if (sendEmailAsSummary !== undefined) user.sendEmailAsSummary = sendEmailAsSummary;
     if (sendImportSummaryReport !== undefined) user.sendImportSummaryReport = sendImportSummaryReport;
+    if (sendRegistrationNotification !== undefined) user.sendRegistrationNotification = Boolean(sendRegistrationNotification);
+    if (!REGISTRATION_NOTIFICATION_ROLES.includes(user.role)) user.sendRegistrationNotification = false;
     
     await user.save();
     

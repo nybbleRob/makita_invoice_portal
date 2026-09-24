@@ -480,9 +480,12 @@ const Settings = () => {
         };
       }
       const response = await api.put('/api/settings', settingsToSave);
-      setSettings(response.data);
+      const { statementRetentionRecalculated, ...savedSettings } = response.data;
+      setSettings(savedSettings);
       refreshSettings();
-      toast.success('Settings saved successfully!');
+      toast.success(statementRetentionRecalculated
+        ? `Settings saved. Purge date updated on ${statementRetentionRecalculated} existing statement(s).`
+        : 'Settings saved successfully!');
     } catch (error) {
       console.error('Error saving settings:', error);
       toast.error('Error saving settings: ' + (error.response?.data?.message || error.message));
@@ -1132,6 +1135,7 @@ const Settings = () => {
                           <h3 className="mb-3">Statement Retention</h3>
                           <p className="text-muted mb-3">
                             Optional override for Statements. Leave fields blank to use the same policy as Invoices and Credit Notes above.
+                            Changing the statement policy also moves the purge date of statements already in the portal.
                           </p>
                         </div>
                         <div className="col-md-6">

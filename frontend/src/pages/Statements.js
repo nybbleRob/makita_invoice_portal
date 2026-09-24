@@ -11,6 +11,8 @@ const Statements = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { settings } = useSettings();
+  // Statements can override the invoice retention policy; null means inherit.
+  const statementRetentionPeriod = settings?.statementRetentionPeriod ?? settings?.documentRetentionPeriod;
   const { hasPermission } = usePermissions();
 
   const [statements, setStatements] = useState([]);
@@ -62,6 +64,14 @@ const Statements = () => {
     editReason: ''
   });
   const [editSaving, setEditSaving] = useState(false);
+
+  // Monthly archive: the Credit Team keeps every statement for 7 years, but
+  // the portal purges them after the retention period.
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [archiveMonths, setArchiveMonths] = useState([]);
+  const [archiveMonth, setArchiveMonth] = useState('');
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveDownloading, setArchiveDownloading] = useState(false);
 
   // Import state (PDF/XLS upload flow only - the ACR11P .TXT sandbox lives in
   // Settings > Admin Tools so non-admins can't invoke the generator.)
@@ -324,6 +334,42 @@ const Statements = () => {
     fetchStatements();
   };
 
+  const openArchiveModal = async () => {
+    setShowArchiveModal(true);
+    setArchiveLoading(true);
+    try {
+      const response = await api.get('/api/statements/archive/months');
+      const months = response.data.months || [];
+      setArchiveMonths(months);
+      setArchiveMonth(months[0]?.month || '');
+    } catch (error) {
+      toast.error('Error loading statement months: ' + (error.response?.data?.message || error.message));
+      setArchiveMonths([]);
+      setArchiveMonth('');
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
+  const handleDownloadArchive = async () => {
+    if (!archiveMonth) return;
+    setArchiveDownloading(true);
+    await openAuthenticatedFile(
+      `/api/statements/archive?month=${archiveMonth}`,
+      `Makita Statements ${archiveMonth}.zip`
+    );
+    setArchiveDownloading(false);
+    setShowArchiveModal(false);
+  };
+
+  const formatArchiveMonth = ({ month, count, purgeFrom }) => {
+    const label = new Date(`${month}-01T12:00:00`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    const purge = purgeFrom
+      ? ` (purged from ${new Date(purgeFrom).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })})`
+      : '';
+    return `${label}: ${count} statement${count !== 1 ? 's' : ''}${purge}`;
+  };
+
   // Edit handlers
   const openEditModal = (statement) => {
     const q = returnQueryRef.current || searchParams.toString();
@@ -554,6 +600,7 @@ const Statements = () => {
   const canEdit = hasPermission('STATEMENTS_EDIT');
   const canDelete = hasPermission('STATEMENTS_DELETE');
   const canDownload = hasPermission('STATEMENTS_DOWNLOAD');
+  const canArchive = hasPermission('STATEMENTS_ARCHIVE');
 
   return (
     <div className="page">
@@ -631,7 +678,7 @@ const Statements = () => {
                       <option value="createdAt-DESC">Newest Imported</option>
                       <option value="closingBalance-DESC">Balance (High to Low)</option>
                       <option value="closingBalance-ASC">Balance (Low to High)</option>
-                      {settings?.documentRetentionPeriod && (
+                      {statementRetentionPeriod && (
                         <option value="retentionExpiryDate-ASC">Retention Ending Soonest</option>
                       )}
                     </select>
@@ -651,6 +698,17 @@ const Statements = () => {
                         title="Reset all filters and sorting"
                       >
                         Reset
+                      </button>
+                    )}
+
+                    {canArchive && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-success"
+                        onClick={openArchiveModal}
+                        title="Download every PDF and Excel statement for a month as one ZIP"
+                      >
+                        Monthly Archive
                       </button>
                     )}
 
@@ -721,7 +779,7 @@ const Statements = () => {
                     <th>Closing</th>
                     <th>Files</th>
                     <th>Status</th>
-                    {settings?.documentRetentionPeriod && <th>Retention</th>}
+                    {statementRetentionPeriod && <th>Retention</th>}
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -737,13 +795,13 @@ const Statements = () => {
                         <td><span className="placeholder col-6"></span></td>
                         <td><span className="placeholder col-5"></span></td>
                         <td><span className="placeholder col-6"></span></td>
-                        {settings?.documentRetentionPeriod && <td><span className="placeholder col-6"></span></td>}
+                        {statementRetentionPeriod && <td><span className="placeholder col-6"></span></td>}
                         <td><span className="placeholder col-6"></span></td>
                       </tr>
                     ))
                   ) : statements.length === 0 ? (
                     <tr>
-                      <td colSpan={(canDelete ? 1 : 0) + 8 + (settings?.documentRetentionPeriod ? 1 : 0)} className="text-center py-3 text-muted">
+                      <td colSpan={(canDelete ? 1 : 0) + 8 + (statementRetentionPeriod ? 1 : 0)} className="text-center py-3 text-muted">
                         No statements found
                       </td>
                     </tr>
@@ -785,12 +843,12 @@ const Statements = () => {
                               {getDocumentStatusLabel(docStatus)}
                             </span>
                           </td>
-                          {settings?.documentRetentionPeriod && (
+                          {statementRetentionPeriod && (
                             <td>
                               <DocumentRetentionTimer
                                 expiryDate={statement.retentionExpiryDate}
                                 startDate={statement.retentionStartDate}
-                                retentionPeriod={settings?.documentRetentionPeriod}
+                                retentionPeriod={statementRetentionPeriod}
                               />
                             </td>
                           )}
@@ -915,6 +973,59 @@ const Statements = () => {
           onClose={() => setShowCompanyFilterModal(false)}
           onApply={() => setShowCompanyFilterModal(false)}
         />
+      )}
+
+      {/* Monthly Archive Modal */}
+      {showArchiveModal && (
+        <div className="modal modal-blur fade show" style={{ display: 'block' }} tabIndex="-1">
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Monthly Statement Archive</h5>
+                <button type="button" className="btn-close" onClick={() => setShowArchiveModal(false)} disabled={archiveDownloading}></button>
+              </div>
+              <div className="modal-body">
+                <p className="text-muted">
+                  Downloads every PDF and Excel statement dated in the chosen month as one ZIP, with an index of
+                  accounts, for the Credit Team's 7-year record. Statements are purged from the portal after the
+                  retention period, so download each month before its purge date.
+                </p>
+                {archiveLoading ? (
+                  <div className="text-center py-3">
+                    <div className="spinner-border spinner-border-sm" role="status"></div>
+                  </div>
+                ) : archiveMonths.length === 0 ? (
+                  <div className="text-muted">There are no statements in the portal to archive.</div>
+                ) : (
+                  <>
+                    <label className="form-label">Statement month</label>
+                    <select
+                      className="form-select"
+                      value={archiveMonth}
+                      onChange={(e) => setArchiveMonth(e.target.value)}
+                      disabled={archiveDownloading}
+                    >
+                      {archiveMonths.map(m => (
+                        <option key={m.month} value={m.month}>{formatArchiveMonth(m)}</option>
+                      ))}
+                    </select>
+                  </>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-danger" onClick={() => setShowArchiveModal(false)} disabled={archiveDownloading}>Cancel</button>
+                <button
+                  type="button"
+                  className="btn btn-success"
+                  onClick={handleDownloadArchive}
+                  disabled={archiveDownloading || archiveLoading || !archiveMonth}
+                >
+                  {archiveDownloading ? 'Preparing ZIP...' : 'Download ZIP'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Import Processing Modal */}

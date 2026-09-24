@@ -112,6 +112,18 @@ const Companies = () => {
   
   const [creating, setCreating] = useState(false);
 
+  // Users tab of the Add/Edit Company modal. Selection is kept as IDs so it
+  // survives paging and searching; on save only the difference from the
+  // company's current direct assignments is sent.
+  const [userTabSearch, setUserTabSearch] = useState('');
+  const debouncedUserTabSearch = useDebounce(userTabSearch, 300);
+  const [userTabUsers, setUserTabUsers] = useState([]);
+  const [userTabPagination, setUserTabPagination] = useState({ page: 1, limit: 25, total: 0, pages: 0 });
+  const [userTabLoading, setUserTabLoading] = useState(false);
+  const [selectedUserIds, setSelectedUserIds] = useState([]);
+  const [initialUserIds, setInitialUserIds] = useState([]);
+  const [inheritedUserIds, setInheritedUserIds] = useState([]);
+
   // Fetch companies with pagination
   useEffect(() => {
     fetchCompanies();
@@ -653,6 +665,52 @@ const Companies = () => {
     }
   };
 
+  const fetchUserTabUsers = async (page = 1) => {
+    setUserTabLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: String(userTabPagination.limit) });
+      if (debouncedUserTabSearch.trim()) params.set('search', debouncedUserTabSearch.trim());
+      const response = await api.get(`/api/users?${params.toString()}`);
+      setUserTabUsers(response.data.users || []);
+      setUserTabPagination(prev => ({ ...prev, ...(response.data.pagination || {}) }));
+    } catch (error) {
+      toast.error('Error loading users: ' + (error.response?.data?.message || error.message));
+      setUserTabUsers([]);
+    } finally {
+      setUserTabLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showCompanyModal && activeTab === 'users') fetchUserTabUsers(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCompanyModal, activeTab, debouncedUserTabSearch]);
+
+  const loadCompanyUserAssignments = async (companyId) => {
+    try {
+      const response = await api.get(`/api/companies/${companyId}/user-assignments`);
+      const direct = response.data.direct || [];
+      setInitialUserIds(direct);
+      setSelectedUserIds(direct);
+      setInheritedUserIds(response.data.inherited || []);
+    } catch (error) {
+      toast.error('Error loading assigned users: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const resetUserTab = () => {
+    setUserTabSearch('');
+    setUserTabUsers([]);
+    setUserTabPagination(prev => ({ ...prev, page: 1, total: 0, pages: 0 }));
+    setSelectedUserIds([]);
+    setInitialUserIds([]);
+    setInheritedUserIds([]);
+  };
+
+  const toggleUserSelected = (userId) => {
+    setSelectedUserIds(prev => prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]);
+  };
+
   const defaultCompanyForm = () => ({
     type: 'CORP',
     name: '',
@@ -685,6 +743,7 @@ const Companies = () => {
     setUserSearchQuery('');
     setActiveTab('basic');
     setEditingCompany(null);
+    resetUserTab();
   };
 
 
@@ -721,6 +780,8 @@ const Companies = () => {
       fetchParentCompanies(1);
     }
     setActiveTab('basic');
+    resetUserTab();
+    loadCompanyUserAssignments(company.id);
   };
 
   const handleCreateCompany = async (e) => {
@@ -760,12 +821,22 @@ const Companies = () => {
         payload.parentId = null;
       }
 
+      const assignUserIds = selectedUserIds.filter(id => !initialUserIds.includes(id));
+      const unassignUserIds = initialUserIds.filter(id => !selectedUserIds.includes(id));
+      if (assignUserIds.length > 0) payload.assignUserIds = assignUserIds;
+      if (editingCompany && unassignUserIds.length > 0) payload.unassignUserIds = unassignUserIds;
+
+      let response;
       if (editingCompany) {
-        await api.put(`/api/companies/${editingCompany.id}`, payload);
+        response = await api.put(`/api/companies/${editingCompany.id}`, payload);
         toast.success('Company updated successfully!');
       } else {
-        await api.post('/api/companies', payload);
+        response = await api.post('/api/companies', payload);
         toast.success('Company created successfully!');
+      }
+      const skipped = response?.data?.userAssignments?.skipped || 0;
+      if (skipped > 0) {
+        toast.warning(`${skipped} user(s) were not changed because your role cannot manage them.`);
       }
       setShowCompanyModal(false);
       resetCompanyForm();
@@ -906,6 +977,21 @@ const Companies = () => {
                             }}
                           >
                             Address
+                          </a>
+                        </li>
+                        <li className="nav-item">
+                          <a
+                            href="#company-users"
+                            className={`nav-link ${activeTab === 'users' ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setActiveTab('users');
+                            }}
+                          >
+                            Users
+                            {selectedUserIds.length > 0 && (
+                              <span className="badge bg-primary-lt ms-2">{selectedUserIds.length}</span>
+                            )}
                           </a>
                         </li>
                       </ul>
@@ -1145,6 +1231,101 @@ const Companies = () => {
                             </div>
                           </div>
                         </div>
+                        <div className={`tab-pane ${activeTab === 'users' ? 'active show' : ''}`} id="company-users">
+                          <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
+                            <div className="input-group input-group-sm w-auto flex-grow-1" style={{ maxWidth: '360px' }}>
+                              <span className="input-group-text">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"/><path d="M21 21l-6-6"/></svg>
+                              </span>
+                              <input
+                                type="text"
+                                className="form-control"
+                                placeholder="Search users by name or email..."
+                                value={userTabSearch}
+                                onChange={(e) => setUserTabSearch(e.target.value)}
+                              />
+                            </div>
+                            <span className="text-muted small ms-auto">
+                              {selectedUserIds.length} user{selectedUserIds.length !== 1 ? 's' : ''} assigned to this company
+                            </span>
+                          </div>
+                          <p className="text-muted small mb-2">
+                            Tick the users who should see this company's invoices, credit notes and statements.
+                            {isEditing ? ' Changes are saved when you update the company.' : ' They are assigned when the company is created.'}
+                          </p>
+                          <div className="table-responsive" style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid #e0e0e0' }}>
+                            <table className="table table-vcenter table-sm mb-0">
+                              <thead>
+                                <tr>
+                                  <th className="w-1"></th>
+                                  <th>Name</th>
+                                  <th>Email</th>
+                                  <th>Role</th>
+                                  <th>Access</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {userTabLoading ? (
+                                  <tr>
+                                    <td colSpan="5" className="text-center py-3">
+                                      <div className="spinner-border spinner-border-sm" role="status"></div>
+                                    </td>
+                                  </tr>
+                                ) : userTabUsers.length === 0 ? (
+                                  <tr>
+                                    <td colSpan="5" className="text-center text-muted py-3">No users found</td>
+                                  </tr>
+                                ) : (
+                                  userTabUsers.map((u) => {
+                                    const isSelected = selectedUserIds.includes(u.id);
+                                    const viaParent = !isSelected && inheritedUserIds.includes(u.id);
+                                    const locked = u.allCompanies || viaParent;
+                                    return (
+                                      <tr
+                                        key={u.id}
+                                        className={isSelected ? 'bg-primary-lt' : ''}
+                                        style={{ cursor: locked ? 'default' : 'pointer' }}
+                                        onClick={() => { if (!locked) toggleUserSelected(u.id); }}
+                                      >
+                                        <td>
+                                          <input
+                                            type="checkbox"
+                                            className="form-check-input m-0 align-middle"
+                                            checked={isSelected || locked}
+                                            disabled={locked}
+                                            onChange={() => toggleUserSelected(u.id)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            aria-label={`Assign ${u.name}`}
+                                          />
+                                        </td>
+                                        <td>
+                                          {u.name}
+                                          {!u.isActive && <span className="badge bg-secondary-lt ms-2">Inactive</span>}
+                                        </td>
+                                        <td className="text-muted">{u.email}</td>
+                                        <td><span className={`badge ${getRoleBadgeClass(u.role)}`}>{getRoleLabel(u.role)}</span></td>
+                                        <td className="text-muted small">
+                                          {u.allCompanies ? 'All companies' : viaParent ? 'Via parent company' : isSelected ? 'Assigned' : ''}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                          {userTabPagination.pages > 1 && (
+                            <div className="d-flex justify-content-between align-items-center mt-2">
+                              <small className="text-muted">
+                                Page {userTabPagination.page} of {userTabPagination.pages} ({userTabPagination.total} users)
+                              </small>
+                              <div className="btn-group btn-group-sm">
+                                <button type="button" className="btn btn-sm btn-secondary" disabled={userTabLoading || userTabPagination.page <= 1} onClick={() => fetchUserTabUsers(userTabPagination.page - 1)}>Prev</button>
+                                <button type="button" className="btn btn-sm btn-secondary" disabled={userTabLoading || userTabPagination.page >= userTabPagination.pages} onClick={() => fetchUserTabUsers(userTabPagination.page + 1)}>Next</button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1306,6 +1487,7 @@ const Companies = () => {
                       className="btn btn-sm btn-primary"
                       onClick={() => {
                         setCompanyFormData(defaultCompanyForm());
+                        resetUserTab();
                         setShowCompanyModal(true);
                         setActiveTab('basic');
                       }}

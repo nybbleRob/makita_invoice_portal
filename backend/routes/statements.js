@@ -2,10 +2,11 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
+const Papa = require('papaparse');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { Statement, Company, File, Sequelize, Settings } = require('../models');
-const { calculateDocumentRetentionDates } = require('../utils/documentRetention');
+const { calculateStatementRetentionDates } = require('../utils/documentRetention');
 const { Op } = Sequelize;
 const auth = require('../middleware/auth');
 const { checkDocumentAccess, buildCompanyFilter } = require('../middleware/documentAccess');
@@ -390,6 +391,134 @@ router.post('/bulk-delete', requirePermission('STATEMENTS_DELETE'), async (req, 
   } catch (error) {
     console.error('Error bulk deleting statements:', error);
     res.status(500).json({ message: error.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Monthly archive
+//
+// The Credit Team must keep every statement for 7 years, but the portal only
+// holds them for the statement retention period. These routes let staff take
+// a whole month's statements out as one ZIP (every PDF and Excel file, plus an
+// index.csv) before they are purged. Declared before /:id routes.
+//
+// A statement belongs to the month of its statement date (periodEnd) in UK
+// time, so the run dated 1 September is the September archive.
+// ---------------------------------------------------------------------------
+const STATEMENT_MONTH_SQL = `to_char("Statement"."periodEnd" AT TIME ZONE 'Europe/London', 'YYYY-MM')`;
+
+router.get('/archive/months', requirePermission('STATEMENTS_ARCHIVE'), async (req, res) => {
+  try {
+    const rows = await Statement.findAll({
+      where: buildCompanyFilter(req.accessibleCompanyIds),
+      attributes: [
+        [Sequelize.literal(STATEMENT_MONTH_SQL), 'month'],
+        [Sequelize.fn('COUNT', Sequelize.col('Statement.id')), 'count'],
+        [Sequelize.fn('MIN', Sequelize.col('Statement.retentionExpiryDate')), 'purgeFrom']
+      ],
+      group: [Sequelize.literal(STATEMENT_MONTH_SQL)],
+      order: [[Sequelize.literal(STATEMENT_MONTH_SQL), 'DESC']],
+      raw: true
+    });
+
+    res.json({
+      months: rows.map(r => ({ month: r.month, count: parseInt(r.count, 10), purgeFrom: r.purgeFrom }))
+    });
+  } catch (error) {
+    console.error('Error listing statement archive months:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get('/archive', requirePermission('STATEMENTS_ARCHIVE'), async (req, res) => {
+  const month = String(req.query.month || '');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    return res.status(400).json({ message: 'month must be given as YYYY-MM' });
+  }
+
+  try {
+    const statements = await Statement.findAll({
+      where: {
+        ...buildCompanyFilter(req.accessibleCompanyIds),
+        [Op.and]: [Sequelize.where(Sequelize.literal(STATEMENT_MONTH_SQL), month)]
+      },
+      include: [{ model: Company, as: 'company', attributes: ['id', 'name', 'referenceNo'], required: false }],
+      order: [[{ model: Company, as: 'company' }, 'referenceNo', 'ASC'], ['periodEnd', 'ASC']]
+    });
+
+    if (statements.length === 0) {
+      return res.status(404).json({ message: `No statements dated ${month}` });
+    }
+
+    const folder = `Statements ${month}`;
+    const usedNames = new Set();
+    const entryName = (filePath, statement) => {
+      const base = path.basename(filePath);
+      const candidates = [base, `${statement.company?.referenceNo || 'unmatched'}_${base}`, `${statement.id}_${base}`];
+      const name = candidates.find(n => !usedNames.has(n)) || `${statement.id}_${Date.now()}_${base}`;
+      usedNames.add(name);
+      return name;
+    };
+
+    // Each rendition is either archived, not held for this statement (e.g. a
+    // manually uploaded PDF with no Excel), or recorded but missing on disk.
+    // The index says which, so the archive is complete on its own.
+    const files = [];
+    const indexRows = [];
+    for (const statement of statements) {
+      const row = {
+        account_number: statement.company?.referenceNo ?? '',
+        company: statement.company?.name || '',
+        statement_date: new Date(statement.periodEnd).toISOString().slice(0, 10),
+        pdf_file: '',
+        excel_file: ''
+      };
+      const renditions = [
+        ['pdf_file', statement.pdfFileUrl || (/\.pdf$/i.test(statement.fileUrl || '') ? statement.fileUrl : null)],
+        ['excel_file', statement.xlsFileUrl || (/\.xlsx?$/i.test(statement.fileUrl || '') ? statement.fileUrl : null)]
+      ];
+      for (const [column, stored] of renditions) {
+        if (!stored) { row[column] = 'not held'; continue; }
+        const filePath = resolveStatementFile(stored);
+        if (!filePath) { row[column] = 'missing from server'; continue; }
+        const name = entryName(filePath, statement);
+        files.push({ filePath, name });
+        row[column] = name;
+      }
+      indexRows.push(row);
+    }
+
+    logActivity({
+      type: ActivityType.STATEMENT_DOWNLOADED,
+      userId: req.user.userId,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: `Downloaded statement archive for ${month} (${statements.length} statements, ${files.length} files)`,
+      details: { archive: true, month, statementCount: statements.length, fileCount: files.length },
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get('user-agent')
+    }).catch(err => console.error('Error logging statement archive download:', err));
+
+    const archiver = require('archiver');
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    archive.on('warning', (err) => {
+      console.warn('Statement archive warning:', err);
+    });
+    archive.on('error', (err) => {
+      console.error('Statement archive error:', err);
+      res.destroy(err);
+    });
+
+    res.attachment(`Makita Statements ${month}.zip`);
+    archive.pipe(res);
+    for (const { filePath, name } of files) {
+      archive.file(filePath, { name: `${folder}/${name}` });
+    }
+    archive.append(Papa.unparse(indexRows), { name: `${folder}/index.csv` });
+    archive.finalize();
+  } catch (error) {
+    console.error('Error building statement archive:', error);
+    if (!res.headersSent) res.status(500).json({ message: error.message });
   }
 });
 
@@ -1093,8 +1222,8 @@ router.post('/', requirePermission('STATEMENTS_EDIT'), async (req, res) => {
       documentStatus: 'ready'
     };
     
-    // Calculate retention dates
-    const retentionDates = calculateDocumentRetentionDates(documentDataForRetention, settings);
+    // Calculate retention dates (statement policy, which may override the invoice one)
+    const retentionDates = calculateStatementRetentionDates(documentDataForRetention, settings);
     
     const statement = await Statement.create({
       statementNumber,

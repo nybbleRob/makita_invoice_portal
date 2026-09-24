@@ -199,7 +199,51 @@ function shouldDeleteStatement(statement, settings) {
   return expiryDate <= new Date();
 }
 
+/**
+ * Re-apply the current statement retention policy to every statement already
+ * in the portal. Retention dates are stamped when a statement is created, so
+ * without this a policy change only reaches future statements: moving from 30
+ * days to 90 would still purge the current month's run on the old date.
+ *
+ * Rows are grouped by their new dates so a monthly run (hundreds of rows
+ * sharing a statement date) costs one UPDATE rather than one per row.
+ *
+ * @param {Object} settings - Settings object (already saved)
+ * @returns {Promise<number>} - number of statements whose dates changed
+ */
+async function recalculateStatementRetention(settings) {
+  const { Statement } = require('../models');
+
+  const statements = await Statement.findAll({
+    where: { retentionDeletedAt: null },
+    attributes: ['id', 'periodEnd', 'createdAt', 'retentionStartDate', 'retentionExpiryDate']
+  });
+
+  const groups = new Map();
+  for (const statement of statements) {
+    const { retentionStartDate, retentionExpiryDate } = calculateStatementRetentionDates(statement, settings);
+    const sameStart = (statement.retentionStartDate?.getTime() ?? null) === (retentionStartDate?.getTime() ?? null);
+    const sameExpiry = (statement.retentionExpiryDate?.getTime() ?? null) === (retentionExpiryDate?.getTime() ?? null);
+    if (sameStart && sameExpiry) continue;
+
+    const key = `${retentionStartDate?.getTime() ?? ''}|${retentionExpiryDate?.getTime() ?? ''}`;
+    if (!groups.has(key)) groups.set(key, { retentionStartDate, retentionExpiryDate, ids: [] });
+    groups.get(key).ids.push(statement.id);
+  }
+
+  let changed = 0;
+  for (const { retentionStartDate, retentionExpiryDate, ids } of groups.values()) {
+    const [count] = await Statement.update(
+      { retentionStartDate, retentionExpiryDate },
+      { where: { id: ids } }
+    );
+    changed += count;
+  }
+  return changed;
+}
+
 module.exports = {
+  recalculateStatementRetention,
   calculateRetentionExpiryDate,
   getRetentionStartDate,
   shouldDeleteDocument,
